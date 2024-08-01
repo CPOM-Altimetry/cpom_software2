@@ -18,4 +18,4 @@ Now uses **poetry** for dependency management instead of **conda**
 
 ## Automatic Documentation
 
-[cpom-altimetry.github.io/cpom_software2]([https://link-url-here.org](https://cpom-altimetry.github.io/cpom_software2/)) 
+[cpom-altimetry.github.io/cpom_software2]([https://link-url-here.org](https://cpom-altimetry.github.io/cpom_software2/)
