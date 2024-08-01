@@ -10,3 +10,8 @@ This is a software package for :
 - Masks
 - ...
   
+# What's New 
+
+## Package and Dependency Management
+
+Now uses **poetry** for dependency management instead of **conda**
