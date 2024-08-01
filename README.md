@@ -1,10 +1,10 @@
 # CPOM Software (v2)
 
-CPOM Software v2 aims to build on the original CPOM Software Repository, but use more advanced software engineering techniques for testing and continous integration.
+CPOM Software (v2.x) aims to build/refactor the original CPOM Software Repository, but now use more advanced software engineering techniques for testing and continous integration.
 
-This is a CPOM software package for :
+This is a software package for :
 
-- Altimetry processing
+- Altimetry processing (focusing on the Cryosphere)
 - Cryosphere plotting
 - DEMs
 - Masks
