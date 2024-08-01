@@ -6,3 +6,6 @@
 ## Setup
 
 """
+from .altimetry import missions, projects, tools
+
+__all__ = ["altimetry", "missions", "projects", "tools"]
