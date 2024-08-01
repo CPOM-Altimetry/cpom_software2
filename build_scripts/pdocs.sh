@@ -7,7 +7,7 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 if [ "$current_branch" = "main" ]; then
 echo "on $current_branch branch"
 pdoc -o docs src/cpom --no-include-undocumented --mermaid --logo "https://www.homepages.ucl.ac
-.uk/~ucasamu/cl_liww_partners_esa.png" --docformat google 
+.uk/~ucasamu/cpom_logo.gif" --docformat google 
 retVal=$?
 if [ $retVal -ne 0 ]; then
     echo "pdoc failed"
