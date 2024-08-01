@@ -18,4 +18,5 @@ Now uses **poetry** for dependency management instead of **conda**
 
 ## Automatic Documentation
 
+Documentation is automatically produced from docstrings in the code, and published here: 
 [cpom-altimetry.github.io/cpom_software2](https://cpom-altimetry.github.io/cpom_software2/)
