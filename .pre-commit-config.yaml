@@ -1,0 +1,48 @@
+files: "\\.(py)$"
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    #-   id: trailing-whitespace
+-   repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+    -   id: black
+-   repo: local
+    hooks:
+    -  id: pylint
+       name: pylint
+       entry: pylint
+       language: system
+       types: [python]
+
+-   repo: local
+    hooks:
+    - id: pdocs_build
+      name: pdocs_build
+      entry: build_scripts/pdocs.sh
+      language: script
+      pass_filenames: false
+
+-   repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+    -   id: isort
+        files: "\\.(py)$"
+        args: [--settings-path=pyproject.toml]
+
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+    -   id: mypy
+        args: [--ignore-missing-imports]
+        additional_dependencies: [types-all]
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.0.290
+  hooks:
+    - id: ruff
+

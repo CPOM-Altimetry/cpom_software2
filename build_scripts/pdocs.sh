@@ -6,7 +6,7 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 # Check if the current branch is master
 if [ "$current_branch" = "main" ]; then
 echo "on $current_branch branch"
-pdoc -o docs src/clev2er --no-include-undocumented --mermaid --logo "https://www.homepages.ucl.ac
+pdoc -o docs src/cpom --no-include-undocumented --mermaid --logo "https://www.homepages.ucl.ac
 .uk/~ucasamu/cl_liww_partners_esa.png" --docformat google 
 retVal=$?
 if [ $retVal -ne 0 ]; then
