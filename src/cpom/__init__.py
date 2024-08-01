@@ -1,6 +1,8 @@
 """
 # Main docs
 
-<small>this doc at src/cpom/__init__.py</small>
+<small>this toplevel page at src/cpom/__init__.py</small>
+
+## Setup
 
 """
