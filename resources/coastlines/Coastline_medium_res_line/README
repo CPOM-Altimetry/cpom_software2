@@ -1,0 +1,4 @@
+created by
+
+ogr2ogr -t_srs EPSG:4326 periphereies_WGS84.shp periphereies.shp
+

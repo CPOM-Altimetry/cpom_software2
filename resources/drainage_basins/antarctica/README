@@ -1,0 +1,32 @@
+Antarctic Drainage Basin Masks
+----------------------------------
+
+
+rignot_2016_imbie2_ant_grounded_icesheet_basins/
+		Grounded ice sheet basins + islands
+			/basins/rignot_ant_mask_2016_<N>km.sav     
+      		each array contains a number 0..19
+		0 : unclassified
+		1: Islands
+		2: West H-Hp
+		...
+		19: West Ep-F
+		
+		reference: E. Rignot and J. Mouginot (for IMBIE-2, 2016)
+
+
+zwally_2012_imbie1_ant_grounded_icesheet_basins/
+		Grounded ice sheet basins from Zwally 2012 used in IMBIE-1
+		/basins/zwally_2012_imbie1_ant_grounded_icesheet_basins_<N>km.sav
+		each array point contains a number 1..27, 0=outside mask
+		
+		
+
+zwally_2012_imbie1_ant_grounded_and_floating_icesheet_basins/
+		Grounded and floating ice sheet basins from Zwally 2012 used in IMBIE-1
+		/basins/zwally_2012_imbie1_ant_grounded_and_floating_icesheet_basins_<N>km.sav
+		each array point contains a number 1..27, 0=outside mask
+		
+		
+zwallycfl_rignotgll_ant_floating_basins/
+		ice shelf basins from Zwally 2012 using Rignot 2016 GLL and island mask		

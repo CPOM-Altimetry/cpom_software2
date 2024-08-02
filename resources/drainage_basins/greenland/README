@@ -1,0 +1,18 @@
+Greenland Drainage Basin Mask Data
+-----------------------------------
+
+GRE_Basins_IMBIE2_v1.3/
+			RIGNOT 2016 Greenland Basins, divides Greenland in to 6
+			regions, SW, SE, CW, NW, NE, NO + a number of
+			icecaps/islands.
+			Input data is shapefile polygons
+			
+GRE_IceSheet_IMBIE2/
+			Rignot Greenland IceSheet Mask is ICE_SHEET or ICE_CAP.
+				
+
+zwally_2012_grn_icesheet_basins/ 
+			Zwally 2012 Greenland ice sheet grounded basins. Basins
+			labelled 1.1, 1.2, 1.3.....8.2
+			The 19 basins in Greenland are grouped into eight separate 
+			regions (1=North, 2=North-East, 3=East, 4=South-East, 5=South, 6=South-West, 7=West, 8=North-West). 

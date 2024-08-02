@@ -1,0 +1,9 @@
+https://add.data.bas.ac.uk/repository/entry/show?entryid=synth%3Af477219b-9121-44d6-afa6-d8552762dc45%3AL2NvYXN0bGluZXMvc2hwL0NvYXN0bGluZV9sb3dfcmVzX2xpbmUuemlw
+
+https://add.data.bas.ac.uk/repository/entry/show?entryid=synth%3Af477219b-9121-44d6-afa6-d8552762dc45%3AL2NvYXN0bGluZXMvc2hw
+
+created using
+
+ogr2ogr -t_srs EPSG:4326 Coastline_low_res_line_WGS84.shp Coastline_low_res_line.shp
+
+

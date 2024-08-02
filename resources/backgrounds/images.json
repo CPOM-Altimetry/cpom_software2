@@ -1,0 +1,55 @@
+{
+"__comment__": "JSON file specifying the image to use for a given type/name and resolution. Read in by cartopy.mpl.geoaxes.read_user_background_images.",
+    "blue_marble": {
+    "__comment__": "Blue Marble Next Generation, July ",
+    "__source__": "https://neo.sci.gsfc.nasa.gov/view.php?datasetId=BlueMarbleNG-TB",
+    "__projection__": "PlateCarree",
+    "low": "blue_marble_low.png",
+    "medium": "blue_marble_medium.png",
+    "high": "blue_marble_high.png"},
+    
+    "natural_earth_cbh": {
+        "__comment__": "Cross-blended Hypsometric Tints with Relief, Water, Drains and Ocean Bottom from Natural Earth",
+        "__projection__": "PlateCarree",
+        "__source__": "https://www.naturalearthdata.com/downloads/10m-raster-data/10m-cross-blend-hypso/ and https://www.naturalearthdata.com/downloads/50m-raster-data/50m-cross-blend-hypso/",
+	"low": "natural_earth_cbh_2700x1350.png",
+	"medium": "natural_earth_cbh_5400x2700.png",
+        "high": "natural_earth_cbh_10800x5400.png"
+      },
+
+    "natural_earth_cbh_oceanmasked": {
+        "__comment__": "Cross-blended Hypsometric Tints with Relief, Water, Drains and Ocean Bottom from Natural Earth",
+        "__projection__": "PlateCarree",
+        "__source__": "https://www.naturalearthdata.com/downloads/10m-raster-data/10m-cross-blend-hypso/ and https://www.naturalearthdata.com/downloads/50m-raster-data/50m-cross-blend-hypso/",
+	"low": "natural_earth_cbh_oceanmasked2_2700x1350.png",
+	"medium": "natural_earth_cbh_oceanmasked2_5400x2700.png",
+        "high": "natural_earth_cbh_oceanmasked2_10800x5400.png"
+      },
+
+    "natural_earth_gray": {
+        "__comment__": "Gray Earth with Shaded Relief, Hypsography, and Ocean Bottom from Natural Earth",
+        "__projection__": "PlateCarree",
+        "__source__": "https://www.naturalearthdata.com/http//www.naturalearthdata.com/download/50m/raster/GRAY_50M_SR_OB.zip",
+	"low": "natural_earth_gray_shaded_relief_2700x1350.png",
+	"medium": "natural_earth_gray_shaded_relief_5400x2700.png",
+        "high": "natural_earth_gray_shaded_relief_10800x5400.png"
+      },
+
+    "natural_earth_1": {
+        "__comment__": "Natural Earth I with Shaded Relief and Water",
+        "__projection__": "PlateCarree",
+        "__source__": "https://www.naturalearthdata.com/http//www.naturalearthdata.com/download/50m/raster/NE1_50M_SR_W.zip",
+	"low": "natural_earth1_sr_w_2700x1350.png",
+	"medium": "natural_earth1_sr_w_5400x2700.png",
+        "high": "natural_earth1_sr_w_10800x5400.png"
+      },
+
+    "rema_ross": {
+        "__comment__": "REMA Ross",
+        "__projection__": "PlateCarree",
+        "__source__": "REMA",
+        "high": "rema_hillshade_stretched_ross.tiff"
+      }
+}
+
+
