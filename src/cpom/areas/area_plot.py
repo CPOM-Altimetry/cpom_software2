@@ -466,7 +466,8 @@ class Polarplot:
                 is_flag_data = len(data_set.get("flag_values", [])) > 0
 
                 lats = data_set.get("lats", np.array([]))
-                lons = data_set.get("lons", np.array([])) % 360  # ensure 0..360 degs E
+                lons = data_set.get("lons", np.array([]))
+                lons = np.array(lons) % 360  # ensure 0..360 degs E
                 vals = data_set.get("vals", np.array([]))
 
                 n_vals = len(vals)
@@ -640,9 +641,11 @@ class Polarplot:
                         data_set.get("valid_range") is not None
                         and len(data_set.get("valid_range")) == 2
                     ):
-                        outside_vals_bool = (vals < data_set.get("valid_range")[0]) | (
-                            vals > data_set.get("valid_range")[1]
-                        )
+                        outside_vals_bool = np.zeros_like(vals, dtype=bool)
+                        if data_set.get("valid_range")[0] is not None:
+                            outside_vals_bool |= vals < data_set.get("valid_range")[0]
+                        if data_set.get("valid_range")[1] is not None:
+                            outside_vals_bool |= vals > data_set.get("valid_range")[1]
                         percent_outside = np.mean(outside_vals_bool) * 100.0
                     else:
                         percent_outside = 0.0

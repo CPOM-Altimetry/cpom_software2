@@ -34,6 +34,10 @@ def list_all_area_definition_names(logger=None) -> list[str]:
     original_level = logger.level
     logger.setLevel(logging.ERROR)
 
+    blue = "\033[0;34m"
+    green = "\033[0;32m"
+    endc = "\033[0m"  # Reset to default color
+
     try:
         area_def_directory = f"{os.environ['CPOM_SOFTWARE_DIR']}/src/cpom/areas/definitions"
         if not os.path.isdir(area_def_directory):
@@ -49,15 +53,20 @@ def list_all_area_definition_names(logger=None) -> list[str]:
         final_defs = []
         for thisdef in all_defs:
             thisarea = Area(thisdef)
+            color = green
+            if thisarea.hemisphere == "north":
+                color = blue
             if thisarea.area_summary:
                 final_defs.append(
-                    f"{thisdef} : {thisarea.area_summary} : background:{thisarea.background_image}"
+                    f"{color}{thisdef}{endc} : {thisarea.area_summary} :"
+                    f" background:{thisarea.background_image}"
                 )
             else:
                 final_defs.append(
-                    f"{thisdef} : {thisarea.long_name} : background:{thisarea.background_image}"
+                    f"{color}{thisdef}{endc} : {thisarea.long_name} :"
+                    f" background:{thisarea.background_image}"
                 )
-        return final_defs
+        return sorted(final_defs)
 
     finally:
         logger.setLevel(original_level)
