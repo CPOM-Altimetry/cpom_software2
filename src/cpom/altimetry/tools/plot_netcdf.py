@@ -96,13 +96,14 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     return ("latitude", "longitude")
 
 
-def find_nc_files(directory: str, recursive: bool) -> List[str]:
+def find_nc_files(directory: str, recursive: bool, max_files: int | None) -> List[str]:
     """
     Find .nc or .NC files in the specified directory.
 
     Args:
         directory (str): The directory to search for .nc files.
         recursive (bool): If True, search recursively in subdirectories.
+        max_files (int|None): if not None, limit number of files read to this number
 
     Returns:
         List[str]: A list of found .nc or .NC files with their full paths.
@@ -116,6 +117,10 @@ def find_nc_files(directory: str, recursive: bool) -> List[str]:
         files = glob.glob(os.path.join(directory, "*.nc"))
         if len(files) < 1:
             files = glob.glob(os.path.join(directory, "*.NC"))
+
+    if max_files is not None:
+        if len(files) > max_files:
+            files = files[:max_files]
     return files
 
 
@@ -247,6 +252,14 @@ def main():
         help=("plot map only, not histograms"),
         required=False,
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--max_files",
+        "-mf",
+        help=("only read the first N input netcdf files (if multiple files input)"),
+        required=False,
+        type=int,
     )
 
     parser.add_argument(
@@ -439,9 +452,11 @@ def main():
         if args.file:
             files = [args.file]
         else:
-            files = find_nc_files(args.dir, args.recursive)
+            files = find_nc_files(args.dir, args.recursive, args.max_files)
     else:
         files = []
+
+    log.info("Number of netcdf files found: %d", len(files))
 
     # ------------------------------------------------------------------------------------------
     # Attempt to identify file types and get default latitude, longitude names
@@ -467,6 +482,10 @@ def main():
     else:
         num_data_sets = 1
         params = ["None"]
+
+    log.info("param names: %s", str(params))
+    log.info("latnames : %s", str(latnames))
+    log.info("lonnames : %s", str(lonnames))
 
     # ---------------------------------------------------------------------------
     # Build dataset dicts to plot
@@ -543,7 +562,7 @@ def main():
             "cmap_over_color": cmap_over[i],
             "cmap_under_color": cmap_under[i],
             "cmap_extend": cmap_extend[i],
-            "apply_area_mask_to_data": ~args.not_apply_mask,
+            "apply_area_mask_to_data": not args.not_apply_mask,
         }
         if min_plot_range[i] != "":
             ds["min_plot_range"] = float(min_plot_range[i])
@@ -562,8 +581,10 @@ def main():
 
         datasets.append(ds)
 
-    if len(files) == 0:
+    if len(files) > 0:
+        log.info("reading netcdf files...")
         for filename in files:
+            log.debug("%s", filename)
             # Open the NetCDF file
             try:
                 with Dataset(filename) as nc:
