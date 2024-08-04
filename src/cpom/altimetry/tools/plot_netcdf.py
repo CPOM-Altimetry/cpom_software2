@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 """Plot variables from NetCDF files using Polarplot"""
 
+
 import argparse
 import glob
 import logging
+import os
 import sys
+from typing import List
 
 import numpy as np
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
@@ -63,6 +66,59 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
+def get_default_param(filename: str) -> str:
+    """Get a default parameter to plot from filename
+
+    Args:
+        filename (str): path of NetCDF file
+
+    Returns:
+        str: parameter name or '' if not found
+    """
+
+    print(f"finding default params for {filename}")
+
+    return "elevation"
+
+
+def get_default_latlon_names(filename: str) -> tuple[str, str]:
+    """Get a default latitude and longitude names to plot from filename
+
+    Args:
+        filename (str): path of NetCDF file
+
+    Returns:
+        str: parameter name or '' if not found
+    """
+
+    print(f"finding default lat/lon parameters for {filename}")
+
+    return ("latitude", "longitude")
+
+
+def find_nc_files(directory: str, recursive: bool) -> List[str]:
+    """
+    Find .nc or .NC files in the specified directory.
+
+    Args:
+        directory (str): The directory to search for .nc files.
+        recursive (bool): If True, search recursively in subdirectories.
+
+    Returns:
+        List[str]: A list of found .nc or .NC files with their full paths.
+    """
+    files = []
+    if recursive:
+        for root, _, _ in os.walk(directory):
+            files.extend(glob.glob(os.path.join(root, "*.nc")))
+            files.extend(glob.glob(os.path.join(root, "*.NC")))
+    else:
+        files = glob.glob(os.path.join(directory, "*.nc"))
+        if len(files) < 1:
+            files = glob.glob(os.path.join(directory, "*.NC"))
+    return files
+
+
 def main():
     """main function of tool
 
@@ -71,6 +127,7 @@ def main():
     """
 
     log = setup_logging()  # Initialize logging configuration
+    log.info("initializing log")
 
     # ----------------------------------------------------------------------
     # Process Command Line Arguments for tool
@@ -185,6 +242,49 @@ def main():
     )
 
     parser.add_argument(
+        "--map_only",
+        "-m",
+        help=("plot map only, not histograms"),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--max_plot_range",
+        "-pr2",
+        help=(
+            "maximum plot range value."
+            " Default is the maximum value of the parameter plotted."
+            " For multiple parameters use comma separated list."
+        ),
+        required=False,
+        default="",
+    )
+
+    parser.add_argument(
+        "--min_plot_range",
+        "-pr1",
+        help=(
+            "minimum plot range value."
+            " Default is the minimum value of the parameter plotted."
+            " For multiple parameters use comma separated list."
+        ),
+        required=False,
+        default="",
+    )
+
+    parser.add_argument(
+        "--not_apply_mask",
+        "-nam",
+        help=(
+            "if set, do not apply area's data mask to filter input locations."
+            " Applies to all parameters when multiple parameters used."
+        ),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--out_dir",
         "-od",
         help=(
@@ -227,35 +327,11 @@ def main():
     )
 
     parser.add_argument(
-        "--map_only",
-        "-m",
-        help=("plot map only, not histograms"),
+        "--recursive",
+        "-r",
+        help=("recursive directory search for input files"),
         required=False,
         action="store_true",
-    )
-
-    parser.add_argument(
-        "--max_plot_range",
-        "-pr2",
-        help=(
-            "maximum plot range value."
-            " Default is the maximum value of the parameter plotted."
-            " For multiple parameters use comma separated list."
-        ),
-        required=False,
-        default="",
-    )
-
-    parser.add_argument(
-        "--min_plot_range",
-        "-pr1",
-        help=(
-            "minimum plot range value."
-            " Default is the minimum value of the parameter plotted."
-            " For multiple parameters use comma separated list."
-        ),
-        required=False,
-        default="",
     )
 
     parser.add_argument(
@@ -268,6 +344,16 @@ def main():
         ),
         required=False,
         type=float,
+    )
+
+    parser.add_argument(
+        "--units",
+        "-u",
+        help=(
+            "[optional] units of parameters to plot. Used in annotation. Comma"
+            "separated list of units if multiple parameters used. "
+        ),
+        required=False,
     )
 
     parser.add_argument(
@@ -320,157 +406,163 @@ def main():
         )
 
     if args.out_file and args.out_dir:
-        log.error("Only one of --out_file and --out_dir allowed")
-        sys.exit(1)
+        sys.exit("{RED}Only one of --out_file and --out_dir allowed{NC}")
+
+    # ------------------------------------------------------------------------------------------
+    #  Extract list of parameters and lat/lon names from arguments if available
+    # ------------------------------------------------------------------------------------------
+
+    if args.params:
+        params = args.params.split(",")
+    else:
+        params = []
+
+    num_data_sets = len(params)
+
+    if args.latname:
+        latnames = args.latname.split(",")
+    else:
+        latnames = []
+
+    if args.lonname:
+        lonnames = args.lonname.split(",")
+    else:
+        lonnames = []
+
+    # ------------------------------------------------------------------------------------------
+    #  Find list of files to plot (or could be an empty list if just plotting map)
+    # ------------------------------------------------------------------------------------------
+
+    # Find list of input netcdf files .nc, or .NC
+
+    if args.file or args.dir:
+        if args.file:
+            files = [args.file]
+        else:
+            files = find_nc_files(args.dir, args.recursive)
+    else:
+        files = []
+
+    # ------------------------------------------------------------------------------------------
+    # Attempt to identify file types and get default latitude, longitude names
+    # ------------------------------------------------------------------------------------------
+
+    if len(files) > 0:
+        if len(params) == 0:
+            def_param = get_default_param(files[0])
+            if len(def_param) > 0:
+                params = [def_param]
+                num_data_sets = len(params)
+        if num_data_sets > 0:
+            if len(latnames) == 0 | len(lonnames) == 0:
+                def_latname, def_lonname = get_default_latlon_names(files[0])
+                if len(def_latname) > 0:
+                    latnames = [def_latname] * num_data_sets
+                    lonnames = [def_lonname] * num_data_sets
+                else:
+                    sys.exit("{RED}requires --latname , --lonname command line args{NC}")
+                if len(latnames) != num_data_sets:
+                    latnames = [latnames[0]] * num_data_sets
+                    lonnames = [lonnames[0]] * num_data_sets
+    else:
+        num_data_sets = 1
+        params = ["None"]
 
     # ---------------------------------------------------------------------------
-    # Get datasets to plot
+    # Build dataset dicts to plot
     # ---------------------------------------------------------------------------
 
     datasets = []
 
-    if not args.file and not args.dir:
-        if args.step:
-            # Generate some simulated data
-            lon_step = args.step
-            lat_step = args.step
+    error_str = ""
+    plot_size_scale_factor = args.point_size_factor.split(",")
+    if len(plot_size_scale_factor) != num_data_sets:
+        plot_size_scale_factor = [plot_size_scale_factor[0]] * num_data_sets
+        error_str += "point_size_factor "
+    min_plot_range = args.min_plot_range.split(",")
+    if len(min_plot_range) != num_data_sets:
+        min_plot_range = [min_plot_range[0]] * num_data_sets
+        error_str += "min_plot_range "
+    max_plot_range = args.max_plot_range.split(",")
+    if len(max_plot_range) != num_data_sets:
+        max_plot_range = [max_plot_range[0]] * num_data_sets
+        error_str += "max_plot_range "
+    cmap_names = args.cmap.split(",")
+    if len(cmap_names) != num_data_sets:
+        cmap_names = [cmap_names[0]] * num_data_sets
+        error_str += "cmap "
+    cmap_over = args.cmap_over.split(",")
+    if len(cmap_over) != num_data_sets:
+        cmap_over = [cmap_over[0]] * num_data_sets
+        error_str += "cmap_over "
+    cmap_under = args.cmap_under.split(",")
+    if len(cmap_under) != num_data_sets:
+        cmap_under = [cmap_under[0]] * num_data_sets
+        error_str += "cmap_under "
+    cmap_extend = args.cmap_extend.split(",")
+    if len(cmap_extend) != num_data_sets:
+        cmap_extend = [cmap_extend[0]] * num_data_sets
+        error_str += "cmap_extend "
+    if args.valid_min:
+        valid_min = args.valid_min.split(",")
+        if len(valid_min) != num_data_sets:
+            valid_min = [valid_min[0]] * num_data_sets
+            error_str += "valid_min "
+    if args.valid_max:
+        valid_max = args.valid_max.split(",")
+        if len(valid_max) != num_data_sets:
+            valid_max = [valid_max[0]] * num_data_sets
+            error_str += "valid_max "
 
-            # Generate the grid of points
-            lon_values = np.arange(thisarea.minlon, thisarea.maxlon + lon_step, lon_step)
-            lat_values = np.arange(thisarea.minlat, thisarea.maxlat + lat_step, lat_step)
+    if args.fill_value:
+        fill_value = args.fill_value.split(",")
+        if len(fill_value) != num_data_sets:
+            fill_value = [fill_value[0]] * num_data_sets
+            error_str += "fill_value "
 
-            # Create the mesh grid
-            lons, lats = np.meshgrid(lon_values, lat_values)
-            vals = lats
-        else:
-            lats = []
-            lons = []
-            vals = []
+    if args.units:
+        units = args.units.split(",")
+        if len(units) != num_data_sets:
+            units = [units[0]] * num_data_sets
+            error_str += "units "
 
-        dataset = {
-            "name": "simulated" if len(lats) > 0 else "None",
-            "units": "m",
-            "lats": lats,
-            "lons": lons,
-            "vals": vals,
-            # "flag_colors": ["b"],
-            # "flag_names": [
-            #     "1",
-            # ],
-            # "flag_values": [
-            #     1,
-            # ],
+    if len(error_str) > 0:
+        print(
+            f"{ORANGE} WARNING: If you have {num_data_sets} commas separated --params args,"
+            f" you can have an equal number of comma separated\n"
+            f" {error_str} arguments{NC}"
+        )
+    for i in range(num_data_sets):
+        ds = {
+            "name": params[i],
+            "lats": [],
+            "lons": [],
+            "vals": [],
+            "plot_size_scale_factor": float(plot_size_scale_factor[i]),
+            "cmap_name": cmap_names[i],
+            "cmap_over_color": cmap_over[i],
+            "cmap_under_color": cmap_under[i],
+            "cmap_extend": cmap_extend[i],
+            "apply_area_mask_to_data": ~args.not_apply_mask,
         }
-
-        datasets.append(dataset)
-    elif args.file or args.dir:
-        if args.file:
-            files = [args.file]
-        else:
-            files = glob.glob(f"{args.dir}/*.nc")
-            if len(files) < 1:
-                files = glob.glob(f"{args.dir}/*.NC")
-
-        params = args.params.split(",")
-        num_data_sets = len(params)
-        print(f"Number of datasets: {num_data_sets}")
-
-        error_str = ""
-        latnames = args.latname.split(",")
-        if len(latnames) != num_data_sets:
-            latnames = [latnames[0]] * num_data_sets
-            error_str += "latname "
-        lonnames = args.lonname.split(",")
-        if len(lonnames) != num_data_sets:
-            lonnames = [lonnames[0]] * num_data_sets
-            error_str += "lonname "
-        plot_size_scale_factor = args.point_size_factor.split(",")
-        if len(plot_size_scale_factor) != num_data_sets:
-            plot_size_scale_factor = [plot_size_scale_factor[0]] * num_data_sets
-            error_str += "point_size_factor "
-        min_plot_range = args.min_plot_range.split(",")
-        if len(min_plot_range) != num_data_sets:
-            min_plot_range = [min_plot_range[0]] * num_data_sets
-            error_str += "min_plot_range "
-        max_plot_range = args.max_plot_range.split(",")
-        if len(max_plot_range) != num_data_sets:
-            max_plot_range = [max_plot_range[0]] * num_data_sets
-            error_str += "max_plot_range "
-        cmap_names = args.cmap.split(",")
-        if len(cmap_names) != num_data_sets:
-            cmap_names = [cmap_names[0]] * num_data_sets
-            error_str += "cmap "
-        cmap_over = args.cmap_over.split(",")
-        if len(cmap_over) != num_data_sets:
-            cmap_over = [cmap_over[0]] * num_data_sets
-            error_str += "cmap_over "
-        cmap_under = args.cmap_under.split(",")
-        if len(cmap_under) != num_data_sets:
-            cmap_under = [cmap_under[0]] * num_data_sets
-            error_str += "cmap_under "
-        cmap_extend = args.cmap_extend.split(",")
-        if len(cmap_extend) != num_data_sets:
-            cmap_extend = [cmap_extend[0]] * num_data_sets
-            error_str += "cmap_extend "
-        if args.valid_min:
-            valid_min = args.valid_min.split(",")
-            if len(valid_min) != num_data_sets:
-                valid_min = [valid_min[0]] * num_data_sets
-                error_str += "valid_min "
-        if args.valid_max:
-            valid_max = args.valid_max.split(",")
-            if len(valid_max) != num_data_sets:
-                valid_max = [valid_max[0]] * num_data_sets
-                error_str += "valid_max "
-
+        if min_plot_range[i] != "":
+            ds["min_plot_range"] = float(min_plot_range[i])
+        if max_plot_range[i] != "":
+            ds["max_plot_range"] = float(max_plot_range[i])
+        if args.valid_min and args.valid_max is None:
+            ds["valid_range"] = [float(valid_min[i]), None]
+        if args.valid_max and args.valid_min is None:
+            ds["valid_range"] = [None, float(valid_max[i])]
+        if args.valid_max and args.valid_min:
+            ds["valid_range"] = [float(valid_min[i]), float(valid_max[i])]
         if args.fill_value:
-            fill_value = args.fill_value.split(",")
-            if len(fill_value) != num_data_sets:
-                fill_value = [fill_value[0]] * num_data_sets
-                error_str += "fill_value "
+            ds["fill_value"] = float(fill_value[i])
+        if args.units:
+            ds["units"] = units[i]
 
-        if len(error_str) > 0:
-            print(
-                f"{ORANGE} WARNING: If you have {num_data_sets} commas separated --params args,"
-                f" you can have an equal number of comma separated\n"
-                f" {error_str} arguments{NC}"
-            )
-        for i in range(num_data_sets):
-            ds = {
-                "name": params[i],
-                "units": "m",
-                "lats": [],
-                "lons": [],
-                "vals": [],
-                "plot_size_scale_factor": float(plot_size_scale_factor[i]),
-                "cmap_name": cmap_names[i],
-                "cmap_over_color": cmap_over[i],
-                "cmap_under_color": cmap_under[i],
-                "cmap_extend": cmap_extend[i],
-            }
-            if min_plot_range[i] != "":
-                ds["min_plot_range"] = float(min_plot_range[i])
-            if max_plot_range[i] != "":
-                ds["max_plot_range"] = float(max_plot_range[i])
-            if args.valid_min and args.valid_max is None:
-                ds["valid_range"] = [float(valid_min[i]), None]
-            if args.valid_max and args.valid_min is None:
-                ds["valid_range"] = [None, float(valid_max[i])]
-            if args.valid_max and args.valid_min:
-                ds["valid_range"] = [float(valid_min[i]), float(valid_max[i])]
-            if args.fill_value:
-                ds["fill_value"] = float(fill_value[i])
+        datasets.append(ds)
 
-            datasets.append(ds)
-
-            # "flag_colors": ["b"],
-            # "flag_names": [
-            #     "1",
-            # ],
-            # "flag_values": [
-            #     1,
-            # ],
-
+    if len(files) == 0:
         for filename in files:
             # Open the NetCDF file
             try:
@@ -487,7 +579,26 @@ def main():
             except IOError:
                 sys.exit(f"{RED}Can not open {filename}{NC}")
     else:
-        sys.exit('feature Not implemented yet"')
+        if args.step:
+            # Generate some simulated data
+            lon_step = args.step
+            lat_step = args.step
+
+            # Generate the grid of points
+            lon_values = np.arange(thisarea.minlon, thisarea.maxlon + lon_step, lon_step)
+            lat_values = np.arange(thisarea.minlat, thisarea.maxlat + lat_step, lat_step)
+
+            # Create the mesh grid
+            lons, lats = np.meshgrid(lon_values, lat_values)
+            vals = lats
+        else:
+            lats = []
+            lons = []
+            vals = []
+        datasets[0]["lats"].extend(lats)
+        datasets[0]["lons"].extend(lons)
+        datasets[0]["vals"].extend(vals)
+        datasets[0]["name"] = "simulated"
 
     Polarplot(args.area).plot_points(
         *datasets,
