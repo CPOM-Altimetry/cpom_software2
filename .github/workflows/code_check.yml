@@ -1,0 +1,77 @@
+name: code_check
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  code_check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11'] # Define the Python versions here
+    steps:
+      #----------------------------------------------
+      #       check-out repo and set-up python
+      #----------------------------------------------
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }} # Use matrix strategy for Python versions
+      #----------------------------------------------
+      #  -----  install & configure poetry  -----
+      #----------------------------------------------
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      #----------------------------------------------
+      #       load cached venv if cache exists
+      #----------------------------------------------
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-v3
+
+      #----------------------------------------------
+      # install dependencies if cache does not exist
+      #----------------------------------------------
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+      #----------------------------------------------
+      # install your root project, if required
+      #----------------------------------------------
+      - name: Install project
+        run: poetry install --no-interaction --with dev
+      #----------------------------------------------
+      #              run test suite
+      #----------------------------------------------
+      - name: Run tests
+        env:
+            CPOM_SOFTWARE_DIR: ${{ github.workspace }}
+        run: |
+          echo $CPOM_SOFTWARE_DIR
+          #source $VENV
+          . .venv/bin/activate
+          # check that all src directories contain a __init__.py
+          missing_init=$(find src/cpom -type d \( -name '.*' -o -name '__*' \) -prune -o -type d ! -exec test -e '{}/__init__.py' \; -print | head -n 1)
+          if [ -n "$missing_init" ]; then
+            echo "Missing __init__.py in directory : $missing_init"
+            exit 1
+          fi
+          ruff src/ccpom
+          pylint --version
+          pylint src/cpom
+          mypy --ignore-missing-imports src/cpom
+          echo "running pytest -m not non_core and not requires_external_data"
+          pytest -m "not non_core and not requires_external_data"
