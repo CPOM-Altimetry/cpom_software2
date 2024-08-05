@@ -96,7 +96,9 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     return ("latitude", "longitude")
 
 
-def find_nc_files(directory: str, recursive: bool, max_files: int | None) -> List[str]:
+def find_nc_files(
+    directory: str, recursive: bool, max_files: int | None, include_string: str | None
+) -> List[str]:
     """
     Find .nc or .NC files in the specified directory.
 
@@ -121,10 +123,14 @@ def find_nc_files(directory: str, recursive: bool, max_files: int | None) -> Lis
     if max_files is not None:
         if len(files) > max_files:
             files = files[:max_files]
+
+    if include_string:
+        files = [file for file in files if include_string in os.path.basename(file)]
+
     return files
 
 
-def main():
+def main(args):
     """main function of tool
 
     Returns:
@@ -211,6 +217,13 @@ def main():
             "[Optional] assign fill value (value to be treated as bad values)."
             "If multiple parameters use comma separated list."
         ),
+        required=False,
+    )
+
+    parser.add_argument(
+        "--include",
+        "-i",
+        help=("[optional] include only files with this string in their filename"),
         required=False,
     )
 
@@ -391,7 +404,7 @@ def main():
     )
 
     # read arguments from the command line
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     # Print a list of available area definitions
     if args.list_areas:
@@ -452,7 +465,7 @@ def main():
         if args.file:
             files = [args.file]
         else:
-            files = find_nc_files(args.dir, args.recursive, args.max_files)
+            files = find_nc_files(args.dir, args.recursive, args.max_files, args.include)
     else:
         files = []
 
@@ -628,6 +641,8 @@ def main():
         map_only=args.map_only,
     )
 
+    log.info("plot completed ok")
+
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
