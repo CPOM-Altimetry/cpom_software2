@@ -1,7 +1,7 @@
 """
 # Altimetry related directories
 
-- missions
+- `cpom.altimetry.missions`
 - projects
 - tools
 """
