@@ -3,8 +3,8 @@
 
 The following command line tools are available:
 
-## plot_netcdf
+## plot_map.py
 
-Tool to plot variable(s) from one or more netcdf files on to cryosphere areas.
+Plot variables from NetCDF file(s) on a selectable cryosphere map.
 
 """
