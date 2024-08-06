@@ -20,6 +20,7 @@ import matplotlib.path as mpath
 import numpy as np
 import shapefile as shp  # type: ignore
 from cartopy.mpl.geoaxes import GeoAxesSubplot  # type: ignore
+from matplotlib import colormaps
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from numpy import ma  # masked arrays
@@ -58,7 +59,9 @@ def get_unique_colors(n: int, cmap_name_override: str | None = None):
         cmap_name = "tab20"
     if cmap_name_override is not None:
         cmap_name = cmap_name_override
-    cmap = plt.cm.get_cmap(cmap_name, n)  # Replace 'tab20' with any suitable colormap
+    cmap = colormaps[cmap_name].resampled(
+        n
+    )  # Using the dictionary-like access and resampled method
     colors = [cmap(i) for i in range(cmap.N)]
     return colors
 

@@ -42,7 +42,7 @@ An example environment setup is shown below (the path in the first line should b
 adapted for your specific directory path):
 
 ```script
-export CPOM_SOFTWARE_DIR=/Users/someuser/software/clev2er_liiw
+export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
 export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
 export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}
 # for multi-processing/shared mem support set ulimit

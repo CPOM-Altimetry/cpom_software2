@@ -425,7 +425,8 @@ class Background:
 
             zimage = exposure.equalize_adapthist(zimage)
 
-            thiscmap = plt.cm.get_cmap("Greys_r")
+            # thiscmap = plt.cm.get_cmap("Greys_r") - depreciated
+            thiscmap = colormaps["Greys_r"]
 
             print("pcolormesh")
             plt.pcolormesh(x_grid, y_grid, zimage, cmap=thiscmap, shading="auto", transform=dataprj)
@@ -484,7 +485,9 @@ class Background:
 
             x_grid, y_grid = np.meshgrid(xdem, ydem)
 
-            thiscmap = plt.cm.get_cmap("Greys", 48)
+            # thiscmap = plt.cm.get_cmap("Greys", 48) - depreciated
+            thiscmap = colormaps["Greys"].resampled(48)
+
             thiscmap.set_bad(color="aliceblue")
             ax.pcolormesh(
                 x_grid,
@@ -693,7 +696,8 @@ class Background:
                 log.error("Could not read %s", bgfile)
                 sys.exit(f"Could not read {bgfile}")
 
-            thiscmap = plt.cm.get_cmap("Blues_r", 8)
+            # thiscmap = plt.cm.get_cmap("Blues_r", 8) - depreciated
+            thiscmap = colormaps["Blues_r"].resampled(8)
 
             ax.pcolormesh(
                 x_grid,
@@ -772,7 +776,9 @@ class Background:
 
             x_grid, y_grid = np.meshgrid(xdem, ydem)
 
-            thiscmap = plt.cm.get_cmap("Greys", 48)
+            # thiscmap = plt.cm.get_cmap("Greys", 48) - depreciated
+            thiscmap = colormaps["Greys"].resampled(48)
+
             ax.pcolormesh(
                 x_grid,
                 y_grid,
@@ -874,7 +880,9 @@ class Background:
 
             x_grid, y_grid = np.meshgrid(xdem, ydem)
 
-            thiscmap = plt.cm.get_cmap("Greys", 48)
+            # thiscmap = plt.cm.get_cmap("Greys", 48) - this method depreciated
+            thiscmap = colormaps["Greys"].resampled(48)
+
             thiscmap.set_bad(color="aliceblue")
             ax.pcolormesh(
                 x_grid,
@@ -946,7 +954,9 @@ class Background:
 
             x_grid, y_grid = np.meshgrid(xdem, ydem)
 
-            thiscmap = plt.cm.get_cmap("Greys", 48)
+            # thiscmap = plt.cm.get_cmap("Greys", 48) - depreciated
+            thiscmap = colormaps["Greys"].resampled(48)
+
             thiscmap.set_bad(color="aliceblue")
             ax.pcolormesh(
                 x_grid,
@@ -1018,7 +1028,9 @@ class Background:
 
             x_grid, y_grid = np.meshgrid(xdem, ydem)
 
-            thiscmap = plt.cm.get_cmap("Greys", 64)
+            # thiscmap = plt.cm.get_cmap("Greys", 64) - depreciated
+            thiscmap = colormaps["Greys"].resampled(64)
+
             thiscmap.set_bad(color="aliceblue")
             max_elevation = self.thisarea.max_elevation
             if self.thisarea.max_elevation:
