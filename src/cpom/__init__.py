@@ -1,9 +1,9 @@
 """
-# Main docs
-
 <small>this toplevel page at src/cpom/__init__.py</small>
 Documentation for the CPOM Software Package, hosted on GitHub at
 [github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).
+
+# Installation
 
 ## Installation of the CPOM Software Package
 
