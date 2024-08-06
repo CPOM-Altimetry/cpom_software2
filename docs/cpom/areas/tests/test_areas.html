@@ -81,8 +81,8 @@
 </span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="kn">import</span> <span class="nn">pytest</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names_only</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names_only</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a>
 </span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a>
 </span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="k">def</span> <span class="nf">test_bad_area_name</span><span class="p">():</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;pytest to check for handling of invalid area names&quot;&quot;&quot;</span>
@@ -93,12 +93,11 @@
 </span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="k">def</span> <span class="nf">test_good_area_name</span><span class="p">():</span>
 </span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;pytest to check for handling of valid area names&quot;&quot;&quot;</span>
 </span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>    <span class="n">area_list</span><span class="o">=</span><span class="n">list_all_area_definition_names_only</span><span class="p">()</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>    <span class="n">area_list</span> <span class="o">=</span> <span class="n">list_all_area_definition_names_only</span><span class="p">()</span>
 </span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>
 </span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>    <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">area_list</span><span class="p">:</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>        <span class="n">thisarea</span><span class="o">=</span><span class="n">area</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>        <span class="n">thisarea</span> <span class="o">=</span> <span class="n">area</span>
 </span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>        <span class="n">Area</span><span class="p">(</span><span class="n">thisarea</span><span class="p">)</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>    
 </span></pre></div>
 
 
@@ -140,10 +139,10 @@
             <div class="pdoc-code codehilite"><pre><span></span><span id="test_good_area_name-15"><a href="#test_good_area_name-15"><span class="linenos">15</span></a><span class="k">def</span> <span class="nf">test_good_area_name</span><span class="p">():</span>
 </span><span id="test_good_area_name-16"><a href="#test_good_area_name-16"><span class="linenos">16</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;pytest to check for handling of valid area names&quot;&quot;&quot;</span>
 </span><span id="test_good_area_name-17"><a href="#test_good_area_name-17"><span class="linenos">17</span></a>
-</span><span id="test_good_area_name-18"><a href="#test_good_area_name-18"><span class="linenos">18</span></a>    <span class="n">area_list</span><span class="o">=</span><span class="n">list_all_area_definition_names_only</span><span class="p">()</span>
+</span><span id="test_good_area_name-18"><a href="#test_good_area_name-18"><span class="linenos">18</span></a>    <span class="n">area_list</span> <span class="o">=</span> <span class="n">list_all_area_definition_names_only</span><span class="p">()</span>
 </span><span id="test_good_area_name-19"><a href="#test_good_area_name-19"><span class="linenos">19</span></a>
 </span><span id="test_good_area_name-20"><a href="#test_good_area_name-20"><span class="linenos">20</span></a>    <span class="k">for</span> <span class="n">area</span> <span class="ow">in</span> <span class="n">area_list</span><span class="p">:</span>
-</span><span id="test_good_area_name-21"><a href="#test_good_area_name-21"><span class="linenos">21</span></a>        <span class="n">thisarea</span><span class="o">=</span><span class="n">area</span>
+</span><span id="test_good_area_name-21"><a href="#test_good_area_name-21"><span class="linenos">21</span></a>        <span class="n">thisarea</span> <span class="o">=</span> <span class="n">area</span>
 </span><span id="test_good_area_name-22"><a href="#test_good_area_name-22"><span class="linenos">22</span></a>        <span class="n">Area</span><span class="p">(</span><span class="n">thisarea</span><span class="p">)</span>
 </span></pre></div>
 
