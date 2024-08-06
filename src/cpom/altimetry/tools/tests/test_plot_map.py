@@ -1,11 +1,11 @@
-"""pytest for cpom.altimetry.tools.plotnetcdf.py"""
+"""pytest for cpom.altimetry.tools.plot_map.py"""
 import os
 import sys
 from unittest import mock
 
 import pytest
 
-from cpom.altimetry.tools.plot_netcdf import main
+from cpom.altimetry.tools.plot_map import main
 
 
 # Test various command line arg combinations complete successfully to produce a plot
@@ -15,7 +15,7 @@ from cpom.altimetry.tools.plot_netcdf import main
     [
         (
             [
-                "plot_netcdf.py",
+                "plot_map.py",
                 "-f",
                 (
                     f'{os.environ["CPOM_SOFTWARE_DIR"]}/testdata/cs2/l2/cryotempo/c/landice/greenl/'
@@ -32,7 +32,7 @@ from cpom.altimetry.tools.plot_netcdf import main
         ),
         (
             [
-                "plot_netcdf.py",
+                "plot_map.py",
                 "-f",
                 (
                     f'{os.environ["CPOM_SOFTWARE_DIR"]}/testdata/cs2/l2/cryotempo/c/landice/antarc/'
@@ -48,14 +48,14 @@ from cpom.altimetry.tools.plot_netcdf import main
         # Add more test cases as needed
     ],
 )
-def test_plot_netcdf(
+def test_plot_map(
     capsys: pytest.CaptureFixture,
     tmpdir: pytest.TempPathFactory,
     test_args: list[str],
     expected_output: str,
 ) -> None:
     """
-    Test the `plot_netcdf` function from `cpom.altimetry.tools.plot_netcdf`
+    Test the `plot_map` function from `cpom.altimetry.tools.plot_map`
     with multiple sets of arguments.
 
     Args:

@@ -1359,6 +1359,9 @@ class Polarplot:
 
         print("Adding map scale bar")
 
+        if self.thisarea.show_scalebar is False:
+            return
+
         mapscale = self.thisarea.mapscale
 
         # Centre point of scale bar in data coordinates (m)
@@ -2270,6 +2273,12 @@ class Polarplot:
         elif self.thisarea.epsg_number == 3031:
             dataprj = ccrs.epsg("3031")
             this_projection = ccrs.SouthPolarStereo(true_scale_latitude=-71.0)
+
+        # EPSG:3395: World Mercator/ WGS 84
+        elif self.thisarea.epsg_number == 3395:
+            dataprj = ccrs.epsg("3395")
+            this_projection = ccrs.PlateCarree()
+
         else:
             raise ValueError(f"EPSG-{self.thisarea.epsg_number} not supported")
 
@@ -2362,11 +2371,18 @@ class Polarplot:
                             self.thisarea.bounding_lat - 12, -90 + 180
                         )
                         ax.set_extent([llx, urx, lly, ury], dataprj)
-                else:
+                elif self.thisarea.hemisphere == "south":
                     # Note that the '+1' below is a fudge to expand the area to account for the
                     # clipping of the circular boundary
                     ax.set_extent(
                         [-180, 180, -90, self.thisarea.bounding_lat + 1],
+                        ccrs.PlateCarree(),
+                    )  # min lon, max_lon, max_lat, min_lat, data is in lat, lon, so use PlateCarree
+                else:
+                    # Note that the '+1' below is a fudge to expand the area to account for the
+                    # clipping of the circular boundary
+                    ax.set_extent(
+                        [-180, 180, -91, 91],
                         ccrs.PlateCarree(),
                     )  # min lon, max_lon, max_lat, min_lat, data is in lat, lon, so use PlateCarree
 

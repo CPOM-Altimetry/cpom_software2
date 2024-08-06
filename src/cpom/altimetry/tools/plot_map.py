@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Plot variables from NetCDF files using Polarplot"""
+"""Plot variables from NetCDF file(s) on a selectable cryosphere map
+
+    - plot_map.py --help for full list of command line args
+"""
 
 
 import argparse
@@ -18,19 +21,19 @@ from cpom.areas.areas import Area, list_all_area_definition_names
 
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
-
-RED = "\033[0;31m"  # pylint: disable=invalid-name
-BLUE = "\033[0;34m"
-# YELLOW = "\033[1;33m"
-BLACK_BOLD = "\033[1;30m"
-ORANGE = "\033[38;5;208m"
-NC = "\033[0m"  # No Color, pylint: disable=invalid-name
-
 # pylint: disable=too-many-branches
+# pylint: disable=too-many-return-statements
+
+# Colour constants for highlighting terminal output text
+RED = "\033[0;31m"  # pylint: disable=invalid-name
+BLUE = "\033[0;34m"  # pylint: disable=invalid-name
+BLACK_BOLD = "\033[1;30m"  # pylint: disable=invalid-name
+ORANGE = "\033[38;5;208m"  # pylint: disable=invalid-name
+NC = "\033[0m"  # No Color, pylint: disable=invalid-name
 
 
 def setup_logging():
-    """Setup logging configuration"""
+    """Setup logging handlers"""
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler(sys.stdout)
@@ -66,19 +69,60 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def get_default_param(filename: str) -> str:
-    """Get a default parameter to plot from filename
+def get_default_param(
+    filename: str,
+) -> tuple[str, str]:
+    """Get a default parameter to plot from known file types
+
+    Supported types:
+    Cryo-TEMPO Land Ice: file name starts with CS_OFFL_SIR_TDP_LI
+    Cryo-TEMPO Sea Ice: file name starts with CS_OFFL_SIR_TDP_SI
+
 
     Args:
         filename (str): path of NetCDF file
 
     Returns:
-        str: parameter name or '' if not found
+        str,str: parameter name or '' if not found,units or '' if not found
     """
+
+    basename = os.path.basename(filename)
 
     print(f"finding default params for {filename}")
 
-    return "elevation"
+    # CryoTEMPO Products
+    if "CS_OFFL_SIR_TDP_LI" in basename[: len("CS_OFFL_SIR_TDP_LI")]:
+        # CRYO_TEMPO Land Ice file
+        return "elevation", "m"
+    if "CS_OFFL_SIR_TDP_SI" in basename[: len("CS_OFFL_SIR_TDP_SI")]:
+        # CRYO_TEMPO Sea Ice file
+        return "radar_freeboard", "m"
+    if "CS_OFFL_SIR_TDP_PO" in basename[: len("CS_OFFL_SIR_TDP_PO")]:
+        # CRYO_TEMPO Polar Oceans file
+        return "dynamic_ocean_topography", "m"
+    if "CS_OFFL_SIR_TDP_SS" in basename[: len("CS_OFFL_SIR_TDP_SS")]:
+        # CRYO_TEMPO Summer Sea Ice file
+        return "radar_freeboard", "m"
+    if "CS_NRT__SIR_TDP_PO" in basename[: len("CS_NRT__SIR_TDP_PO")]:
+        # CRYO_TEMPO NRT Polar Oceans
+        return "dynamic_ocean_topography", "m"
+    if "CS_NRT__SIR_TDP_SI" in basename[: len("CS_NRT__SIR_TDP_SI")]:
+        # CRYO_TEMPO NRT Sea Ice
+        return "radar_freeboard", "m"
+    # CRISTAL L1b Products
+    if "CRA_IR_1B_HR__" in basename[: len("CRA_IR_1B_HR__")]:
+        # CRISTAL L1b HR
+        return "data/ku/tracker_range_calibrated", "m"
+    if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
+        # CRISTAL L1b LMC
+        return "data_20/ku/tracker_range_calibrated", "m"
+
+    print(
+        f"{ORANGE}Format of {basename} not recognized - "
+        f"so not using defaults for parameter name{NC}"
+    )
+
+    return "", ""
 
 
 def get_default_latlon_names(filename: str) -> tuple[str, str]:
@@ -93,7 +137,61 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
 
     print(f"finding default lat/lon parameters for {filename}")
 
-    return ("latitude", "longitude")
+    basename = os.path.basename(filename)
+
+    # CryoTEMPO Products
+    if "CS_OFFL_SIR_TDP_LI" in basename[: len("CS_OFFL_SIR_TDP_LI")]:
+        # CRYO_TEMPO Land Ice file
+        return ("latitude", "longitude")
+    if "CS_OFFL_SIR_TDP_SI" in basename[: len("CS_OFFL_SIR_TDP_SI")]:
+        # CRYO_TEMPO Sea Ice file
+        return ("latitude", "longitude")
+    if "CS_OFFL_SIR_TDP_PO" in basename[: len("CS_OFFL_SIR_TDP_PO")]:
+        # CRYO_TEMPO Polar Oceans file
+        return ("latitude", "longitude")
+    if "CS_OFFL_SIR_TDP_SS" in basename[: len("CS_OFFL_SIR_TDP_SS")]:
+        # CRYO_TEMPO Polar Oceans file
+        return ("latitude", "longitude")
+    if "CS_NRT__SIR_TDP_PO" in basename[: len("CS_NRT__SIR_TDP_PO")]:
+        # CRYO_TEMPO NRT Polar Oceans file
+        return ("latitude", "longitude")
+    if "CS_NRT__SIR_TDP_SI" in basename[: len("CS_NRT__SIR_TDP_SI")]:
+        # CRYO_TEMPO NRT Sea Ice file
+        return ("latitude", "longitude")
+    # CRISTAL L1b Products
+    if "CRA_IR_1B_HR__" in basename[: len("CRA_IR_1B_HR__")]:
+        # CRISTAL L1b HR
+        return "data/ku/latitude", "data/ku/longitude"
+    if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
+        # CRISTAL L1b LMC
+        return "data_20/ku/latitude", "data_20/ku/longitude"
+
+    print(
+        f"{ORANGE}Format of {basename} not recognized - "
+        f"so not using defaults for lat/lon parameters{NC}"
+    )
+
+    return ("", "")
+
+
+def get_default_area(lat: float, filename: str) -> str:
+    """select a default area definition based on latitude
+
+    Args:
+        lat (float): latitude in degs
+        filename (str): file name
+
+    Returns:
+        str: cpom area definition name
+    """
+    if lat < -50.0:
+        return "antarctica_hs"
+    if lat > 50.0:
+        basename = os.path.basename(filename)
+        if "GREENL" in basename:  # for CryoTEMPO Greenland files
+            return "greenland_hs"
+        return "arctic_cpy"
+    return "global"
 
 
 def find_nc_files(
@@ -349,7 +447,7 @@ def main(args):
             "parameters different sizes you can use a comma separated list of scale factors."
         ),
         required=False,
-        default="1.0",
+        default="0.1",
     )
 
     parser.add_argument(
@@ -417,20 +515,6 @@ def main(args):
             print(f"{area_name}")
         sys.exit(0)
 
-    if not args.area:
-        sys.exit(
-            f"{RED}--area area_name{NC} missing. Use --list_areas to show available area names"
-        )
-
-    try:
-        thisarea = Area(args.area)
-    except ImportError:
-        sys.exit(
-            f"{RED}Area name {BLUE}{args.area}{RED} not found in list of area definitions "
-            f"src/cpom/areas/definitions{NC}."
-            " Use --listareas to show available areas"
-        )
-
     if args.out_file and args.out_dir:
         sys.exit("{RED}Only one of --out_file and --out_dir allowed{NC}")
 
@@ -442,6 +526,11 @@ def main(args):
         params = args.params.split(",")
     else:
         params = []
+
+    if args.units:
+        units = args.units.split(",")
+    else:
+        units = []
 
     num_data_sets = len(params)
 
@@ -476,10 +565,12 @@ def main(args):
     # ------------------------------------------------------------------------------------------
 
     if len(files) > 0:
-        if len(params) == 0:
-            def_param = get_default_param(files[0])
+        if len(params) == 0:  # ie if no parameters given on command line
+            # find default parameter names for this file type
+            def_param, def_units = get_default_param(files[0])
             if len(def_param) > 0:
                 params = [def_param]
+                units = [def_units]
                 num_data_sets = len(params)
         if num_data_sets > 0:
             if len(latnames) == 0 | len(lonnames) == 0:
@@ -497,6 +588,7 @@ def main(args):
         params = ["None"]
 
     log.info("param names: %s", str(params))
+    log.info("unit names: %s", str(units))
     log.info("latnames : %s", str(latnames))
     log.info("lonnames : %s", str(lonnames))
 
@@ -589,11 +681,12 @@ def main(args):
             ds["valid_range"] = [float(valid_min[i]), float(valid_max[i])]
         if args.fill_value:
             ds["fill_value"] = float(fill_value[i])
-        if args.units:
+        if units:
             ds["units"] = units[i]
 
         datasets.append(ds)
 
+    def_area = ""
     if len(files) > 0:
         log.info("reading netcdf files...")
         for filename in files:
@@ -610,9 +703,29 @@ def main(args):
                         datasets[i]["lons"].extend(lons)
                         datasets[i]["vals"].extend(vals)
 
+                        if not args.area and not def_area:
+                            def_area = get_default_area(lats[0], filename)
+
             except IOError:
                 sys.exit(f"{RED}Can not open {filename}{NC}")
-    else:
+
+    if not args.area and not def_area:
+        sys.exit(
+            f"{RED}--area area_name{NC} missing. Use --list_areas to show available area names"
+        )
+
+    if not def_area:
+        def_area = args.area
+    try:
+        thisarea = Area(def_area)
+    except ImportError:
+        sys.exit(
+            f"{RED}Area name {BLUE}{def_area}{RED} not found in list of area definitions "
+            f"src/cpom/areas/definitions{NC}."
+            " Use --listareas to show available areas"
+        )
+
+    if len(files) == 0:
         if args.step:
             # Generate some simulated data
             lon_step = args.step
@@ -634,7 +747,7 @@ def main(args):
         datasets[0]["vals"].extend(vals)
         datasets[0]["name"] = "simulated"
 
-    Polarplot(args.area).plot_points(
+    Polarplot(def_area).plot_points(
         *datasets,
         output_file=args.out_file,
         output_dir=args.out_dir,

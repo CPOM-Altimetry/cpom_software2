@@ -662,10 +662,7 @@ class Dem:
 
             filename = "GaplessREMA100.zarr"
             filled_filename = "GaplessREMA100.zarr"
-            default_dir = (
-                f'{os.environ["CLEV2ER_BASE_DIR"]}/testdata_external/adf/landice/dems/antarctica/'
-                "rema_gapless_100m"
-            )
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/' "rema_gapless_100m"
             self.src_url = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.src_url_filled = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.dem_version = "1.1(REMA)/2.0(Gapless)"
@@ -684,7 +681,7 @@ class Dem:
 
             filename = "GaplessREMA1km.tif"
             filled_filename = "GaplessREMA1km.tif"
-            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/rema_gapless_100m'
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/rema_gapless_1km'
             self.src_url = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.src_url_filled = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.dem_version = "1.1(REMA)/2.0(Gapless)"
@@ -701,10 +698,7 @@ class Dem:
 
             filename = "GaplessREMA1km.zarr"
             filled_filename = "GaplessREMA1km.zarr"
-            default_dir = (
-                f'{os.environ["CLEV2ER_BASE_DIR"]}/testdata_external/adf/landice/dems/antarctica/'
-                "rema_gapless_1km"
-            )
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/' "rema_gapless_1km"
             self.src_url = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.src_url_filled = "https://figshare.com/articles/dataset/Gapless-REMA100/19122212"
             self.dem_version = "1.1(REMA)/2.0(Gapless)"
