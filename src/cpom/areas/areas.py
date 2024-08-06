@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 
 
 def list_all_area_definition_names(logger=None) -> list[str]:
-    """return a list of all area definition names
+    """return a list of all area definition names and some additional
+    info on each.
 
     Raises:
 
@@ -72,6 +73,43 @@ def list_all_area_definition_names(logger=None) -> list[str]:
         logger.setLevel(original_level)
 
 
+def list_all_area_definition_names_only(logger=None) -> list[str]:
+    """return a list of all area definition names (only the names)
+
+    Raises:
+
+    Returns:
+        list[str]
+    """
+
+    if logger is None:
+        logger = logging.getLogger()
+
+    original_level = logger.level
+    logger.setLevel(logging.ERROR)
+
+    try:
+        area_def_directory = f"{os.environ['CPOM_SOFTWARE_DIR']}/src/cpom/areas/definitions"
+        if not os.path.isdir(area_def_directory):
+            raise FileNotFoundError(f"{area_def_directory} not found")
+
+        all_defs = glob.glob(f"{area_def_directory}/*.py")
+        all_defs = [
+            os.path.basename(thisdef).replace(".py", "")
+            for thisdef in all_defs
+            if "__init__" not in thisdef
+        ]
+
+        final_defs = []
+        for thisdef in all_defs:
+            _ = Area(thisdef)
+            final_defs.append(thisdef)
+        return sorted(final_defs)
+
+    finally:
+        logger.setLevel(original_level)
+
+
 class Area:
     """class to define polar areas for plotting etc"""
 
@@ -97,7 +135,7 @@ class Area:
     def load_area(self, overrides: dict | None = None):
         """Load area settings for current area name"""
 
-        log.info("loading area %s", self.name)
+        log.info("loading area -%s-", self.name)
 
         try:
             module = importlib.import_module(f"cpom.areas.definitions.{self.name}")
