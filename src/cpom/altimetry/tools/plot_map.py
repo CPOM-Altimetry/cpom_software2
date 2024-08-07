@@ -3,6 +3,14 @@
 """Plot variables from NetCDF file(s) on a selectable cryosphere map
 
     - plot_map.py --help for full list of command line args
+
+## Examples
+
+Plot a simulated grid of values at 0.01 deg separation over Lake Vostok, with
+point size 1.0 and colormap set to viridis
+
+`plot_map.py -a vostok -s 0.01 -ps 1 --cmap viridis`
+
 """
 
 
@@ -737,7 +745,18 @@ def main(args):
 
             # Create the mesh grid
             lons, lats = np.meshgrid(lon_values, lat_values)
-            vals = lats
+            vals = lats.copy()
+
+            # Calculate the number of elements to set to NaN
+            num_nan = int(len(vals) * 0.1)
+
+            # Randomly select indices to be set to NaN
+            nan_indices = np.random.choice(len(vals), num_nan, replace=False)
+
+            # Set the selected indices to NaN
+            vals[nan_indices] = np.nan
+
+            datasets[0]["units"] = "degs N"
         else:
             lats = []
             lons = []
@@ -745,7 +764,7 @@ def main(args):
         datasets[0]["lats"].extend(lats)
         datasets[0]["lons"].extend(lons)
         datasets[0]["vals"].extend(vals)
-        datasets[0]["name"] = "simulated"
+        datasets[0]["name"] = "simulated" if args.step else "None"
 
     Polarplot(def_area).plot_points(
         *datasets,

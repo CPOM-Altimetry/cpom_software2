@@ -39,7 +39,7 @@ area_definition = {
     #   Area min/max lat/lon for initial data filtering
     "minlon": 100.0,  # minimum longitude to initially filter records for area (0..360E)
     "maxlon": 107.0,  # maximum longitude to initially filter records for area (0..360E)
-    "minlat": -79.0,  # minimum latitude to initially filter records for area
+    "minlat": -78.7,  # minimum latitude to initially filter records for area
     "maxlat": -74.0,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from cpom.masks.Mask
@@ -74,9 +74,9 @@ area_definition = {
     "show_polygon_overlay_in_main_map": True,  # Overlay the area polygon outline in the main map
     "grid_polygon_overlay_mask": None,
     "apply_hillshade_to_vals": False,  # Apply a hillshade to plotted vals (True or False)
-    "draw_coastlines": True,  # Draw coastlines
+    "draw_coastlines": False,  # Draw coastlines
     "coastline_color": "grey",  # Colour to draw coastlines
-    "use_antarctica_medium_coastline": True,  # True,False: Antarctic coastline including iceshelves
+    "use_antarctica_medium_coastline": False,  # True,False: Antarctic coastline inc iceshelves
     "use_cartopy_coastline": "no",  # 'no', 'low','medium', 'high' resolution
     "show_gridlines": True,  # True|False, display lat/lon grid lines
     "area_long_name_position": (0.29, 0.89),  # for default annotation position of area long name
@@ -202,13 +202,13 @@ area_definition = {
     # --------------------------------------------------------
     "show_histograms": True,  # Whether to show the histogram plots
     "histogram_plotrange_axes": [
-        0.735,  # left
+        0.705,  # left
         0.3,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
     "histogram_fullrange_axes": [
-        0.89,  # left
+        0.86,  # left
         0.3,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
@@ -218,7 +218,7 @@ area_definition = {
     # --------------------------------------------------------
     "show_latitude_scatter": True,  # Whether to show the latitude scatter plot
     "latvals_axes": [
-        0.77,  # left
+        0.75,  # left
         0.05,  # bottom
         0.17,  # width (axes fraction)
         0.2,  # height (axes fraction)
@@ -229,8 +229,8 @@ area_definition = {
     # --------------------------------------------------------
     "show_bad_data_map": True,
     "bad_data_minimap_axes": [  # define minimap axis position
-        0.64,  # left
-        0.67,  # bottom
+        0.69,  # left
+        0.7,  # bottom
         0.25,  # width (axes fraction)
         0.25,  # height (axes fraction)
     ],
@@ -250,7 +250,7 @@ area_definition = {
         -60,
     ],  # longitude lines to draw in bad data minimap
     "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
-    "bad_data_minimap_legend_pos": (1.5, 1.0),  # position of minimap legend (upper right)
+    "bad_data_minimap_legend_pos": (0.75, 0.2),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
     # ------------------------------------------------------------------
