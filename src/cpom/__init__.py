@@ -144,7 +144,9 @@ or
 
 # Documentation
 
-Documentation is automatically generated from docstrings in the code. A few things to note:
+Documentation is automatically generated to this page 
+https://cpom-altimetry.github.io/cpom_software2 
+from docstrings in the code. A few things to note:
 
 - docstrings should use Markdown syntax for basic formatting. See 
   [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).
@@ -158,5 +160,6 @@ Documentation is automatically generated from docstrings in the code. A few thin
 - you can create diagrams using **mermaid** syntax within the docstring. 
   See this 
   [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
+- **documentation is only included in the web page when the main branch is updated**.
 
 """
