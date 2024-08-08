@@ -1,6 +1,4 @@
 """
-<small>this toplevel page at src/cpom/__init__.py</small>
-
 Documentation for the CPOM Software Package, hosted on GitHub at
 [github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).
 
@@ -154,8 +152,11 @@ Documentation is automatically generated from docstrings in the code. A few thin
     are displayed as the introduction page of that module or set of modules.
 - the top level page (ie this page) is in **src/cpom/__init__.py**
 - you can display images within docstrings by putting the images in 
-    **docs/images/someimage.png** and then in the module's docstring put
-    `![](/cpom_software2/images/someimage.png "")`. Note you should do a `git add docs/images`
-    within your branch as well.
+    **docs/images/**some_image.png and then in the module's docstring put
+    `![](/cpom_software2/images/some_image.png "")`. Note you should do a `git add docs/images`
+    within your branch as well so that the image is included.
+- you can create diagrams using **mermaid** syntax within the docstring. 
+  See this 
+  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
 
 """
