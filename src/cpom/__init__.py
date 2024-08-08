@@ -144,5 +144,16 @@ or
 
 `pytestmark = pytest.mark.non_core`
 
+# Documentation
+
+Documentation is automatically generated from docstrings in the code. A few things to note:
+
+    - within each directory there should be a __init__.py file. The docstring in these files
+      are displayed as the introduction page of that module or set of modules.
+    - the top level page (ie this page) is in **src/cpom/__init__.py**
+    - you can display images within docstrings by putting the images in 
+      **docs/images/someimage.png** and then in the docstring put
+      `![](/cpom_software2/images/someimage.png "")`. Note you should do a `git add docs/images`
+      within your branch as well.
 
 """

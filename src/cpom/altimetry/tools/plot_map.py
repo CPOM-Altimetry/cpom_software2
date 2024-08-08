@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """Tool to plot variables (including flags) from NetCDF file(s) on a selectable cryosphere map
 
-    - plot_map.py --help for full list of command line args
+For full list of command line args:
+
+`plot_map.py --help`
 
 Most settings are configurable from the tool using the command line arguments, although the tool
 will try and automatically identify default parameters and select an area to plot 
