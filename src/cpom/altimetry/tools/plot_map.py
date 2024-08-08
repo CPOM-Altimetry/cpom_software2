@@ -16,8 +16,8 @@ point size 1.0 and colormap set to viridis
 
 `plot_map.py -a vostok -s 0.01 -ps 1 --cmap viridis`
 
-Plot the instr_mode parameter from the named file, and use the flag paramter settings
-shown:
+Plot the instr_mode parameter files in a named directory, and use the flag paramter settings
+shown to specify flag values, names and colours:
 
 `plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07 \
     -p instrument_mode \

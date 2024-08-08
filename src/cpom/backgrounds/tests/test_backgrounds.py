@@ -13,6 +13,8 @@ from cpom.backgrounds.backgrounds import all_backgrounds
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
+pytestmark = pytest.mark.non_core
+
 
 @pytest.mark.parametrize("background_name", all_backgrounds)
 def test_backgrounds(
