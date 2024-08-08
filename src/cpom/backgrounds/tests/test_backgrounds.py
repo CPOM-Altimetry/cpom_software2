@@ -17,7 +17,7 @@ log.setLevel(logging.INFO)
 @pytest.mark.parametrize("background_name", all_backgrounds)
 def test_backgrounds(
     background_name: str,
-    tmpdir: pytest.TempPathFactory,
+    tmp_path_factory: pytest.TempPathFactory,
 ):
     """
     test purpose: for each background, plot background in one or more test areas
@@ -33,9 +33,12 @@ def test_backgrounds(
 
     # plot_dir = f'{os.environ["CPOM_SOFTWARE_DIR"]}/cpom/backgrounds/test/test_images'
 
+    # Create a temporary directory using tmp_path_factory
+    temp_dir = tmp_path_factory.mktemp("output")
+
     for area in test_areas:
         area_overrides = {"background_image": background_name}
-        Polarplot(area, area_overrides).plot_points(map_only=True, output_dir=tmpdir)
+        Polarplot(area, area_overrides).plot_points(map_only=True, output_dir=str(temp_dir))
 
 
 # @pytest.mark.parametrize("area", all_areas)
