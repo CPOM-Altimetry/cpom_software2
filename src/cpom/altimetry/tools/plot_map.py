@@ -21,6 +21,8 @@ parameter and area to plot.
 
 `plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07`
 
+![my image](/cpom_software2/images/plot_map_example2.png "my image")
+
 Plot a simulated grid of values at 0.01 deg separation over Lake Vostok, with
 point size 1.0 and colormap set to viridis
 
