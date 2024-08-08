@@ -1,8 +1,12 @@
 """pytests for clev2er.utils.areas.areas.py
 """
+
+
 import pytest
 
 from cpom.areas.areas import Area, list_all_area_definition_names_only
+
+pytestmark = pytest.mark.requires_external_data
 
 
 def test_bad_area_name():

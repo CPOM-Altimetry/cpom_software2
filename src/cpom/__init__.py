@@ -123,4 +123,16 @@ must first load the virtual environment using the `poetry shell` commands.
 cd $CPOM_SOFTWARE_DIR
 poetry shell
 ```
+
+# Test Development
+
+Each module should have an associated pytest unit or integration test
+
+`pytestmark = pytest.mark.requires_external_data`
+
+or
+
+`pytestmark = pytest.mark.non_core`
+
+
 """
