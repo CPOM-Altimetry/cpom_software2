@@ -157,7 +157,7 @@ from docstrings in the code when the **main** branch is updated. A few things to
     **docs/images/**some_image.png and then in the module's docstring put
     `![](/cpom_software2/images/some_image.png "")`. Note you should do a `git add docs/images`
     within your branch as well so that the image is included. See the docstring example in
-    `altimetry.tools.plot_map.py`
+    `altimetry.tools.plot_map` or `cpom.altimetry.tools.plot_map`
 - you can create diagrams using **mermaid** syntax within the docstring. 
   See this 
   [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
