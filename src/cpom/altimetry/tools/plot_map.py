@@ -334,6 +334,14 @@ def main(args):
     )
 
     parser.add_argument(
+        "--dpi",
+        "-dpi",
+        help=("[Optional, int] set the dpi to use when writing to an image file (def=85)."),
+        type=int,
+        required=False,
+    )
+
+    parser.add_argument(
         "--file",
         "-f",
         help=("[Optional] path of a single input netcdf file"),
@@ -885,6 +893,7 @@ def main(args):
         output_file=args.out_file,
         output_dir=args.out_dir,
         map_only=args.map_only,
+        dpi=85 if not args.dpi else args.dpi,
     )
 
     log.info("plot completed ok")
