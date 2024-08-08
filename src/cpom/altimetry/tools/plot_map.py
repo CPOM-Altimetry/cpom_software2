@@ -6,10 +6,22 @@
 
 ## Examples
 
+Plot all the netcdf files in the given directory. Automatically select the default
+parameter and area to plot.
+
+`plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07`
+
 Plot a simulated grid of values at 0.01 deg separation over Lake Vostok, with
 point size 1.0 and colormap set to viridis
 
 `plot_map.py -a vostok -s 0.01 -ps 1 --cmap viridis`
+
+Plot the instr_mode parameter from the named file, and use the flag paramter settings
+shown:
+
+`plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07 \
+    -p instrument_mode \
+    --flag_params 1:LRM:blue/2:SAR:pink/3:SIN:red`
 
 """
 
@@ -18,6 +30,7 @@ import argparse
 import glob
 import logging
 import os
+import re
 import sys
 from typing import List
 
@@ -322,6 +335,30 @@ def main(args):
         help=(
             "[Optional] assign fill value (value to be treated as bad values)."
             "If multiple parameters use comma separated list."
+        ),
+        required=False,
+    )
+
+    parser.add_argument(
+        "--flag",
+        "-fl",
+        help=(
+            "[Optional] treat input values as flag data when plotting. "
+            "If no other flag options used then, flag values will be chosen "
+            "from unique values in data set, and flags will be named with that number. "
+            "Use --flag_params instead to set exact flag values/names/colors to use."
+        ),
+        required=False,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--flag_params",
+        "-fp",
+        help=(
+            "[Optional] comma separated list per parameter plotted of \n"
+            "value:name:color/value:name:color/.....,value:name:color/... \n"
+            "where value is the flag value, name is the associated name of this flag, "
+            "color is a python color used to plot the flag"
         ),
         required=False,
     )
@@ -664,6 +701,10 @@ def main(args):
             f" you can have an equal number of comma separated\n"
             f" {error_str} arguments{NC}"
         )
+
+    flag_values_from_data = []
+    flag_names_from_data = []
+
     for i in range(num_data_sets):
         ds = {
             "name": params[i],
@@ -693,11 +734,13 @@ def main(args):
             ds["units"] = units[i]
 
         datasets.append(ds)
+        flag_values_from_data.append([])
+        flag_names_from_data.append([])
 
     def_area = ""
     if len(files) > 0:
         log.info("reading netcdf files...")
-        for filename in files:
+        for fnum, filename in enumerate(files):
             log.debug("%s", filename)
             # Open the NetCDF file
             try:
@@ -713,7 +756,14 @@ def main(args):
 
                         if not args.area and not def_area:
                             def_area = get_default_area(lats[0], filename)
+                    if fnum == 0:
+                        try:
+                            flag_values_from_data[i] = get_variable(nc, params[i]).flag_values
+                            flag_names_from_data[i] = get_variable(nc, params[i]).flag_meanings
 
+                            args.flag = True
+                        except AttributeError:
+                            pass
             except IOError:
                 sys.exit(f"{RED}Can not open {filename}{NC}")
 
@@ -765,6 +815,59 @@ def main(args):
         datasets[0]["lons"].extend(lons)
         datasets[0]["vals"].extend(vals)
         datasets[0]["name"] = "simulated" if args.step else "None"
+
+    if args.flag or args.flag_params:
+        if args.flag_params:
+            flag_params = args.flag_params.split(",")
+            if len(flag_params) == 1 and num_data_sets > 1:
+                flag_params = flag_params * num_data_sets
+        for i in range(num_data_sets):
+            if args.flag_params:
+                unique_vals = []
+                unique_names = []
+                unique_colors = []
+                sub_params = flag_params[i].split("/")
+                for sub_param in sub_params:
+                    fvalues = sub_param.split(":")
+                    unique_vals.append(int(fvalues[0]))
+                    unique_names.append(fvalues[1])
+                    unique_colors.append(fvalues[2])
+
+                datasets[i]["flag_values"] = unique_vals
+                datasets[i]["flag_names"] = unique_names
+                datasets[i]["flag_colors"] = unique_colors
+            else:
+                if len(flag_values_from_data[i]) > 0 and len(flag_names_from_data[i]) > 0:
+                    log.info("Using flag values from data: %s", flag_values_from_data[i])
+                    unique_vals = [
+                        int(re.findall(r"\d+", s)[0]) for s in flag_values_from_data[i].split(",")
+                    ]
+                    unique_names = flag_names_from_data[i].split(" ")
+                    if len(unique_names) != len(unique_vals):
+                        log.error(
+                            (
+                                f"{ORANGE}length of flag names (%d) and values derived from "
+                                f"attributes  (%d) is different{NC}"
+                            ),
+                            len(unique_names),
+                            len(unique_vals),
+                        )
+                        datasets[i]["flag_names"] = [str(n) for n in unique_vals]
+                    else:
+                        datasets[i]["flag_names"] = unique_names
+                    datasets[i]["flag_values"] = unique_vals
+
+                else:
+                    unique_vals = np.unique(datasets[i]["vals"])
+                    if len(unique_vals) > 30:
+                        sys.exit(
+                            f"{RED}Number of unique flag values found > 30 for parameter "
+                            f"{params[i]}. "
+                            f"Only use --flag with flag parameters with < 30 unique values{NC}"
+                        )
+                    log.info("unique flag vals %s", str(unique_vals))
+                    datasets[i]["flag_values"] = unique_vals
+                    datasets[i]["flag_names"] = [str(n) for n in unique_vals]
 
     Polarplot(def_area).plot_points(
         *datasets,
