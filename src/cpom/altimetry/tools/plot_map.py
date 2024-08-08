@@ -6,6 +6,14 @@
 
 ## Examples
 
+Plot a parameter **elevation** from a CryTEMPO netcdf file, and display in area 
+definition **antarctica_hs_is** which is an Antarctic map with hillshading and a 
+grounded icesheet mask:
+
+`plot_map.py -f  /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/\
+ANTARC/2010/07/CS_OFFL_SIR_TDP_LI_ANTARC_20100717T141004_20100717T141229_01_02644_B001.nc \
+-p elevation -a antarctica_hs_is`
+
 Plot all the netcdf files in the given directory. Automatically select the default
 parameter and area to plot.
 
@@ -16,7 +24,7 @@ point size 1.0 and colormap set to viridis
 
 `plot_map.py -a vostok -s 0.01 -ps 1 --cmap viridis`
 
-Plot the instr_mode parameter files in a named directory, and use the flag paramter settings
+Plot the instr_mode parameter files in a named directory, and use the flag parameter settings
 shown to specify flag values, names and colours:
 
 `plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07 \
@@ -25,6 +33,7 @@ shown to specify flag values, names and colours:
 
 """
 
+__all__ = ["main"]
 
 import argparse
 import glob

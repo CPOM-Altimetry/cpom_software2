@@ -6,6 +6,8 @@ import pytest
 
 from cpom.areas.areas import Area, list_all_area_definition_names_only
 
+# As loading some areas requires reading large masks in $CPDATA_DIR we need to
+# mark these tests as not runnable on GitHub actions
 pytestmark = pytest.mark.requires_external_data
 
 
