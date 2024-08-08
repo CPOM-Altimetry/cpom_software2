@@ -146,7 +146,7 @@ or
 
 Documentation is automatically generated to this page 
 https://cpom-altimetry.github.io/cpom_software2 
-from docstrings in the code. A few things to note:
+from docstrings in the code when the **main** branch is updated. A few things to note:
 
 - docstrings should use Markdown syntax for basic formatting. See 
   [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).
