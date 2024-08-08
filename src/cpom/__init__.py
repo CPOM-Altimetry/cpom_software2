@@ -156,7 +156,8 @@ from docstrings in the code. A few things to note:
 - you can display images within docstrings by putting the images in 
     **docs/images/**some_image.png and then in the module's docstring put
     `![](/cpom_software2/images/some_image.png "")`. Note you should do a `git add docs/images`
-    within your branch as well so that the image is included.
+    within your branch as well so that the image is included. See the docstring example in
+    `cpom.altimetry.tools.plot_map.py`
 - you can create diagrams using **mermaid** syntax within the docstring. 
   See this 
   [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
