@@ -126,7 +126,17 @@ poetry shell
 
 # Test Development
 
-Each module should have an associated pytest unit or integration test
+Each module should have an associated pytest unit or integration test. Place these in
+a **tests/** directory inside your module directory. ie:
+
+```
+mymodule.py
+tests/test_mymodule.py
+```
+
+If your test accesses data outside the repository then you need to exclude
+it from running on GitHub Actions CI. To do this just include one of the following
+at the top of your test code:
 
 `pytestmark = pytest.mark.requires_external_data`
 
