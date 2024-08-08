@@ -14,7 +14,7 @@ grounded icesheet mask:
 ANTARC/2010/07/CS_OFFL_SIR_TDP_LI_ANTARC_20100717T141004_20100717T141229_01_02644_B001.nc \
 -p elevation -a antarctica_hs_is`
 
-![my image](/images/test.png "my image")
+![my image](/cpom_software2/images/test.png "my image")
 
 Plot all the netcdf files in the given directory. Automatically select the default
 parameter and area to plot.
