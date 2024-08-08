@@ -148,6 +148,8 @@ or
 
 Documentation is automatically generated from docstrings in the code. A few things to note:
 
+- docstrings should use Markdown syntax for basic formatting. See 
+  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).
 - within each directory there should be a __init__.py file. The docstring in these files
     are displayed as the introduction page of that module or set of modules.
 - the top level page (ie this page) is in **src/cpom/__init__.py**
