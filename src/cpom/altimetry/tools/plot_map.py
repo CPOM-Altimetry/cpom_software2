@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Plot variables from NetCDF file(s) on a selectable cryosphere map
+"""Tool to plot variables (including flags) from NetCDF file(s) on a selectable cryosphere map
 
     - plot_map.py --help for full list of command line args
 
+Most settings are configurable from the tool using the command line arguments, although the tool
+will try and automatically identify default parameters and select an area to plot 
+(from contained lat/lon values) from most altimetry formats. If not you can choose these from the
+command line.
+
 ## Examples
+
+List all available area definitions (ie the areas you can select to plot your data on):
+
+`plot_map.py --list_areas`
 
 Plot a parameter **elevation** from a CryTEMPO netcdf file, and display in area 
 definition **antarctica_hs_is** which is an Antarctic map with hillshading and a 
@@ -30,7 +39,7 @@ point size 1.0 and colormap set to viridis
 
 ![my image](/cpom_software2/images/plot_map_example3.png "my image")
 
-Plot the instr_mode parameter files in a named directory, and use the flag parameter settings
+Plot the instrument_mode parameter files in a named directory, and use the flag parameter settings
 shown to specify flag values, names and colours:
 
 `plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07 \
