@@ -146,7 +146,8 @@ or
 
 Documentation is automatically generated to this page 
 https://cpom-altimetry.github.io/cpom_software2 
-from docstrings in the code when the **main** branch is updated. A few things to note:
+from docstrings in the code when the **main** branch is updated on GitHub. 
+A few things to note:
 
 - docstrings should use Markdown syntax for basic formatting. See 
   [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).
@@ -157,10 +158,14 @@ from docstrings in the code when the **main** branch is updated. A few things to
     **docs/images/**some_image.png and then in the module's docstring put
     `![](/cpom_software2/images/some_image.png "")`. Note you should do a `git add docs/images`
     within your branch as well so that the image is included. See the docstring example in
-    `altimetry.tools.plot_map` or `cpom.altimetry.tools.plot_map`
+    `cpom.altimetry.tools.plot_map`
 - you can create diagrams using **mermaid** syntax within the docstring. 
   See this 
   [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
-- **documentation is only included in the web page when the main branch is updated**.
+- **documentation is only included in the web page when the main branch is updated** so
+  you won't see any update when you modify a separate branch. Your docstrings will only be
+  processed after a successful pull request to the main branch.
+- further info on how auto-documentation works from docstrings and more advanced syntax
+  at the **pdoc** documentation: https://pdoc.dev/docs/pdoc.html#what-is-pdoc
 
 """

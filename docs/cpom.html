@@ -219,7 +219,8 @@ at the top of your test code:</p>
 
 <p>Documentation is automatically generated to this page 
 <a href="https://cpom-altimetry.github.io/cpom_software2">https://cpom-altimetry.github.io/cpom_software2</a> 
-from docstrings in the code when the <strong>main</strong> branch is updated. A few things to note:</p>
+from docstrings in the code when the <strong>main</strong> branch is updated on GitHub. 
+A few things to note:</p>
 
 <ul>
 <li>docstrings should use Markdown syntax for basic formatting. See 
@@ -231,11 +232,15 @@ are displayed as the introduction page of that module or set of modules.</li>
 <strong>docs/images/</strong>some_image.png and then in the module's docstring put
 <code>![](/cpom_software2/images/some_image.png "")</code>. Note you should do a <code>git add docs/images</code>
 within your branch as well so that the image is included. See the docstring example in
-<code>altimetry.tools.plot_map</code> or <code><a href="cpom/altimetry/tools/plot_map.html">cpom.altimetry.tools.plot_map</a></code></li>
+<code><a href="cpom/altimetry/tools/plot_map.html">cpom.altimetry.tools.plot_map</a></code></li>
 <li>you can create diagrams using <strong>mermaid</strong> syntax within the docstring. 
 See this 
 <a href="https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/">link</a>.</li>
-<li><strong>documentation is only included in the web page when the main branch is updated</strong>.</li>
+<li><strong>documentation is only included in the web page when the main branch is updated</strong> so
+you won't see any update when you modify a separate branch. Your docstrings will only be
+processed after a successful pull request to the main branch.</li>
+<li>further info on how auto-documentation works from docstrings and more advanced syntax
+at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.html#what-is-pdoc">https://pdoc.dev/docs/pdoc.html#what-is-pdoc</a></li>
 </ul>
 </div>
 
@@ -391,24 +396,29 @@ See this
 </span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a>
 </span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a><span class="sd">Documentation is automatically generated to this page </span>
 </span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a><span class="sd">https://cpom-altimetry.github.io/cpom_software2 </span>
-</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a><span class="sd">from docstrings in the code when the **main** branch is updated. A few things to note:</span>
-</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a>
-</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a><span class="sd">- docstrings should use Markdown syntax for basic formatting. See </span>
-</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a><span class="sd">  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).</span>
-</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a><span class="sd">- within each directory there should be a __init__.py file. The docstring in these files</span>
-</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="sd">    are displayed as the introduction page of that module or set of modules.</span>
-</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="sd">- the top level page (ie this page) is in **src/cpom/__init__.py**</span>
-</span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a><span class="sd">- you can display images within docstrings by putting the images in </span>
-</span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a><span class="sd">    **docs/images/**some_image.png and then in the module&#39;s docstring put</span>
-</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a><span class="sd">    `![](/cpom_software2/images/some_image.png &quot;&quot;)`. Note you should do a `git add docs/images`</span>
-</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a><span class="sd">    within your branch as well so that the image is included. See the docstring example in</span>
-</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a><span class="sd">    `altimetry.tools.plot_map` or `cpom.altimetry.tools.plot_map`</span>
-</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a><span class="sd">- you can create diagrams using **mermaid** syntax within the docstring. </span>
-</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a><span class="sd">  See this </span>
-</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="sd">  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).</span>
-</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a><span class="sd">- **documentation is only included in the web page when the main branch is updated**.</span>
-</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>
-</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a><span class="sd">from docstrings in the code when the **main** branch is updated on GitHub. </span>
+</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a><span class="sd">A few things to note:</span>
+</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a>
+</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a><span class="sd">- docstrings should use Markdown syntax for basic formatting. See </span>
+</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a><span class="sd">  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).</span>
+</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="sd">- within each directory there should be a __init__.py file. The docstring in these files</span>
+</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="sd">    are displayed as the introduction page of that module or set of modules.</span>
+</span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a><span class="sd">- the top level page (ie this page) is in **src/cpom/__init__.py**</span>
+</span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a><span class="sd">- you can display images within docstrings by putting the images in </span>
+</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a><span class="sd">    **docs/images/**some_image.png and then in the module&#39;s docstring put</span>
+</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a><span class="sd">    `![](/cpom_software2/images/some_image.png &quot;&quot;)`. Note you should do a `git add docs/images`</span>
+</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a><span class="sd">    within your branch as well so that the image is included. See the docstring example in</span>
+</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a><span class="sd">    `cpom.altimetry.tools.plot_map`</span>
+</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a><span class="sd">- you can create diagrams using **mermaid** syntax within the docstring. </span>
+</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="sd">  See this </span>
+</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a><span class="sd">  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).</span>
+</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a><span class="sd">- **documentation is only included in the web page when the main branch is updated** so</span>
+</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a><span class="sd">  you won&#39;t see any update when you modify a separate branch. Your docstrings will only be</span>
+</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a><span class="sd">  processed after a successful pull request to the main branch.</span>
+</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a><span class="sd">- further info on how auto-documentation works from docstrings and more advanced syntax</span>
+</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a><span class="sd">  at the **pdoc** documentation: https://pdoc.dev/docs/pdoc.html#what-is-pdoc</span>
+</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>
+</span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span></pre></div>
 
 
