@@ -1,18 +1,13 @@
-name: website
+name: code_check
 
-# build the documentation whenever there are new commits on main
 on:
   push:
-    branches:
-      - main
-
-# security: restrict permissions for CI jobs.
-permissions:
-  contents: read
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  # Build the documentation and upload the static HTML files as an artifact.
-  build:
+  code_check:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -58,26 +53,15 @@ jobs:
       #----------------------------------------------
       - name: Install project
         run: poetry install --no-interaction --with dev
-
-      # ADJUST THIS: build your documentation into docs/.
-      # We use a custom build script for pdoc itself, ideally you just run `pdoc -o docs/ ...` here.
-      - run: build_scripts/pdocs.sh
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/
-
-  # Deploy the artifact to GitHub pages.
-  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      #----------------------------------------------
+      #              run test suite
+      #----------------------------------------------
+      - name: Run tests
+        env:
+            CPOM_SOFTWARE_DIR: ${{ github.workspace }}
+        run: |
+          echo $CPOM_SOFTWARE_DIR
+          #source $VENV
+          . .venv/bin/activate
+          # check that all src directories contain a __init__.py
+          build_scripts/pdocs.sh
