@@ -1,4 +1,4 @@
-name: code_check
+name: website
 
 on:
   push:
