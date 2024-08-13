@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="generator" content="pdoc 14.6.0"/>
-    <title>cpom API documentation</title>
+    <title>cpom.roughness.tests API documentation</title>
 
     <style>/*! * Bootstrap Reboot v5.0.0 (https://getbootstrap.com/) * Copyright 2011-2021 The Bootstrap Authors * Copyright 2011-2021 Twitter, Inc. * Licensed under MIT (https://github.com/twbs/bootstrap/blob/main/LICENSE) * Forked from Normalize.css, licensed MIT (https://github.com/necolas/normalize.css/blob/master/LICENSE.md) */*,::after,::before{box-sizing:border-box}@media (prefers-reduced-motion:no-preference){:root{scroll-behavior:smooth}}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","Liberation Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";font-size:1rem;font-weight:400;line-height:1.5;color:#212529;background-color:#fff;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}hr{margin:1rem 0;color:inherit;background-color:currentColor;border:0;opacity:.25}hr:not([size]){height:1px}h1,h2,h3,h4,h5,h6{margin-top:0;margin-bottom:.5rem;font-weight:500;line-height:1.2}h1{font-size:calc(1.375rem + 1.5vw)}@media (min-width:1200px){h1{font-size:2.5rem}}h2{font-size:calc(1.325rem + .9vw)}@media (min-width:1200px){h2{font-size:2rem}}h3{font-size:calc(1.3rem + .6vw)}@media (min-width:1200px){h3{font-size:1.75rem}}h4{font-size:calc(1.275rem + .3vw)}@media (min-width:1200px){h4{font-size:1.5rem}}h5{font-size:1.25rem}h6{font-size:1rem}p{margin-top:0;margin-bottom:1rem}abbr[data-bs-original-title],abbr[title]{-webkit-text-decoration:underline dotted;text-decoration:underline dotted;cursor:help;-webkit-text-decoration-skip-ink:none;text-decoration-skip-ink:none}address{margin-bottom:1rem;font-style:normal;line-height:inherit}ol,ul{padding-left:2rem}dl,ol,ul{margin-top:0;margin-bottom:1rem}ol ol,ol ul,ul ol,ul ul{margin-bottom:0}dt{font-weight:700}dd{margin-bottom:.5rem;margin-left:0}blockquote{margin:0 0 1rem}b,strong{font-weight:bolder}small{font-size:.875em}mark{padding:.2em;background-color:#fcf8e3}sub,sup{position:relative;font-size:.75em;line-height:0;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}a{color:#0d6efd;text-decoration:underline}a:hover{color:#0a58ca}a:not([href]):not([class]),a:not([href]):not([class]):hover{color:inherit;text-decoration:none}code,kbd,pre,samp{font-family:SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:1em;direction:ltr;unicode-bidi:bidi-override}pre{display:block;margin-top:0;margin-bottom:1rem;overflow:auto;font-size:.875em}pre code{font-size:inherit;color:inherit;word-break:normal}code{font-size:.875em;color:#d63384;word-wrap:break-word}a>code{color:inherit}kbd{padding:.2rem .4rem;font-size:.875em;color:#fff;background-color:#212529;border-radius:.2rem}kbd kbd{padding:0;font-size:1em;font-weight:700}figure{margin:0 0 1rem}img,svg{vertical-align:middle}table{caption-side:bottom;border-collapse:collapse}caption{padding-top:.5rem;padding-bottom:.5rem;color:#6c757d;text-align:left}th{text-align:inherit;text-align:-webkit-match-parent}tbody,td,tfoot,th,thead,tr{border-color:inherit;border-style:solid;border-width:0}label{display:inline-block}button{border-radius:0}button:focus:not(:focus-visible){outline:0}button,input,optgroup,select,textarea{margin:0;font-family:inherit;font-size:inherit;line-height:inherit}button,select{text-transform:none}[role=button]{cursor:pointer}select{word-wrap:normal}select:disabled{opacity:1}[list]::-webkit-calendar-picker-indicator{display:none}[type=button],[type=reset],[type=submit],button{-webkit-appearance:button}[type=button]:not(:disabled),[type=reset]:not(:disabled),[type=submit]:not(:disabled),button:not(:disabled){cursor:pointer}::-moz-focus-inner{padding:0;border-style:none}textarea{resize:vertical}fieldset{min-width:0;padding:0;margin:0;border:0}legend{float:left;width:100%;padding:0;margin-bottom:.5rem;font-size:calc(1.275rem + .3vw);line-height:inherit}@media (min-width:1200px){legend{font-size:1.5rem}}legend+*{clear:left}::-webkit-datetime-edit-day-field,::-webkit-datetime-edit-fields-wrapper,::-webkit-datetime-edit-hour-field,::-webkit-datetime-edit-minute,::-webkit-datetime-edit-month-field,::-webkit-datetime-edit-text,::-webkit-datetime-edit-year-field{padding:0}::-webkit-inner-spin-button{height:auto}[type=search]{outline-offset:-2px;-webkit-appearance:textfield}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-color-swatch-wrapper{padding:0}::file-selector-button{font:inherit}::-webkit-file-upload-button{font:inherit;-webkit-appearance:button}output{display:inline-block}iframe{border:0}summary{display:list-item;cursor:pointer}progress{vertical-align:baseline}[hidden]{display:none!important}</style>
     <style>/*! syntax-highlighting.css */pre{line-height:125%;}span.linenos{color:inherit; background-color:transparent; padding-left:5px; padding-right:20px;}.pdoc-code .hll{background-color:#ffffcc}.pdoc-code{background:#f8f8f8;}.pdoc-code .c{color:#3D7B7B; font-style:italic}.pdoc-code .err{border:1px solid #FF0000}.pdoc-code .k{color:#008000; font-weight:bold}.pdoc-code .o{color:#666666}.pdoc-code .ch{color:#3D7B7B; font-style:italic}.pdoc-code .cm{color:#3D7B7B; font-style:italic}.pdoc-code .cp{color:#9C6500}.pdoc-code .cpf{color:#3D7B7B; font-style:italic}.pdoc-code .c1{color:#3D7B7B; font-style:italic}.pdoc-code .cs{color:#3D7B7B; font-style:italic}.pdoc-code .gd{color:#A00000}.pdoc-code .ge{font-style:italic}.pdoc-code .gr{color:#E40000}.pdoc-code .gh{color:#000080; font-weight:bold}.pdoc-code .gi{color:#008400}.pdoc-code .go{color:#717171}.pdoc-code .gp{color:#000080; font-weight:bold}.pdoc-code .gs{font-weight:bold}.pdoc-code .gu{color:#800080; font-weight:bold}.pdoc-code .gt{color:#0044DD}.pdoc-code .kc{color:#008000; font-weight:bold}.pdoc-code .kd{color:#008000; font-weight:bold}.pdoc-code .kn{color:#008000; font-weight:bold}.pdoc-code .kp{color:#008000}.pdoc-code .kr{color:#008000; font-weight:bold}.pdoc-code .kt{color:#B00040}.pdoc-code .m{color:#666666}.pdoc-code .s{color:#BA2121}.pdoc-code .na{color:#687822}.pdoc-code .nb{color:#008000}.pdoc-code .nc{color:#0000FF; font-weight:bold}.pdoc-code .no{color:#880000}.pdoc-code .nd{color:#AA22FF}.pdoc-code .ni{color:#717171; font-weight:bold}.pdoc-code .ne{color:#CB3F38; font-weight:bold}.pdoc-code .nf{color:#0000FF}.pdoc-code .nl{color:#767600}.pdoc-code .nn{color:#0000FF; font-weight:bold}.pdoc-code .nt{color:#008000; font-weight:bold}.pdoc-code .nv{color:#19177C}.pdoc-code .ow{color:#AA22FF; font-weight:bold}.pdoc-code .w{color:#bbbbbb}.pdoc-code .mb{color:#666666}.pdoc-code .mf{color:#666666}.pdoc-code .mh{color:#666666}.pdoc-code .mi{color:#666666}.pdoc-code .mo{color:#666666}.pdoc-code .sa{color:#BA2121}.pdoc-code .sb{color:#BA2121}.pdoc-code .sc{color:#BA2121}.pdoc-code .dl{color:#BA2121}.pdoc-code .sd{color:#BA2121; font-style:italic}.pdoc-code .s2{color:#BA2121}.pdoc-code .se{color:#AA5D1F; font-weight:bold}.pdoc-code .sh{color:#BA2121}.pdoc-code .si{color:#A45A77; font-weight:bold}.pdoc-code .sx{color:#008000}.pdoc-code .sr{color:#A45A77}.pdoc-code .s1{color:#BA2121}.pdoc-code .ss{color:#19177C}.pdoc-code .bp{color:#008000}.pdoc-code .fm{color:#0000FF}.pdoc-code .vc{color:#19177C}.pdoc-code .vg{color:#19177C}.pdoc-code .vi{color:#19177C}.pdoc-code .vm{color:#19177C}.pdoc-code .il{color:#666666}</style>
@@ -32,36 +32,22 @@
     <nav class="pdoc">
         <label id="navtoggle" for="togglestate" class="pdoc-button"><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'><path stroke-linecap='round' stroke="currentColor" stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/></svg></label>
         <input id="togglestate" type="checkbox" aria-hidden="true" tabindex="-1">
-        <div>
+        <div>            <a class="pdoc-button module-list-button" href="../roughness.html">
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-in-left" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M10 3.5a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 1 1 0v2A1.5 1.5 0 0 1 9.5 14h-8A1.5 1.5 0 0 1 0 12.5v-9A1.5 1.5 0 0 1 1.5 2h8A1.5 1.5 0 0 1 11 3.5v2a.5.5 0 0 1-1 0v-2z"/>
+  <path fill-rule="evenodd" d="M4.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H14.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3z"/>
+</svg>                &nbsp;cpom.roughness</a>
+
             <img src="https://www.homepages.ucl.ac
 .uk/~ucasamu/cpom_logo.gif" class="logo" alt="project logo"/>
 
             <input type="search" placeholder="Search..." role="searchbox" aria-label="search"
                    pattern=".+" required>
 
-            <h2>Contents</h2>
-            <ul>
-  <li><a href="#installation">Installation</a>
-  <ul>
-    <li><a href="#installation-of-the-cpom-software-package">Installation of the CPOM Software Package</a></li>
-    <li><a href="#shell-environment-setup">Shell Environment Setup</a></li>
-    <li><a href="#python-requirement">Python Requirement</a></li>
-    <li><a href="#virtual-environment-and-package-requirements">Virtual Environment and Package Requirements</a></li>
-  </ul></li>
-  <li><a href="#test-development">Test Development</a></li>
-  <li><a href="#documentation">Documentation</a></li>
-</ul>
-
 
             <h2>Submodules</h2>
             <ul>
-                    <li><a href="cpom/altimetry.html">altimetry</a></li>
-                    <li><a href="cpom/areas.html">areas</a></li>
-                    <li><a href="cpom/backgrounds.html">backgrounds</a></li>
-                    <li><a href="cpom/dems.html">dems</a></li>
-                    <li><a href="cpom/masks.html">masks</a></li>
-                    <li><a href="cpom/roughness.html">roughness</a></li>
-                    <li><a href="cpom/slopes.html">slopes</a></li>
+                    <li><a href="tests/test_roughness.html">test_roughness</a></li>
             </ul>
 
 
@@ -76,351 +62,17 @@
     <main class="pdoc">
             <section class="module-info">
                     <h1 class="modulename">
-cpom    </h1>
+<a href="./../../cpom.html">cpom</a><wbr>.<a href="./../roughness.html">roughness</a><wbr>.tests    </h1>
 
-                        <div class="docstring"><p>Documentation for the CPOM Software Package, hosted on GitHub at
-<a href="https://github.com/CPOM-Altimetry/cpom_software2">github.com/CPOM-Altimetry/cpom_software2</a>.</p>
-
-<h1 id="installation">Installation</h1>
-
-<h2 id="installation-of-the-cpom-software-package">Installation of the CPOM Software Package</h2>
-
-<p>Note that the package has been tested on Linux and MacOS systems. Use on
-other operating systems is possible but may require additional install steps.</p>
-
-<p>Make sure you have <em>git</em> installed on your target system.</p>
-
-<p>Clone the git public repository in to a suitable directory on your system.
-This will create a directory called <strong>/cpom_software2</strong> in your current directory.</p>
-
-<p>with https:
-<code>git clone https://github.com/CPOM-Altimetry/cpom_software2.git</code></p>
-
-<p>or with ssh:
-<code>git clone git@github.com:CPOM-Altimetry/cpom_software2.git</code></p>
-
-<p>or with the GitHub CLI:
-<code>gh repo clone CPOM-Altimetry/cpom_software2</code></p>
-
-<h2 id="shell-environment-setup">Shell Environment Setup</h2>
-
-<p>The following shell environment variables need to be set to support package
-operations.</p>
-
-<p>In a bash shell this might be done by adding export lines to your 
-$HOME/.bashrc or $HOME/.bash_profile file.</p>
-
-<ul>
-<li>Set the <em>CPOM_SOFTWARE_DIR</em> environment variable to the root of the cpom software package.</li>
-<li>Add $CPOM_SOFTWARE_DIR/src to <em>PYTHONPATH</em>.</li>
-<li>Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the <em>PATH</em>.</li>
-<li>Set the shell's <em>ulimit -n</em> to allow enough file descriptors to be available for
-multi-processing.</li>
-</ul>
-
-<p>An example environment setup is shown below (the path in the first line should be
-adapted for your specific directory path):</p>
-
-<pre><code>export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
-export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
-export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}
-# for multi-processing/shared mem support set ulimit
-# to make sure you have enough file descriptors available
-ulimit -n 8192
-</code></pre>
-
-<h2 id="python-requirement">Python Requirement</h2>
-
-<p>python v3.11 must be installed or available before proceeding.
-A recommended minimal method of installation of python 3.11 is using Miniconda.</p>
-
-<p>To install Python 3.11 using Miniconda, select the appropriate link for your operating system from:</p>
-
-<p><a href="https://docs.anaconda.com/free/miniconda/miniconda-other-installer-links/">https://docs.anaconda.com/free/miniconda/miniconda-other-installer-links/</a></p>
-
-<p>For example, for <strong>Linux</strong> (select different installer for other operating systems),
-download the installer and install a minimal python 3.11 installation using:</p>
-
-<pre><code>wget https://repo.anaconda.com/miniconda/Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-chmod +x Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-./Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-
-Do you wish the installer to initialize Miniconda3
-by running conda init? [yes|no] yes
-</code></pre>
-
-<p>You may need to start a new shell to refresh your environment before
-checking that python 3.11 is in your path.</p>
-
-<p>Check that python v3.11 is now available, by typing:</p>
-
-<pre><code>python -V
-</code></pre>
-
-<h2 id="virtual-environment-and-package-requirements">Virtual Environment and Package Requirements</h2>
-
-<p>This project uses <em>poetry</em> (a dependency manager, see: <a href="https://python-poetry.org/">https://python-poetry.org/</a>) to manage
-package dependencies and virtual envs.</p>
-
-<p>First, you need to install <em>poetry</em> on your system using instructions from
-<a href="https://python-poetry.org/docs/#installation">https://python-poetry.org/docs/#installation</a>. Normally this just requires running:</p>
-
-<p><code>curl -sSL https://install.python-poetry.org | python3 -</code></p>
-
-<p>You should also then ensure that poetry is in your path, such that the command</p>
-
-<p><code>poetry --version</code></p>
-
-<p>returns the poetry version number. You may need to modify your
-PATH variable in order to achieve this.</p>
-
-<p>To make sure poetry is setup to use Python 3.11 virtual env when in the CLEV2ER base directory</p>
-
-<pre><code>cd $CPOM_SOFTWARE_DIR
-poetry env use $(which python3.11)
-</code></pre>
-
-<h3 id="install-required-python-packages-using-poetry">Install Required Python packages using Poetry</h3>
-
-<p>Run the following command to install python dependencies for this project
-(for info, it uses settings in pyproject.toml to know what to install)</p>
-
-<pre><code>cd $CPOM_SOFTWARE_DIR
-poetry install
-</code></pre>
-
-<h3 id="load-the-virtual-environment">Load the Virtual Environment</h3>
-
-<p>Now you are all setup to go. Whenever you want to run any cpom software you
-must first load the virtual environment using the <code>poetry shell</code> commands.</p>
-
-<pre><code>cd $CPOM_SOFTWARE_DIR
-poetry shell
-</code></pre>
-
-<h1 id="test-development">Test Development</h1>
-
-<p>Each module should have an associated pytest unit or integration test. Place these in
-a <strong>tests/</strong> directory inside your module directory. ie:</p>
-
-<pre><code>mymodule.py
-tests/test_mymodule.py
-</code></pre>
-
-<p>If your test accesses data outside the repository then you need to exclude
-it from running on GitHub Actions CI. To do this just include one of the following
-at the top of your test code:</p>
-
-<p><code>pytestmark = pytest.mark.requires_external_data</code></p>
-
-<p>or</p>
-
-<p><code>pytestmark = pytest.mark.non_core</code></p>
-
-<h1 id="documentation">Documentation</h1>
-
-<p>Documentation is automatically generated to this page 
-<a href="https://cpom-altimetry.github.io/cpom_software2">https://cpom-altimetry.github.io/cpom_software2</a> 
-from docstrings in the code when the <strong>main</strong> branch is updated on GitHub. 
-A few things to note:</p>
-
-<ul>
-<li>docstrings should use Markdown syntax for basic formatting. See 
-<a href="https://www.markdownguide.org/basic-syntax">markdownguide.org/basic-syntax</a>.</li>
-<li>within each directory there should be a __init__.py file. The docstring in these files
-are displayed as the introduction page of that module or set of modules.</li>
-<li>the top level page (ie this page) is in <strong>src/cpom/__init__.py</strong></li>
-<li>you can display images within docstrings by putting the images in 
-<strong>docs/images/</strong>some_image.png and then in the module's docstring put
-<code>![](/cpom_software2/images/some_image.png "")</code>. Note you should do a <code>git add docs/images</code>
-within your branch as well so that the image is included. See the docstring example in
-<code><a href="cpom/altimetry/tools/plot_map.html">cpom.altimetry.tools.plot_map</a></code></li>
-<li>you can create diagrams using <strong>mermaid</strong> syntax within the docstring. 
-See this 
-<a href="https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/">link</a>.</li>
-<li><strong>documentation is only included in the web page when the main branch is updated</strong> so
-you won't see any update when you modify a separate branch. Your docstrings will only be
-processed after a successful pull request to the main branch.</li>
-<li>further info on how auto-documentation works from docstrings and more advanced syntax
-at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.html#what-is-pdoc">https://pdoc.dev/docs/pdoc.html#what-is-pdoc</a></li>
-</ul>
+                        <div class="docstring"><p>pytests for cpom.roughness.roughness.py</p>
 </div>
 
-                        <input id="mod-cpom-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+                        <input id="mod-tests-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
-                        <label class="view-source-button" for="mod-cpom-view-source"><span>View Source</span></label>
+                        <label class="view-source-button" for="mod-tests-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="sd">Documentation for the CPOM Software Package, hosted on GitHub at</span>
-</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">[github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="sd"># Installation</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="sd">## Installation of the CPOM Software Package</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a><span class="sd">Note that the package has been tested on Linux and MacOS systems. Use on</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="sd">other operating systems is possible but may require additional install steps.</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a>
-</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="sd">Make sure you have *git* installed on your target system.</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a>
-</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="sd">Clone the git public repository in to a suitable directory on your system.</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a><span class="sd">This will create a directory called **/cpom_software2** in your current directory.</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
-</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="sd">with https:</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a><span class="sd">`git clone https://github.com/CPOM-Altimetry/cpom_software2.git`</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a>
-</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a><span class="sd">or with ssh:</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="sd">`git clone git@github.com:CPOM-Altimetry/cpom_software2.git`</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a>
-</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a><span class="sd">or with the GitHub CLI:</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="sd">`gh repo clone CPOM-Altimetry/cpom_software2`</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a>
-</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="sd">## Shell Environment Setup</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a>
-</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="sd">The following shell environment variables need to be set to support package</span>
-</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="sd">operations.</span>
-</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a>
-</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="sd">In a bash shell this might be done by adding export lines to your </span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="sd">$HOME/.bashrc or $HOME/.bash_profile file.</span>
-</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>
-</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="sd">- Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="sd">- Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="sd">- Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the *PATH*.</span>
-</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="sd">- Set the shell&#39;s *ulimit -n* to allow enough file descriptors to be available for</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="sd">    multi-processing.</span>
-</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>
-</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="sd">An example environment setup is shown below (the path in the first line should be</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="sd">adapted for your specific directory path):</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a>
-</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">```script</span>
-</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a><span class="sd">export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2</span>
-</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}</span>
-</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd"># for multi-processing/shared mem support set ulimit</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="sd"># to make sure you have enough file descriptors available</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a><span class="sd">ulimit -n 8192</span>
-</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="sd">```</span>
-</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>
-</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a><span class="sd">## Python Requirement</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>
-</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a><span class="sd">python v3.11 must be installed or available before proceeding.</span>
-</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="sd">A recommended minimal method of installation of python 3.11 is using Miniconda.</span>
-</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>
-</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a><span class="sd">To install Python 3.11 using Miniconda, select the appropriate link for your operating system from:</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>
-</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a><span class="sd">https://docs.anaconda.com/free/miniconda/miniconda-other-installer-links/</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a><span class="sd">For example, for **Linux** (select different installer for other operating systems),</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="sd">download the installer and install a minimal python 3.11 installation using:</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>
-</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a><span class="sd">```script</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a><span class="sd">wget https://repo.anaconda.com/miniconda/Miniconda3-py311_24.1.2-0-Linux-x86_64.sh</span>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">chmod +x Miniconda3-py311_24.1.2-0-Linux-x86_64.sh</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="sd">./Miniconda3-py311_24.1.2-0-Linux-x86_64.sh</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>
-</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">Do you wish the installer to initialize Miniconda3</span>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">by running conda init? [yes|no] yes</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">```</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">You may need to start a new shell to refresh your environment before</span>
-</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a><span class="sd">checking that python 3.11 is in your path.</span>
-</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">Check that python v3.11 is now available, by typing:</span>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="sd">```</span>
-</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd">python -V</span>
-</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">```</span>
-</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a>
-</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a><span class="sd">## Virtual Environment and Package Requirements</span>
-</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>
-</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a><span class="sd">This project uses *poetry* (a dependency manager, see: https://python-poetry.org/) to manage</span>
-</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a><span class="sd">package dependencies and virtual envs.</span>
-</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a>
-</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a><span class="sd">First, you need to install *poetry* on your system using instructions from</span>
-</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="sd">https://python-poetry.org/docs/#installation. Normally this just requires running:</span>
-</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a>
-</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a><span class="sd">`curl -sSL https://install.python-poetry.org | python3 -`</span>
-</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>
-</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a><span class="sd">You should also then ensure that poetry is in your path, such that the command</span>
-</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>
-</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a><span class="sd">`poetry --version`</span>
-</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="sd">returns the poetry version number. You may need to modify your</span>
-</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="sd">PATH variable in order to achieve this.</span>
-</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
-</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="sd">To make sure poetry is setup to use Python 3.11 virtual env when in the CLEV2ER base directory</span>
-</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a>
-</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">```</span>
-</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a><span class="sd">cd $CPOM_SOFTWARE_DIR</span>
-</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a><span class="sd">poetry env use $(which python3.11)</span>
-</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a><span class="sd">```</span>
-</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>
-</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="sd">### Install Required Python packages using Poetry</span>
-</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>
-</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a><span class="sd">Run the following command to install python dependencies for this project</span>
-</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a><span class="sd">(for info, it uses settings in pyproject.toml to know what to install)</span>
-</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>
-</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a><span class="sd">```</span>
-</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a><span class="sd">cd $CPOM_SOFTWARE_DIR</span>
-</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a><span class="sd">poetry install</span>
-</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a><span class="sd">```</span>
-</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a>
-</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a><span class="sd">### Load the Virtual Environment</span>
-</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>
-</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a><span class="sd">Now you are all setup to go. Whenever you want to run any cpom software you</span>
-</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a><span class="sd">must first load the virtual environment using the `poetry shell` commands.</span>
-</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a>
-</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a><span class="sd">```</span>
-</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a><span class="sd">cd $CPOM_SOFTWARE_DIR</span>
-</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a><span class="sd">poetry shell</span>
-</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a><span class="sd">```</span>
-</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a>
-</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a><span class="sd"># Test Development</span>
-</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>
-</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a><span class="sd">Each module should have an associated pytest unit or integration test. Place these in</span>
-</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a><span class="sd">a **tests/** directory inside your module directory. ie:</span>
-</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>
-</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a><span class="sd">```</span>
-</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a><span class="sd">mymodule.py</span>
-</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a><span class="sd">tests/test_mymodule.py</span>
-</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a><span class="sd">```</span>
-</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a>
-</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a><span class="sd">If your test accesses data outside the repository then you need to exclude</span>
-</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a><span class="sd">it from running on GitHub Actions CI. To do this just include one of the following</span>
-</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a><span class="sd">at the top of your test code:</span>
-</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>
-</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">`pytestmark = pytest.mark.requires_external_data`</span>
-</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>
-</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">or</span>
-</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a>
-</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a><span class="sd">`pytestmark = pytest.mark.non_core`</span>
-</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a>
-</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a><span class="sd"># Documentation</span>
-</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a>
-</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a><span class="sd">Documentation is automatically generated to this page </span>
-</span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a><span class="sd">https://cpom-altimetry.github.io/cpom_software2 </span>
-</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a><span class="sd">from docstrings in the code when the **main** branch is updated on GitHub. </span>
-</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a><span class="sd">A few things to note:</span>
-</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a>
-</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a><span class="sd">- docstrings should use Markdown syntax for basic formatting. See </span>
-</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a><span class="sd">  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).</span>
-</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="sd">- within each directory there should be a __init__.py file. The docstring in these files</span>
-</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="sd">    are displayed as the introduction page of that module or set of modules.</span>
-</span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a><span class="sd">- the top level page (ie this page) is in **src/cpom/__init__.py**</span>
-</span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a><span class="sd">- you can display images within docstrings by putting the images in </span>
-</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a><span class="sd">    **docs/images/**some_image.png and then in the module&#39;s docstring put</span>
-</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a><span class="sd">    `![](/cpom_software2/images/some_image.png &quot;&quot;)`. Note you should do a `git add docs/images`</span>
-</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a><span class="sd">    within your branch as well so that the image is included. See the docstring example in</span>
-</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a><span class="sd">    `cpom.altimetry.tools.plot_map`</span>
-</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a><span class="sd">- you can create diagrams using **mermaid** syntax within the docstring. </span>
-</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="sd">  See this </span>
-</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a><span class="sd">  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).</span>
-</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a><span class="sd">- **documentation is only included in the web page when the main branch is updated** so</span>
-</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a><span class="sd">  you won&#39;t see any update when you modify a separate branch. Your docstrings will only be</span>
-</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a><span class="sd">  processed after a successful pull request to the main branch.</span>
-</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a><span class="sd">- further info on how auto-documentation works from docstrings and more advanced syntax</span>
-</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a><span class="sd">  at the **pdoc** documentation: https://pdoc.dev/docs/pdoc.html#what-is-pdoc</span>
-</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>
-</span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a><span class="sd">&quot;&quot;&quot;</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">1</span></a><span class="sd">&quot;&quot;&quot; pytests for cpom.roughness.roughness.py</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos">2</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span></pre></div>
 
 
@@ -478,7 +130,7 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
                 script.async = true;
                 script.onload = () => resolve(window.pdocSearch);
                 script.onerror = (e) => reject(e);
-                script.src = "search.js";
+                script.src = "../../search.js";
                 document.getElementsByTagName("head")[0].appendChild(script);
             });
         } catch (e) {
@@ -520,7 +172,7 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
             }
             for (let result of results.slice(0, 10)) {
                 let doc = result.doc;
-                let url = `${doc.modulename.replaceAll(".", "/")}.html`;
+                let url = `../../${doc.modulename.replaceAll(".", "/")}.html`;
                 if (doc.qualname) {
                     url += `#${doc.qualname}`;
                 }
