@@ -14,6 +14,9 @@ jobs:
   # Build the documentation and upload the static HTML files as an artifact.
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11'] # Define the Python versions here
     steps:
       #----------------------------------------------
       #       check-out repo and set-up python
