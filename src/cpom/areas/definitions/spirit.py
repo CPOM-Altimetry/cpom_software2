@@ -75,9 +75,9 @@ area_definition = {
     "show_polygon_overlay_in_main_map": True,  # Overlay the area polygon outline in the main map
     "grid_polygon_overlay_mask": None,
     "apply_hillshade_to_vals": False,  # Apply a hillshade to plotted vals (True or False)
-    "draw_coastlines": False,  # Draw coastlines
+    "draw_coastlines": True,  # Draw coastlines
     "coastline_color": "grey",  # Colour to draw coastlines
-    "use_antarctica_medium_coastline": False,  # True,False: Antarctic coastline inc iceshelves
+    "use_antarctica_medium_coastline": True,  # True,False: Antarctic coastline inc iceshelves
     "use_cartopy_coastline": "no",  # 'no', 'low','medium', 'high' resolution
     "show_gridlines": True,  # True|False, display lat/lon grid lines
     "area_long_name_position": (0.29, 0.89),  # for default annotation position of area long name
@@ -209,7 +209,7 @@ area_definition = {
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
     "histogram_fullrange_axes": [
-        0.86,  # left
+        0.88,  # left
         0.3,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
@@ -230,10 +230,10 @@ area_definition = {
     # --------------------------------------------------------
     "show_bad_data_map": True,
     "bad_data_minimap_axes": [  # define minimap axis position
-        0.69,  # left
-        0.7,  # bottom
-        0.25,  # width (axes fraction)
-        0.25,  # height (axes fraction)
+        0.8,  # left
+        0.75,  # bottom
+        0.19,  # width (axes fraction)
+        0.19,  # height (axes fraction)
     ],
     "bad_data_minimap_bounding_lat": None,  # None or bounding latitude if used for mini-map
     # uses 40N for northern hemisphere or 50N for southern.
@@ -251,25 +251,25 @@ area_definition = {
         -60,
     ],  # longitude lines to draw in bad data minimap
     "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
-    "bad_data_minimap_legend_pos": (0.75, 0.2),  # position of minimap legend (upper right)
+    "bad_data_minimap_legend_pos": (0.75, 0.0),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
     # ------------------------------------------------------------------
     # Mini-map (with box showing actual area) - purpose to show where a
     # smaller area is on a larger map.
     # -------------------------------------------------------------------
-    "show_minimap": False,  # show the overview minmap
+    "show_minimap": True,  # show the overview minmap
     "minimap_axes": [  # define minimap axis position
-        0.64,  # left
-        0.67,  # bottom
-        0.29,  # width (axes fraction)
-        0.29,  # height (axes fraction)
+        0.63,  # left
+        0.81,  # bottom
+        0.18,  # width (axes fraction)
+        0.18,  # height (axes fraction)
     ],
     "minimap_bounding_lat": None,  # None or bounding latitude if used for mini-map
     # uses 40N for northern hemisphere or 50N for southern.
     # Override with this parameter
-    "minimap_circle": None,  # None or [lat,lon,circle_radius_m,color_str]
-    "minimap_draw_gridlines": False,
+    "minimap_circle": [-68, 141, 200000, "red"],  # None or [lat,lon,circle_radius_m,color_str]
+    "minimap_draw_gridlines": True,
     "minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
     "minimap_legend_pos": (1.38, 1.1),  # position of minimap legend (upper right) in minimap axis
 }
