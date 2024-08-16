@@ -40,10 +40,10 @@ area_definition = {
     "minlat": 59.0,  # minimum latitude to initially filter records for area
     "maxlat": 85.0,  # maximum latitude to initially filter records for area
     # --------------------------------------------
-    #    mask from cpom.masks.Mask
+    #    mask from clev2er.utils.masks.Mask
     # --------------------------------------------
     "apply_area_mask_to_data": False,  # filter data using areas mask
-    "maskname": None,  # from  cpom.masks.Mask
+    "maskname": None,  # from  clev2er.utils.masks.Mask
     "masktype": None,  # mask is a polar stereo grid of Nkm resolution
     "basin_numbers": None,  # [n1,n2,..] if mask allows basin numbers
     # for bedmachine v3, 2=grounded ice, 3=floating
@@ -66,7 +66,7 @@ area_definition = {
     ],
     "draw_axis_frame": True,
     "background_color": None,  # background color of map
-    "background_image": "basic_land",  # background image. see cpom.backgrounds
+    "background_image": "basic_land",  # background image. see clev2er.utils.backgrounds
     "background_image_alpha": 1.0,  # 0..1.0, default is 1.0, image transparency
     "background_image_resolution": "low",  # None, 'low','medium', 'high'
     "hillshade_params": None,  # hill shade parameter dict or None
@@ -95,11 +95,11 @@ area_definition = {
     # ------------------------------------------------------
     "varname_annotation_position_xy": (
         0.02,
-        0.8,
+        0.91,
     ),  # normalized position of default varname annotation in plot
     "varname_annotation_position_xy_simple": (
-        0.06,
-        0.8,
+        0.02,
+        0.91,
     ),  # normalized position of default varname annotation in map_only plot
     "stats_position_x_offset": 0,  # x offset to stats position
     "stats_position_y_offset": 0,  # y offset to stats position

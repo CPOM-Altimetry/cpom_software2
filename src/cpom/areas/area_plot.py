@@ -931,7 +931,7 @@ class Polarplot:
         elif self.thisarea.colorbar_orientation == "vertical":
             # Step 2: Calculate positions for the text for a vertical colorbar
             # Adjust these values as needed for your specific figure layout
-            offset_y = 0.005  # Vertical offset from the colorbar ends
+            offset_y = 0.017  # Vertical offset from the colorbar ends
             text_bottom_y = bbox.y0 - offset_y
             text_top_y = bbox.y1 + offset_y
             text_x = bbox.x0 + (bbox.width / 2)  # Horizontally centered
@@ -1436,6 +1436,15 @@ class Polarplot:
                 orientation="vertical",
                 extend=dataset.get("cmap_extend", self.thisarea.cmap_extend),
             )
+            # Get the current ticks and labels
+            ticks = cbar.get_ticks()
+            tick_labels = [str(tick) for tick in ticks]
+
+            # Remove the last (maximum) tick label
+            tick_labels[-1] = ""
+
+            # Set the modified tick labels
+            cbar.set_ticklabels(tick_labels)
         else:  # horizontal colorbar
             colorbar_axes = fig.add_axes(
                 self.thisarea.horizontal_colorbar_axes
