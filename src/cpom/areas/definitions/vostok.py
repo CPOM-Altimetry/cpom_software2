@@ -37,10 +37,10 @@ area_definition = {
     # Data filtering using lat/lon extent (used as a quick data pre-filter before masking)
     # --------------------------------------------
     #   Area min/max lat/lon for initial data filtering
-    "minlon": 100.0,  # minimum longitude to initially filter records for area (0..360E)
-    "maxlon": 107.0,  # maximum longitude to initially filter records for area (0..360E)
+    "minlon": 101.0,  # minimum longitude to initially filter records for area (0..360E)
+    "maxlon": 107.5,  # maximum longitude to initially filter records for area (0..360E)
     "minlat": -78.7,  # minimum latitude to initially filter records for area
-    "maxlat": -74.0,  # maximum latitude to initially filter records for area
+    "maxlat": -76.1,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from cpom.masks.Mask
     # --------------------------------------------
