@@ -1,5 +1,5 @@
 """Utility to convert Geotiff format DEM files to Zarr format using a
-chunk size equivalent to the CS2 beamwidth
+chunk size equivalent to the CS2 beamwidth or a selectable chunk size
 """
 
 import argparse
@@ -67,6 +67,7 @@ class DEMConverter:
         demfile: str,
         zarrfile: str,
         flipped_zarrfile: str,
+        chunk_width: int = 20000,
     ):
         """Convert a GeoTIFF file to Zarr format and create a flipped version.
 
@@ -74,6 +75,7 @@ class DEMConverter:
             demfile (str): Path of GeoTIFF file.
             zarrfile (str): Path where the original Zarr file will be saved.
             flipped_zarrfile (str): Path where the flipped Zarr file will be saved.
+            chunk_width (int, optional): chunk size in m (def = 20000 (ie 20km))
         """
 
         (
@@ -89,8 +91,8 @@ class DEMConverter:
         print(f"Converting {demfile} to zarr")
         print(f"binsize {binsize}, ncols {ncols}, nrows {nrows}")
 
-        chunk_x = int(ncols * binsize / 20000)  # set chunk size to ~20km
-        chunk_y = int(nrows * binsize / 20000)
+        chunk_x = int(ncols * binsize / chunk_width)  # set chunk size to ~20km
+        chunk_y = int(nrows * binsize / chunk_width)
 
         print(f"chunk size chosen {chunk_x} {chunk_y}")
         chunk_size = (chunk_x, chunk_y)
@@ -205,8 +207,9 @@ def main():
         "--void_value",
         "-v",
         type=int,
-        help=("void value in DEM tiff file (ie -9999)"),
-        required=True,
+        help=("void value in DEM tiff file (ie -9999 for REMA/ArcticDEM, -32767 for GaplessREMA)"),
+        required=False,
+        default=-9999,
     )
 
     parser.add_argument(
@@ -215,6 +218,17 @@ def main():
         type=str,
         help=("directory to write Zarr to (not the Zarr dir itself)"),
         required=False,
+    )
+
+    parser.add_argument(
+        "--chunk_size",
+        "-c",
+        type=int,
+        help=(
+            "chunk size in m, default is 20000 (ie 20km), " "slightly larger than the CS2 beamwidth"
+        ),
+        required=False,
+        default=20000,
     )
 
     # read arguments from the command line
@@ -261,6 +275,7 @@ def main():
         tiff_file,
         zarr_file,
         zarr_flipped_file,
+        chunk_width=args.chunk_size,
     )
 
     print(f"Source TIFF file: {tiff_file}")
@@ -270,73 +285,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# # Example usage
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/ant_rema_200m_dem/REMA_200m_dem_filled.tif",
-#     "/cpdata/SATS/RA/DEMS/ant_rema_200m_dem/REMA_200m_dem_filled.zarr",
-#     "/cpdata/SATS/RA/DEMS/ant_rema_200m_dem/REMA_200m_dem_filled_flipped.zarr",
-# )
-
-# sys.exit(1)
-
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0.zarr",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0_flipped.zarr",
-# )
-
-
-# # Example usage
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem/REMA_1km_dem_filled.tif",
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem/REMA_1km_dem_filled.zarr",
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem/REMA_1km_dem_filled_flipped.zarr",
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem_v2/rema_mosaic_1km_v2.0_filled_cop30_dem.tif",
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem_v2/rema_mosaic_1km_v2.0_filled_cop30_dem.zarr",
-#     "/cpdata/SATS/RA/DEMS/rema_1km_dem_v2/rema_mosaic_1km_v2.0_filled_cop30_dem_flipped.zarr",
-# )
-# DEMConverter(void_value=-32767).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA100.tif",
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA100.zarr",
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA100_flipped.zarr",
-# )
-# DEMConverter(void_value=-32767).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA1km.tif",
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA1km.zarr",
-#     "/cpdata/SATS/RA/DEMS/rema_gapless_100m/GaplessREMA1km_flipped.zarr",
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_100m_v4.1/arcticdem_mosaic_100m_v4.1_subarea_greenland.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_100m_v4.1/arcticdem_mosaic_100m_v4.1_subarea_greenland.zarr",
-#     (
-#         "/cpdata/SATS/RA/DEMS/arctic_dem_100m_v4.1/"
-#         "arcticdem_mosaic_100m_v4.1_subarea_greenland_flipped.zarr"
-#     ),
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0.zarr",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0_flipped.zarr",
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0_subarea_greenland.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/arcticdem_mosaic_1km_v3.0_subarea_greenland.zarr",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km/"
-#     "arcticdem_mosaic_1km_v3.0_subarea_greenland_flipped.zarr",
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/arcticdem_mosaic_1km_v4.1_dem.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/arcticdem_mosaic_1km_v4.1_dem.zarr",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/arcticdem_mosaic_1km_v4.1_dem_flipped.zarr",
-# )
-# DEMConverter(void_value=-9999).convert_geotiff_to_zarr(
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/arcticdem_mosaic_1km_v4.1_subarea_greenland.tif",
-#     "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/arcticdem_mosaic_1km_v4.1_subarea_greenland.zarr",
-#     (
-#         "/cpdata/SATS/RA/DEMS/arctic_dem_1km_v4.1/"
-#         "arcticdem_mosaic_1km_v4.1_subarea_greenland_flipped.zarr"
-#     ),
-# )
