@@ -380,7 +380,7 @@ class Slopes:
             filename = "REMA_Slope_100m_900ws.zarr"
             filled_filename = "REMA_Slope_100m_900ws.zarr"
             # default_dir can be modified in class init
-            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_rougness'
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness'
             self.src_url = "TBD"  # Add REMA src URL
             self.src_url_filled = "TBD"  # Add REMA src URL
             self.slopes_version = "1.1"
@@ -398,7 +398,7 @@ class Slopes:
             filename = "ArcticDEM_Slope_100m_900ws.zarr"
             filled_filename = "ArcticDEM_Slope_100m_900ws.zarr"
             # default_dir can be modified in class init
-            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_rougness'
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness'
             self.src_url = "TBD"  # Add ArcticDEM src URL
             self.src_url_filled = "TBD"  # Add ArcticDEM src URL
             self.slopes_version = "1.1"
