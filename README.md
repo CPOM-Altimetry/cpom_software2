@@ -16,6 +16,16 @@ This is a software package for :
 
 Now uses **poetry** for dependency management instead of **conda**
 
+## Automated Static Code Analysis
+
+Static code analysis (linting, type checking, etc) is built in at the pre-commit, commit and GitHub CI
+stages (after a pull request, or push to the main branch).
+
+## Automated Testing
+
+Testing is performed using the **pytest** framework. Tests are automatically run using GitHub actions during a pull request
+or push to the main branch.
+
 ## Automatic Documentation
 
 Documentation is automatically produced from docstrings in the code, and published here: 
