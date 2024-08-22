@@ -1,6 +1,8 @@
 # CPOM Software (v2)
 
-CPOM Software (v2.x) aims to build/refactor the original CPOM Software Repository, but now use more advanced software engineering techniques for testing, static code analysis, documentation and continous integration.
+CPOM Software (v2.x) aims to build/refactor the original CPOM Software Repository (https://github.com/CPOM-Altimetry/cpom_software), 
+but now use more advanced software engineering techniques for testing, 
+static code analysis, documentation and continous integration.
 
 This is a software package for :
 
