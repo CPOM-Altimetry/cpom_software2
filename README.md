@@ -16,6 +16,9 @@ This is a software package for :
 
 All code in the cpom (v2) repository has to be refactored to pass the automated static code analysis and pytest tests.
 
+In some cases the code modules will be re-engineered to use better processes, and may not be backward compatible with
+the original cpom repository.
+
 ## Package and Dependency Management
 
 Now uses **poetry** for dependency management instead of **conda**
