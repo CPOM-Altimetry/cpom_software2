@@ -237,7 +237,7 @@ area_definition = {
         -120,
         -60,
     ],  # longitude lines to draw in bad data minimap
-    "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
+    "bad_data_minimap_val_scalefactor": 0.01,  # scale factor for plotting bad values on minimap
     "bad_data_minimap_legend_pos": (1.38, 1.1),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
