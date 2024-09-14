@@ -301,6 +301,16 @@ def main(args):
     )
 
     parser.add_argument(
+        "--and_flag",
+        "-af",
+        help=(
+            "[optional, str:int], flag_name:flag_value, main plot parameter is "
+            "included if flag == value"
+        ),
+        required=False,
+    )
+
+    parser.add_argument(
         "--area",
         "-a",
         help=("CPOM area definition name. See --list_areas for a full list"),
@@ -785,6 +795,14 @@ def main(args):
                         vals = get_variable(nc, params[i])[:].data
                         lats = get_variable(nc, latnames[i])[:].data
                         lons = get_variable(nc, lonnames[i])[:].data % 360.0
+
+                        if args.and_flag:
+                            flag_name, flag_value = args.and_flag.split(":")
+                            flag_value = int(flag_value)
+                            flag_vals = get_variable(nc, flag_name)[:].data
+                            vals = vals[flag_vals == flag_value]
+                            lats = lats[flag_vals == flag_value]
+                            lons = lons[flag_vals == flag_value]
 
                         datasets[i]["lats"].extend(lats)
                         datasets[i]["lons"].extend(lons)
