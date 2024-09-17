@@ -721,7 +721,7 @@ class Background:
             )
 
             try:
-                print("Loading IBCAO_v4.2 topo map background..")
+                print(f"Loading IBCAO_v4.2 topo map background {bgfile}..")
                 data = np.load(bgfile, allow_pickle=True)
                 zdem = data["zdem"]
                 x_grid = data["X"]
