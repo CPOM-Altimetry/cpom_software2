@@ -142,6 +142,8 @@ def get_default_param(
     # CS2 L1b SIN
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
         return "lat_20_ku", "degs"
+    if "CS_LTA__SIR_SIN_1B" in basename[: len("CS_LTA__SIR_SIN_1B")]:
+        return "lat_20_ku", "degs"
     # CryoTEMPO Products
     if "CS_OFFL_SIR_TDP_LI" in basename[: len("CS_OFFL_SIR_TDP_LI")]:
         # CRYO_TEMPO Land Ice file
@@ -193,6 +195,9 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
 
     # CS2 L1b
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
+        # CS2 L1b SIN
+        return "lat_20_ku", "lon_20_ku"
+    if "CS_LTA__SIR_SIN_1B" in basename[: len("CS_LTA__SIR_SIN_1B")]:
         # CS2 L1b SIN
         return "lat_20_ku", "lon_20_ku"
     # CryoTEMPO Products
