@@ -733,6 +733,7 @@ class Background:
             new_colors = base_cmap(np.linspace(0, 1, 8))
             thiscmap = LinearSegmentedColormap.from_list("custom_blues", new_colors)
 
+            print(data["zdem"].dtype)
             print(f"x_grid {x_grid[0:30]}")
             print(f"y_grid {y_grid[0:30]}")
             print(f"zdem {zdem[0:30]}")
