@@ -737,12 +737,13 @@ class Background:
                 x_grid,
                 y_grid,
                 zdem,
-                cmap=thiscmap,
+                # cmap=thiscmap,
                 shading="auto",
                 alpha=alpha,
                 vmin=np.nanmin(zdem),
                 vmax=np.nanmax(zdem),
                 transform=dataprj,
+                zorder=9999,
             )
 
         elif self.name == "awi_gis_dem":
