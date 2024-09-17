@@ -165,6 +165,9 @@ def get_default_param(
     if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
         # CRISTAL L1b LMC
         return "data_20/ku/tracker_range_calibrated", "m"
+    if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
+        # CS2 L1b SIN
+        return "lat_20_ku", "degs"
 
     print(
         f"{ORANGE}Format of {basename} not recognized - "
