@@ -733,11 +733,15 @@ class Background:
             new_colors = base_cmap(np.linspace(0, 1, 8))
             thiscmap = LinearSegmentedColormap.from_list("custom_blues", new_colors)
 
+            print(f"x_grid {x_grid[0:30]}")
+            print(f"y_grid {y_grid[0:30]}")
+            print(f"zdem {zdem[0:30]}")
+
             ax.pcolormesh(
                 x_grid,
                 y_grid,
                 zdem,
-                # cmap=thiscmap,
+                cmap=thiscmap,
                 shading="auto",
                 alpha=alpha,
                 vmin=np.nanmin(zdem),
