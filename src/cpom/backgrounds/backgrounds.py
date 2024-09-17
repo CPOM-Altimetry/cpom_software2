@@ -717,7 +717,7 @@ class Background:
 
             bgfile = (
                 f'{os.environ["CPDATA_DIR"]}/RESOURCES/backgrounds/'
-                f"IBCAO_v4.2_bathymetry_{resolution}.npz"
+                f"IBCAO_v4.2_bathymetry_{resolution}.v2.npz"
             )
 
             try:
@@ -726,6 +726,7 @@ class Background:
                 zdem = data["zdem"]
                 x_grid = data["X"]
                 y_grid = data["Y"]
+                # np.savez(bgfile.replace('.npz','.v2.npz'),zdem=zdem, X=x_grid, Y=y_grid )
             except IOError:
                 log.error("Could not read %s", bgfile)
 
@@ -733,10 +734,10 @@ class Background:
             new_colors = base_cmap(np.linspace(0, 1, 8))
             thiscmap = LinearSegmentedColormap.from_list("custom_blues", new_colors)
 
-            print(data["zdem"].dtype)
-            print(f"x_grid {x_grid[0:30]}")
-            print(f"y_grid {y_grid[0:30]}")
-            print(f"zdem {zdem[0:30]}")
+            # print(data["zdem"].dtype)
+            # print(f"x_grid {x_grid[0:30]}")
+            # print(f"y_grid {y_grid[0:30]}")
+            # print(f"zdem {zdem[0:30]}")
 
             ax.pcolormesh(
                 x_grid,
