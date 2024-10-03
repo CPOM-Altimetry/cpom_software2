@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-""" plot dhdt.npz files from CPOM sec processing
+""" plot dhdt.npz files from CPOM sec processing (not a finished tool)
+
+    using black background
+    to highlight missing areas of the grid
 
     Note, just supports greenland and antarctica grid areas at the moment.
     Doesn't read the dhdt.info file
 
-    Need to edit dataset name string
+    Need to edit dataset name string, plot range
 """
 import argparse
 
