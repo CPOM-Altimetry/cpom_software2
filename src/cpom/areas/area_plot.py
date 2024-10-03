@@ -1002,7 +1002,7 @@ class Polarplot:
             min_str = f"min:{np.min(vals):.2f}"
             if len(min_str) > 11:
                 min_str = f"{np.min(vals):.2f}"
-            max_str = f"min:{np.max(vals):.2f}"
+            max_str = f"max:{np.max(vals):.2f}"
             if len(max_str) > 11:
                 max_str = f"{np.max(vals):.2f}"
             plt.gcf().text(text_left_x, text_y, min_str, ha="right", va="center")

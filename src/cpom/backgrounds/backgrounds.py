@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 # dict of available plot background names and test areas
 all_backgrounds = {
     "basic_land": ["antarctica_is"],
+    "basic_land_black": ["antarctica_is"],
     "cartopy_stock": ["antarctica_is", "arctic"],
     "cartopy_stock_ocean": ["antarctica_is", "arctic"],
     "arcgis_shaded_relief": ["antarctica_is", "arctic"],
@@ -315,6 +316,47 @@ class Background:
             ax.set_facecolor("#F2F7FF")
             land_color = cfeature.COLORS["land"]
             land_color = "#F5F5F5"
+            if resolution == "low":
+                land = cfeature.NaturalEarthFeature(
+                    "physical",
+                    "land",
+                    "110m",
+                    edgecolor="face",
+                    facecolor=land_color,
+                )
+            elif resolution == "medium":
+                land = cfeature.NaturalEarthFeature(
+                    "physical",
+                    "land",
+                    "50m",
+                    edgecolor="face",
+                    facecolor=land_color,
+                )
+            elif resolution == "high":
+                land = cfeature.NaturalEarthFeature(
+                    "physical",
+                    "land",
+                    "10m",
+                    edgecolor="black",
+                    facecolor=land_color,
+                )
+            else:
+                land = cfeature.NaturalEarthFeature(
+                    "physical",
+                    "land",
+                    "110m",
+                    edgecolor="face",
+                    facecolor=land_color,
+                )
+            ax.add_feature(land, zorder=0)
+
+        # like basic_land bit with a black background (useful to highlight lack of data)
+        elif self.name == "basic_land_black":
+            print("Loading basic_land_black background")
+            # ax.stock_img()
+            ax.set_facecolor("#000000")
+            land_color = cfeature.COLORS["land"]
+            land_color = "#000000"
             if resolution == "low":
                 land = cfeature.NaturalEarthFeature(
                     "physical",
