@@ -22,6 +22,7 @@ import shapefile as shp  # type: ignore
 from cartopy.mpl.geoaxes import GeoAxesSubplot  # type: ignore
 from matplotlib import colormaps
 from matplotlib import pyplot as plt
+from matplotlib import ticker
 from matplotlib.figure import Figure
 from numpy import ma  # masked arrays
 
@@ -1436,14 +1437,17 @@ class Polarplot:
                 orientation="vertical",
                 extend=dataset.get("cmap_extend", self.thisarea.cmap_extend),
             )
-            # Get the current ticks and labels
+            # Set the format for the colorbar ticks to display 2 decimal places
+            cbar.ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
+
+            # Optionally, if you still need to remove the last tick label:
             ticks = cbar.get_ticks()
-            tick_labels = [str(tick) for tick in ticks]
+            tick_labels = [f"{tick:.2f}" for tick in ticks]  # format with 2 decimal places
 
             # Remove the last (maximum) tick label
             tick_labels[-1] = ""
 
-            # Set the modified tick labels
+            # Apply the tick labels
             cbar.set_ticklabels(tick_labels)
         else:  # horizontal colorbar
             colorbar_axes = fig.add_axes(
