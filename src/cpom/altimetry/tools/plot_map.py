@@ -330,6 +330,18 @@ def main(args):
     )
 
     parser.add_argument(
+        "--bool_mask_params",
+        "-bm",
+        help=(
+            "comma separated list of netcdf parameters containing a boolean mask "
+            "with optional group path (e.g., 'group/subgroup/parameter'). "
+            "Example: -bm ku/original/bool_mask_area -p ku/original/surface_type."
+            " The boolean mask is used to subset the parameter(s) set by --params"
+        ),
+        required=False,
+    )
+
+    parser.add_argument(
         "--cmap",
         "-cm",
         help=("colourmap name to to use. Default is RdYlBu_r"),
@@ -630,6 +642,11 @@ def main(args):
     else:
         params = []
 
+    if args.bool_mask_params:
+        bool_mask_params = args.bool_mask_params.split(",")
+    else:
+        bool_mask_params = []
+
     if args.units:
         units = args.units.split(",")
     else:
@@ -807,6 +824,11 @@ def main(args):
                         vals = get_variable(nc, params[i])[:].data
                         lats = get_variable(nc, latnames[i])[:].data
                         lons = get_variable(nc, lonnames[i])[:].data % 360.0
+                        if len(bool_mask_params) == len(params):
+                            bool_mask = get_variable(nc, bool_mask_params[i])[:].data.astype(bool)
+                            vals = vals[bool_mask]
+                            lats = lats[bool_mask]
+                            lons = lons[bool_mask]
 
                         if args.and_flag:
                             flag_name, flag_value = args.and_flag.split(":")
