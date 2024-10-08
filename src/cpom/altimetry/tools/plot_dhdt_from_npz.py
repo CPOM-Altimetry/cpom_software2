@@ -35,6 +35,13 @@ def main():
         required=False,
         action="store_true",
     )
+    parser.add_argument(
+        "--plot_name",
+        "-n",
+        default="dh/dt",
+        help=("plot name to use in annotation"),
+        required=False,
+    )
 
     args = parser.parse_args()
 
@@ -73,7 +80,7 @@ def main():
         lats, lons = thisgridarea.transform_x_y_to_lat_lon(x, y)
 
     data_set = {
-        "name": "dh/dt from CT D045 (2015-2020)",
+        "name": args.plot_name,
         "lats": lats,
         "lons": lons,
         "vals": dhdt,
