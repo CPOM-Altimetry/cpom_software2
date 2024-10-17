@@ -184,9 +184,9 @@ def get_default_parameter_names(
         latitude name,longitude name.
     """
 
-    wf_parameter = ""
-    latitude_name = ""
-    longitude_name = ""
+    wf_parameter = waveform_parameter_name
+    latitude_name = latname
+    longitude_name = lonname
 
     # Check if it is a CRISTAL L1b file in HR mode
     if "CRA_IR_1B_HR__" in file_name[: len("CRA_IR_1B_HR__")]:
@@ -230,13 +230,13 @@ def get_default_parameter_names(
             latitude_name = "lat_20_ku"
         if lonname is None:
             longitude_name = "lon_20_ku"
-    else:
-        if waveform_parameter_name is None or latname is None or lonname is None:
-            sys.exit(
-                f"File {file_name} type not identified. "
-                "In this case you must provide the --parameter <WAVEFORM_PARAM_NAME> "
-                "and --latname <LATITUDE_NAME>, --lonname <LONGITUDE_NAME> to plot"
-            )
+
+    if wf_parameter is None or latitude_name is None or longitude_name is None:
+        sys.exit(
+            f"File {file_name} type not identified. "
+            "In this case you must provide the --parameter <WAVEFORM_PARAM_NAME> "
+            "and --latname <LATITUDE_NAME>, --lonname <LONGITUDE_NAME> to plot"
+        )
 
     return wf_parameter, latitude_name, longitude_name
 

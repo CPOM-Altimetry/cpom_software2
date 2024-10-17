@@ -43,6 +43,15 @@ def main():
         required=False,
     )
 
+    parser.add_argument(
+        "--plot_range",
+        "-pr",
+        default=0.5,
+        help=("absolute value of plot range to use for dh/dt plots"),
+        required=False,
+        type=float,
+    )
+
     args = parser.parse_args()
 
     dhdt_filename = args.file
@@ -85,8 +94,8 @@ def main():
         "lons": lons,
         "vals": dhdt,
         "units": "m/yr",
-        "min_plot_range": -2,
-        "max_plot_range": 2,
+        "min_plot_range": args.plot_range * -1,
+        "max_plot_range": args.plot_range,
         "cmap_name": "RdYlBu",  # colormap name to use for this dataset
         "cmap_under_color": "#A85754",
         "cmap_over_color": "#3E4371",
