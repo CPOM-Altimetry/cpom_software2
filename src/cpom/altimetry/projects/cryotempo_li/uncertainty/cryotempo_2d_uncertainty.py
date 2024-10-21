@@ -12,9 +12,15 @@ Grn:
 Slopes("arcticdem_100m_900ws_slopes_zarr")
 Roughness("arcticdem_100m_900ws_roughness_zarr")
 
-Input is dh values, lat, lon from CS2-IS2 differences npz files
-[/Users/alanmuir/Downloads]/cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
-[/Users/alanmuir/Downloads]/cs2_minus_is2_gt2lgt2r_p2p_diffs_greenland.npz
+Input is dh values, lat, lon from CS2-IS2 differences npz files, for example:
+[cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
+[cs2_minus_is2_gt2lgt2r_p2p_diffs_greenland.npz
+
+example usage: 
+python cryotempo_2d_uncertainty.py -a -m median \
+    -dh_file ~/downloads/cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
+python cryotempo_2d_uncertainty.py -g -m median \
+    -dh_file ~/downloads/cs2_minus_is2_gt2lgt2r_p2p_diffs_greenland.npz
 
 """
 
@@ -355,6 +361,18 @@ def main():
     )
 
     parser.add_argument(
+        "-dh_file",
+        "-dh",
+        help=(
+            "path of elevation difference npz file (for example "
+            "/path/to/cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_greenland.npz or"
+            "/path/to/"
+            "cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_antarctica_icesheets.npz)"
+        ),
+        type=str,
+    )
+
+    parser.add_argument(
         "--method",
         "-m",
         choices=["median", "mad"],
@@ -393,23 +411,16 @@ def main():
             this_slope = Slopes("rema_100m_900ws_slopes_zarr")
 
         this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
-        dh_file = (
-            "/Users/alanmuir/Downloads/"
-            "cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_antarctica_icesheets.npz"
-        )
+
     else:
         area = "grn"
         this_slope = Slopes("arcticdem_100m_900ws_slopes_zarr")
         this_roughness = Roughness("arcticdem_100m_900ws_roughness_zarr")
-        dh_file = (
-            "/Users/alanmuir/Downloads/"
-            "cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_greenland.npz"
-        )
 
     # Read npz file to get dh,lat,lon values
 
-    print(f"reading npz file {dh_file}...")
-    dh_data = np.load(dh_file, allow_pickle=True)
+    print(f"reading npz file {args.dh_file}...")
+    dh_data = np.load(args.dh_file, allow_pickle=True)
 
     lats = dh_data.get("lats")
     lons = dh_data.get("lons")
