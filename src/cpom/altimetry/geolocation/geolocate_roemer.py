@@ -1,4 +1,8 @@
 """
+cpom.altimetry.geolocation.gelocate_roemer.py
+
+# Purpose
+
 Slope correction/geolocation function using an adapted Roemer method 
 from :
 Roemer, S., Legrésy, B., Horwath, M., and Dietrich, R.: Refined
@@ -21,6 +25,10 @@ Finally the slope correction and height is calculated from
 height[i] = altitudes[i]
                     - (geo_corrected_tracker_range[i] + retracker_correction[i])
                     + slope_correction[i]
+
+# Main function
+
+geolocate_roemer()
 
 """
 
