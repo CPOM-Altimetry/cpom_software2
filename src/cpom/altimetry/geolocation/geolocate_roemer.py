@@ -221,14 +221,15 @@ def geolocate_roemer(
         thisdem_fine (Dem): Dem object used for fine Roemer correction (maybe same obj as thisdem)
         config (dict): config dictionary containing
             "roemer_geolocation": {
-                "fine_grid_sampling": 10,
-                "max_poca_reloc_distance": 6600,
-                "range_window_lower_trim": 0,
-                "range_window_upper_trim": 0,
-                "median_filter": False,
+                "fine_grid_sampling": 10, # DEM sampling of second stage
+                "max_poca_reloc_distance": 6600, # meters. Max distance from nadir allowed
+                "median_filter": False, # apply a median filter to DEM area of interest around nadir
                 "median_filter_width": 7,
-                "reject_outside_range_window": True,
-                "use_sliding_window": False,
+                "reject_outside_range_window": True, # reject POCA is outside trimmed range window
+                "range_window_lower_trim": 0, # meters
+                "range_window_upper_trim": 0, # meters
+                "use_sliding_window": False, # sliding window method is much slower.
+                                             # Needs further testing to see if it improves results
             }
             "instrument": {
                 "across_track_beam_width": 15000, # meters
