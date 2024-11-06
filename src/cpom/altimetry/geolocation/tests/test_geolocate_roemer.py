@@ -6,11 +6,14 @@
 import logging
 
 import numpy as np
+import pytest
 
 from cpom.altimetry.geolocation.geolocate_roemer import geolocate_roemer
 from cpom.dems.dems import Dem
 
 log = logging.getLogger(__name__)
+
+pytestmark = pytest.mark.requires_external_data
 
 
 def test_geolocate_roemer():
