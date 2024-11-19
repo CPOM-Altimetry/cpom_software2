@@ -11,6 +11,7 @@ Compatible for the following variables:
 - Slope: interpolated from Slopes("rema_100m_900ws_slopes_zarr")
 - Roughness: interpolated from Roughness ("rema_100m_900ws_roughness_zarr)
 - Power: sigma 0 from L2i product
+- Coherence: coherence from L2i product
 
 Input is dh values, lat, lon from CS2-IS2 differences npz files, for example:
 cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
@@ -47,9 +48,11 @@ def calculate_binned_metric(
     slope: np.ndarray,
     roughness: np.ndarray,
     power: np.ndarray,
+    coherence: np.ndarray,
     slope_bins: np.ndarray,
     roughness_bins: np.ndarray,
     power_bins: np.ndarray,
+    coherence_bins: np.ndarray,
     method: str,
 ) -> pd.DataFrame:
 
@@ -62,9 +65,11 @@ def calculate_binned_metric(
         slope (np.ndarray): Array of surface slopes in meters.
         roughness (np.ndarray): Array of surface roughness values in meters.
         power (np.ndarray): Array of power (sigma 0) values.
+        coherence (np.ndarray): Array of coherence (coherence_20_ku) values.
         slope_bins (np.ndarray): Bins to categorize slope values.
         roughness_bins (np.ndarray): Bins to categorize roughness values.
         power_bins (np.ndarray): Bins to categorise power values.
+        coherence_bins (np.ndarray): Bins to categorise coherence values.
         method (str): Metric to calculate uncertainty within bins.
 
     Returns:
@@ -80,6 +85,7 @@ def calculate_binned_metric(
             "slope": slope,
             "roughness": roughness,
             "power": power,
+            "coherence": coherence,
         }
     )
 
@@ -90,9 +96,11 @@ def calculate_binned_metric(
     data["roughness_bin"] = pd.cut(
         data["roughness"], bins=roughness_bins, include_lowest=True, labels=roughness_bins[:-1]
     )
-
     data["power_bin"] = pd.cut(
         data["power"], bins=power_bins, include_lowest=True, labels=power_bins[:-1]
+    )
+    data["coherence_bin"] = pd.cut(
+        data["coherence"], bins=coherence_bins, include_lowest=True, labels=coherence_bins[:-1]
     )
 
     # calculate the metric within each bin
@@ -100,7 +108,7 @@ def calculate_binned_metric(
     if method == 'median':
         binned_metric = (
             data.assign(abs_delta_elevation=data["delta_elevation"].abs())
-            .groupby(["slope_bin", "roughness_bin", "power_bin"])["abs_delta_elevation"]
+            .groupby(["slope_bin", "roughness_bin", "power_bin", "coherence_bin"])["abs_delta_elevation"]
             .median()
             .reset_index()
         )
@@ -112,7 +120,7 @@ def calculate_binned_metric(
 
         binned_metric = (
             data.assign(abs_delta_elevation=data["delta_elevation"].abs())
-            .groupby(["slope_bin", "roughness_bin", "power_bin"])["abs_delta_elevation"].apply(mad).reset_index()
+            .groupby(["slope_bin", "roughness_bin", "power_bin", "coherence_bin"])["abs_delta_elevation"].apply(mad).reset_index()
         )
 
     # use RMSE as metric
@@ -123,7 +131,7 @@ def calculate_binned_metric(
 
         binned_metric = (
             data.assign(abs_delta_elevation=data["delta_elevation"].abs())
-            .groupby(["slope_bin", "roughness_bin", "power_bin"])["abs_delta_elevation"].apply(rmse).reset_index()
+            .groupby(["slope_bin", "roughness_bin", "power_bin", "coherence_bin"])["abs_delta_elevation"].apply(rmse).reset_index()
         )
 
     # use upper estimate of standard deviation as metric
@@ -134,12 +142,12 @@ def calculate_binned_metric(
 
         binned_metric = (
             data.assign(abs_delta_elevation=data["delta_elevation"].abs())
-            .groupby(["slope_bin", "roughness_bin", "power_bin"])["abs_delta_elevation"].apply(std_ue).reset_index()
+            .groupby(["slope_bin", "roughness_bin", "power_bin", "coherence_bin"])["abs_delta_elevation"].apply(std_ue).reset_index()
         )
 
     # Pivot the table to create a 3D matrix where rows are slope_bins and columns are roughness_bins and power_bins
     binned_metric_pivot = binned_metric.pivot(
-        index="slope_bin", columns=["roughness_bin", "power_bin"], values="abs_delta_elevation"
+        index="slope_bin", columns=["roughness_bin", "power_bin", "coherence_bin"], values="abs_delta_elevation"
     )
 
     # print(binned_metric_pivot.stack(future_stack=True))
@@ -152,9 +160,11 @@ def calc_uncertainty_table(
     slope: np.ndarray,
     roughness: np.ndarray,
     power: np.ndarray,
+    coherence: np.ndarray,
     slope_bins: np.ndarray,
     roughness_bins: np.ndarray,
     power_bins: np.ndarray,
+    coherence_bins: np.ndarray,
     method: str = "median",
 ) -> pd.DataFrame:
 
@@ -166,10 +176,12 @@ def calc_uncertainty_table(
                                       measurement techniques.
         slope (np.ndarray): Array of surface slopes in meters.
         roughness (np.ndarray): Array of surface roughness values in meters.
-        power (np.ndarray): Array if power values.
+        power (np.ndarray): Array of power values.
+        coherence (np.ndarray): Array of coherence values.
         slope_bins (np.ndarray): Bins to categorize slope values.
         roughness_bins (np.ndarray): Bins to categorize roughness values.
         power_bins (np.ndarray): Bins to categorise power values.
+        coherence_bins (np.ndarray): Bins to categorise coherence values.
         method (str): Method to calculate the uncertainty ('median' 'mad' 'rmse' or 'std_ue'). Default is 'median'.
 
     Returns:
@@ -177,7 +189,7 @@ def calc_uncertainty_table(
                       and values to the uncertainty metric within each bin.
     """
     binned_table = calculate_binned_metric(
-        delta_elevation, slope, roughness, power, slope_bins, roughness_bins, power_bins, method,
+        delta_elevation, slope, roughness, power, coherence, slope_bins, roughness_bins, power_bins, coherence_bins, method,
     )
 
     return binned_table
@@ -187,10 +199,12 @@ def get_binned_values(
     slope_values: np.ndarray,
     roughness_values: np.ndarray,
     power_values: np.ndarray,
+    coherence_values: np.ndarray,
     binned_table: pd.DataFrame,
     slope_bins: np.ndarray,
     roughness_bins: np.ndarray,
     power_bins: np.ndarray,
+    coherence_bins: np.ndarray,
 ) -> np.ndarray:
 
     """
@@ -198,13 +212,15 @@ def get_binned_values(
     slope, roughness and power values).
 
     Args:
-        slope_values (np.ndarray): Array of slope values for which to retrieve median differences.
-        roughness_values (np.ndarray): Array of roughness values for which to retrieve median differences.
-        power_values (np.ndarray): Array of power values for which to retrieve median differences.
+        slope_values (np.ndarray): Array of slope values for which to retrieve calculated differences.
+        roughness_values (np.ndarray): Array of roughness values for which to retrieve calculated differences.
+        power_values (np.ndarray): Array of power values for which to retrieve calculated differences.
+        coherence_values (np.ndarray): Array of coherence values for which to retrieve calculated differences.
         binned_table (pd.DataFrame): A pivot table of binned median absolute elevation differences.
         slope_bins (np.ndarray): Bins to categorize slope values.
         roughness_bins (np.ndarray): Bins to categorize roughness values.
         power_bins (np.ndarray): Bins to categorise power values.
+        coherence_bins (np.ndarray): Bins to categorise coherence values.
 
     Returns:
         np.ndarray: An array of median absolute elevation differences corresponding to the
@@ -214,6 +230,7 @@ def get_binned_values(
     slope_values = np.asarray(slope_values)
     roughness_values = np.asarray(roughness_values)
     power_values = np.asarray(power_values)
+    coherence_values = np.asarray(coherence_values)
 
     # Find the slope bin indices for the array of slope_values
     slope_bin_indices = np.digitize(slope_values, slope_bins) - 1
@@ -233,16 +250,23 @@ def get_binned_values(
         power_bin_indices, 0, len(power_bins) - 2
     )  # Ensure indices are within range
 
+    # Find the coherence bin indices for the array of coherence
+    coherence_bin_indices = np.digitize(coherence_values, coherence_bins) - 1
+    coherence_bin_indices = np.clip(
+        coherence_bin_indices, 0, len(coherence_bins) - 2
+    )  # Ensure indices are within range
+
     # Convert bin labels to row and column labels in the DataFrame
     row_indices = [slope_bins[idx] for idx in slope_bin_indices]
     col1_indices = [roughness_bins[idx] for idx in roughness_bin_indices]
     col2_indices = [power_bins[idx] for idx in power_bin_indices]
+    col3_indices = [coherence_bins[idx] for idx in coherence_bin_indices]
 
     binned_table_df = binned_table.stack(future_stack=True)
     # print(binned_table_df)
 
     # Retrieve the values using numpy indexing on the DataFrame values
-    values = [binned_table_df.loc[row_indices[i]][col1_indices[i]][col2_indices[i]] for i in range(len(row_indices))]
+    values = [binned_table_df.loc[row_indices[i]][col1_indices[i]][col2_indices[i]][col3_indices[i]] for i in range(len(row_indices))]
 
     return values
 
@@ -252,6 +276,7 @@ def fit_linear_model(
     slope_bins: np.ndarray,
     roughness_bins: np.ndarray,
     power_bins: np.ndarray,
+    coherence_bins: np.ndarray,
 ) -> np.ndarray:
     """
     Fit a linear model to the lookup table to fill 'NaNs' using interpolation and extrapolation.
@@ -261,6 +286,7 @@ def fit_linear_model(
         slope_bins (np.ndarray): Bins to categorize slope values.
         roughness_bins (np.ndarray): Bins to categorize roughness values.
         power_bins (np.ndarray): Bins to categorise power values.
+        coherence_bins (np.ndarray): Bins to categorise coherence values.
 
     Returns:
         np.ndarray: The pivot table with missing values filled using a linear model fit.
@@ -272,12 +298,14 @@ def fit_linear_model(
     slope_bins = slope_bins[:-1]
     roughness_bins = roughness_bins[:-1]
     power_bins = power_bins[:-1]
+    coherence_bins = coherence_bins[:-1]
 
     # Reshaping data into long format for fitting
-    slope, roughness, power = np.meshgrid(slope_bins, roughness_bins, power_bins, indexing="ij")
+    slope, roughness, power, coherence = np.meshgrid(slope_bins, roughness_bins, power_bins, coherence_bins, indexing="ij")
     slope = slope.flatten()
     roughness = roughness.flatten()
     power = power.flatten()
+    coherence = coherence.flatten()
     z_values = binned_table.values.flatten()  # Uncertainty values
 
     # Remove NaN values before fitting
@@ -285,36 +313,36 @@ def fit_linear_model(
     slope_clean = slope[mask]
     roughness_clean = roughness[mask]
     power_clean = power[mask]
+    coherence_clean = coherence[mask]
     z_clean = z_values[mask]
 
     # Create interaction term (slope * roughness)
-    interaction_term = slope_clean * roughness_clean * power_clean
+    interaction_term = slope_clean * roughness_clean * power_clean * coherence_clean
 
     # Prepare the features matrix
-    x_matrix = np.vstack([slope_clean, roughness_clean, power_clean, interaction_term]).T
+    x_matrix = np.vstack([slope_clean, roughness_clean, power_clean, coherence_clean, interaction_term]).T
 
     # Perform linear regression
     reg = LinearRegression()
     reg.fit(x_matrix, z_clean)
 
     # Coefficients of the model
-    a, b, c, d = reg.coef_
-    e = reg.intercept_
+    a, b, c, d, e = reg.coef_
+    f = reg.intercept_
 
     # Fit function
-    def linear_fit(slope, roughness, power):
-        return a * slope + b * roughness + c * power + d * slope * roughness * power + e
+    def linear_fit(slope, roughness, power, coherence):
+        return a * slope + b * roughness + c * power + d * coherence + e * slope * roughness * power * coherence + f
 
     # Apply the fit to the original grid
     linear_table = pd.DataFrame(
-        linear_fit(slope, roughness, power).reshape(binned_table.shape), index=binned_table.index, columns=binned_table.columns
+        linear_fit(slope, roughness, power, coherence).reshape(binned_table.shape), index=binned_table.index, columns=binned_table.columns
     )
 
     # Replace negative values with values from the original table
     linear_table = linear_table.where(linear_table >= 0, binned_table)
 
     return linear_table
-
 
 # -------------------------------------------------------------------------------------------------------------
 # Main
@@ -362,7 +390,8 @@ def main():
     # Define bins 
     the_slope_bins = np.arange(0, 2.1, 0.1)  # Define slope bins in degrees (0.1 degree steps from 0 to 2 degrees)
     the_roughness_bins = np.arange(0, 2.1, 0.1)  # Define roughness bins in meters (0.1 m steps from 0 to 2 meters)
-    the_power_bins = np.arange(0, 10, 1)  # Define power bins in meters (0.1 m steps from 0 to 2 meters)
+    the_power_bins = np.arange(0, 10, 1)  # Define power bins (1 steps from 0 to 9)
+    the_coherence_bins = np.arange(0, 1.1, 0.1)  # Define coherence bins (0.1 steps from 0 to 1)
 
     if args.area == 'antarctica_icesheets':
         this_slope = Slopes("rema_100m_900ws_slopes_zarr")
@@ -384,6 +413,8 @@ def main():
     roughness = this_roughness.interp_roughness(lats, lons, method="linear", xy_is_latlon=True)
     print('Fetching power data')
     power = dh_data.get("pow")
+    print('Fetching coherence data')
+    coherence = dh_data.get("coh")
     
     # calculate uncertainty lookup table
     print("calculating uncertainty table... ")
@@ -392,9 +423,11 @@ def main():
         slope,
         roughness,
         power,
+        coherence,
         the_slope_bins,
         the_roughness_bins,
         the_power_bins,
+        the_coherence_bins,
         method=args.method
     )
     print(binned_table)
@@ -404,7 +437,8 @@ def main():
         binned_table,
         the_slope_bins,
         the_roughness_bins,
-        the_power_bins
+        the_power_bins,
+        the_coherence_bins
     )
     print(binned_table_filled)
 
@@ -412,12 +446,14 @@ def main():
     slope_values = [0.15, 0.4]  
     roughness_values = [0.25, 0.3]  
     power_values = [-1, 6]  
+    coherence_values = [0.2, 0.8]
 
     # Extract the corresponding value from the binned_table_filled for test values
     values = get_binned_values(
-        slope_values, roughness_values, power_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins,
+        slope_values, roughness_values, power_values, coherence_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins,
+        the_coherence_bins,
     )
-    print(f"Uncertainty for slope {slope_values} and roughness {roughness_values} and power {power_values}: {values} m")
+    print(f"Uncertainty for slope {slope_values} and roughness {roughness_values} and power {power_values} and coherence {coherence_values}: {values} m")
 
     # Extract the corresponding value from the binned_table_filled for entire dataset
     print(f"Getting slope values from {this_slope.name}......")
@@ -428,11 +464,14 @@ def main():
     )
     print(f"Getting power values from [X] ...")
     # NOTE: need to decide upon input data for this. Needs to be the power value for the lat/lon of any given elevation value.
+    print(f"Getting coherence values from [X] ...")
+    # NOTE: need to decide upon input data for this. Needs to be the coherence value for the lat/lon of any given elevation value.
+    # NOTE: ONLY NEED THE UNCERTAINTY VALUES FOR JOINED ELEVATION VALUES FOR THE UNCERTAINTY ASSESSMENT
 
     print("Getting uncertainty values from table...")
     # Extract the corresponding value from the binned_table
     # values = get_binned_values(
-    #     slope_values, roughness_values, power_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins
+    #     slope_values, roughness_values, power_values, coherence_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins, the_coherence_bins
     #     )
     
     # save the final uncertainties to a pickle table?
