@@ -129,7 +129,7 @@ def calculate_binned_metric(
     # use upper estimate of standard deviation as metric
     elif method == 'std_ue':
         def std_ue(x):
-            std_ue = np.std(x) * np.sqrt((len(x)-1)/chi2.ppf(0.975, x))  # THIS IS NOT YET CORRECT - NEEDS FIXING
+            std_ue = np.std(x) * np.sqrt((len(x)-1)/chi2.ppf(0.975, len(x)-1)) 
             return std_ue
 
         binned_metric = (
@@ -147,7 +147,7 @@ def calculate_binned_metric(
     return binned_metric_pivot
 
 
-def calc_2d_uncertainty_table(
+def calc_uncertainty_table(
     delta_elevation: np.ndarray,
     slope: np.ndarray,
     roughness: np.ndarray,
@@ -264,6 +264,9 @@ def fit_linear_model(
 
     Returns:
         np.ndarray: The pivot table with missing values filled using a linear model fit.
+    
+    NOTE: this is currently replacing existing values to fit model. Should this just be 
+    filling empty spaces, rather than replacing existing lookup table values?
 
     """
     slope_bins = slope_bins[:-1]
@@ -382,8 +385,9 @@ def main():
     print('Fetching power data')
     power = dh_data.get("pow")
     
+    # calculate uncertainty lookup table
     print("calculating uncertainty table... ")
-    binned_table = calc_2d_uncertainty_table(
+    binned_table = calc_uncertainty_table(
         dh,
         slope,
         roughness,
@@ -395,6 +399,7 @@ def main():
     )
     print(binned_table)
 
+    # fill the nans using linear interpolation
     binned_table_filled = fit_linear_model(
         binned_table,
         the_slope_bins,
@@ -426,12 +431,9 @@ def main():
 
     print("Getting uncertainty values from table...")
     # Extract the corresponding value from the binned_table
-    the_slope_bins = np.arange(0, 2.1, 0.1)
-    the_roughness_bins = np.arange(0, 2.1, 0.1)
-    the_power_bins = np.arange(0, 10, 1)
-    values = get_binned_values(
-        slope_values, roughness_values, power_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins
-        )
+    # values = get_binned_values(
+    #     slope_values, roughness_values, power_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins
+    #     )
     
     # save the final uncertainties to a pickle table?
     # insert code to do that here
