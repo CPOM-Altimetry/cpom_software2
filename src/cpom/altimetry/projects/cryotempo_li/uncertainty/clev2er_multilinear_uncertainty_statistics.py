@@ -36,10 +36,12 @@ Author: Karla Boxall
 # ---------------------------------------------------------------------------------------------------------------------
 import argparse
 import sys
+import itertools
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+import matplotlib.pyplot as plt
 
 from cpom.roughness.roughness import Roughness
 from cpom.slopes.slopes import Slopes
@@ -48,7 +50,7 @@ from cpom.slopes.slopes import Slopes
 # Functions
 # ---------------------------------------------------------------------------------------------------------------------
 
-def import_variables(dh_file, area, vars):
+def import_variables(dh_file, area):
 
     """
     Import the variable data associated with joined elevation difference values.
@@ -56,7 +58,6 @@ def import_variables(dh_file, area, vars):
     Args:
         dh_file (str): filepath to elevation difference file
         area (str): choice of ice sheet
-        vars (list): list of variables to import
 
     Returns:
         dh (np.ndarray): Array of elevation difference values
@@ -64,16 +65,9 @@ def import_variables(dh_file, area, vars):
         roughness (np.ndarray): Array of roughness values
         power (np.ndarray): Array of power values
         coherence (np.ndarray): Array of coherence values
-        distance (np.ndarray): Array of distance values
+        poca_distance (np.ndarray): Array of distance values
 
     """
-
-    slope=None
-    roughness=None
-    power=None
-    coherence=None
-    poca_distance=None
-    
     dh_data = np.load(dh_file, allow_pickle=True)
 
     # Extract variables directly from difference dataset
@@ -81,26 +75,47 @@ def import_variables(dh_file, area, vars):
     lons = dh_data.get("lons")
     dh = dh_data.get("dh")
 
-    if "power" in vars:
-        power = dh_data.get("pow")
-    if "coherence" in vars:
-        coherence = dh_data.get("coh")
-    if "poca_distance" in vars:
-        poca_distance = dh_data.get("dis_poca")
+    power = dh_data.get("pow")
+    coherence = dh_data.get("coh")
+    poca_distance = dh_data.get("dis_poca")
 
     # Extract slope and roughness values from zarr files
     if area == 'antarctica_icesheets':
-        if "slope" in vars:
-            this_slope = Slopes("rema_100m_900ws_slopes_zarr")
-            slope = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
-        if "roughness" in vars:
-            this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
-            roughness = this_roughness.interp_roughness(lats, lons, method="linear", xy_is_latlon=True)
+        this_slope = Slopes("rema_100m_900ws_slopes_zarr")
+        this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
+    
+    slope = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
+    roughness = this_roughness.interp_roughness(lats, lons, method="linear", xy_is_latlon=True)
 
     return dh, slope, roughness, power, coherence, poca_distance
 
 
-def fit_multilinear_regression(dh, stats_vars):
+def correlation(dh, independent_vars, var_names):
+
+    """
+    Calculate correlation between elevation difference and each variable. 
+
+    Args:
+        dh (np.ndarray): Array of elevation difference values
+        independent_vars (list): List of variables to assess statistically
+        var_names (list): List of variable names
+
+    Returns:
+        corr_coef_dict (Dictionary): Correlation coefficient, for each variable
+    
+    """
+    corr_coef_dict = {}
+
+    # for each variable, calculate the correlation coefficient with elevation difference
+    for i in range(len(independent_vars)):
+        corr_coef = np.corrcoef(dh, independent_vars[i])  
+        print(f'{var_names[i]}: {np.round(corr_coef[0,1],3)}')  # print true correlation coefficients
+        corr_coef_dict[var_names[i]] = abs(corr_coef[0,1])  # add absolute correlation coefficients to dict for sorting
+    
+    return corr_coef_dict
+
+
+def fit_multilinear_regression(dh, independent_vars, var_names):
 
     """
     Fit multi-linear regression to input variables. 
@@ -109,64 +124,109 @@ def fit_multilinear_regression(dh, stats_vars):
 
     Args:
         dh (np.ndarray): Array of elevation difference values
-        stats_vars (list): List of variables to assess statistically
+        independent_vars (list): List of variables to assess statistically
+        var_names (list): List of variable names
 
     Returns:
         r2: R2 value (% of dependent variable explained by independent variables)
         F_pval: F test p value (complex model performs better than simple models; if less than 0.05)
         pvals: p values for independent variables (independent variable affects dependent variable; if less than 0.05)
-
     
     """
-    
-    if len(stats_vars) == 1:
+    # organise independent and dependent variables, for a range of total independent variables
+    if len(independent_vars) == 1:
 
-        dict = {'difference_abs': abs(dh), 'var1': stats_vars[0]}
+        dict = {'difference_abs': abs(dh), 'var1': independent_vars[0]}
         df = pd.DataFrame(dict)
 
         x = df[['var1']]
         y = df['difference_abs']
     
-    elif len(stats_vars) == 2:
+    elif len(independent_vars) == 2:
 
-        dict = {'difference_abs': abs(dh), 'var1': stats_vars[0], 'var2': stats_vars[1]}
+        dict = {'difference_abs': abs(dh), 'var1': independent_vars[0], 'var2': independent_vars[1]}
         df = pd.DataFrame(dict)
 
         x = df[['var1','var2']]
         y = df['difference_abs']
     
-    elif len(stats_vars) == 3: 
+    elif len(independent_vars) == 3: 
 
-        dict = {'difference_abs': abs(dh), 'var1': stats_vars[0], 'var2': stats_vars[1], 'var3': stats_vars[2]}
+        dict = {'difference_abs': abs(dh), 'var1': independent_vars[0], 'var2': independent_vars[1], 'var3': independent_vars[2]}
         df = pd.DataFrame(dict)
 
         x = df[['var1','var2', 'var3']]
         y = df['difference_abs']
     
-    elif len(stats_vars) == 4:
+    elif len(independent_vars) == 4:
 
-        dict = {'difference_abs': abs(dh), 'var1': stats_vars[0], 'var2': stats_vars[1], 'var3': stats_vars[2], 'var4': stats_vars[3]}
+        dict = {'difference_abs': abs(dh), 'var1': independent_vars[0], 'var2': independent_vars[1], 'var3': independent_vars[2], 'var4': independent_vars[3]}
         df = pd.DataFrame(dict)
 
         x = df[['var1','var2', 'var3', 'var4']]
         y = df['difference_abs']
     
-    elif len(stats_vars) == 5:
+    elif len(independent_vars) == 5:
 
-        dict = {'difference_abs': abs(dh), 'var1': stats_vars[0], 'var2': stats_vars[1], 'var3': stats_vars[2], 'var4': stats_vars[3], 'var5': stats_vars[4]}
+        dict = {'difference_abs': abs(dh), 'var1': independent_vars[0], 'var2': independent_vars[1], 'var3': independent_vars[2], 'var4': independent_vars[3], 'var5': independent_vars[4]}
         df = pd.DataFrame(dict)
 
         x = df[['var1','var2', 'var3', 'var4', 'var5']]
         y = df['difference_abs']
 
-
+    # fit regression 
     olsmod = sm.OLS(y, x).fit()
 
+    # output statistics to assess regression
     r2 = olsmod.rsquared
     F_pval = olsmod.f_pvalue
     pvals = olsmod.pvalues
 
+    # print output
+    print(f'R2 = {np.round(r2,2)}')
+
+    if F_pval > 0.05:
+        print('WARNING: Complex model does NOT perform better than simple model')
+    
+    for i in range(len(pvals)):
+        if pvals.iloc[i] < 0.05:
+            print(f'{var_names[i]} SIGNIFICANT; p value: {np.round(pvals.iloc[i], 3)}')
+        else: 
+            print(f'{var_names[i]} NOT SIGNIFICANT; p value: {np.round(pvals.iloc[i], 3)}')
+
     return r2, F_pval, pvals
+
+
+def plot_r2(df, var_names, outdir):
+
+    """
+    Plot the R2 values for all multi-linear regressions as individual box plots
+    Plot by colour (variable) and size (number of variables)
+
+    Args:
+        df (pd.DataFrame): DataFrame of R2 values, variable combinations and variable combination lengths
+        var_names (list): List of named variables to assess statistically
+        outdir (str): Output directory for figure
+    
+    """
+    _, ax = plt.subplots()
+
+    filtered_r2_list = []
+
+    for i, var in enumerate(var_names):
+        df_filter = df[df.combinations.str.contains(var)]
+        ax.scatter([i+1]*len(df_filter['r2']), df_filter['r2'], s=df_filter['comb_length']**3, edgecolors='k', label=var_names[i])
+        filtered_r2_list.append(df_filter['r2'])
+    
+    filtered_r2_array = np.transpose(np.array(filtered_r2_list), (1, 0))
+    ax.boxplot(filtered_r2_array)
+
+    ax.set_xlabel('Variable')
+    ax.set_ylabel('R2')
+
+    ax.legend()
+
+    plt.savefig(outdir)
 
 
 # -------------------------------------------------------------------------------------------------------------
@@ -198,101 +258,92 @@ def main():
     )
 
     parser.add_argument(
-    "--vars",
-    "-v",
-    help="[optional, default=all] Variables to assess. Comma separated list of: all, slope, roughness, power, coherence, poca_distance",
-)
+        "-outdir",
+        "-o",
+        help=(
+            "path of output directory"
+        ),
+        type=str,
+    )
 
     # read arguments from the command line
     args = parser.parse_args()
 
-    if args.vars:
-        vars = args.vars.split(",")
-
-    for var in vars:
-        if var not in ["slope", "roughness", "power", "coherence", "poca_distance"]:
-            sys.exit(
-                "{} not a valid variable. Must be one of slope, roughness, power, coherence, poca_distance".format(
-                    var
-                )
-            )
-
     # import variables
-    dh, slope, roughness, power, coherence, poca_distance = import_variables(args.dh_file, args.area, args.vars)
+    dh, slope, roughness, power, coherence, poca_distance = import_variables(args.dh_file, args.area)
+    var_names_all = ['slope', 'roughness', 'power', 'coherence', 'poca_distance']
+    independent_vars_all = [slope, roughness, power, coherence, poca_distance]
 
-    stats_vars = []
-    for v in [slope, roughness, power, coherence, poca_distance]:
-        if v is not None: 
-            stats_vars.append(v)
+    # calculate correlation coefficient for each variable with elevation difference
+    correlation(dh, independent_vars_all, var_names_all)
 
-    # carry out statistics on variables
-    # r2, F_stat, F_pval, pvals = fit_multilinear_regression(dh, slope, roughness, power, coherence, poca_distance)
-    r2, F_pval, pvals = fit_multilinear_regression(dh, stats_vars)
+    # set up empty lists
+    combinations_list = []
+    combinations_length_list = []
+    r2_list = []
 
-    print(f'{np.round(r2*100,0)}% explained')
-
-    if F_pval < 0.05:
-        print('Complex model performs better than simple model')
-    else:
-        print('Complex model does NOT perform better than simple model')
+    # for each combination of variables, calculate multi-linear regression
+    # for each possible length of combination (ie 1,2,3,4 or 5)
+    for v_no in range(1, len(var_names_all)+1):
+        # find all the possible combinations of variables for a given length of combination
+        combinations = list(itertools.combinations(var_names_all, v_no))
+        # for each possible combination
+        for c in combinations:
+            independent_vars = []
+            var_names = []
+            # collect the dataset corresponding to the variable combination
+            for i in range(v_no):
+                index = var_names_all.index(c[i])
+                independent_vars.append(independent_vars_all[index])
+                var_names.append(var_names_all[index])
+            print(var_names)
+            # carry out multi-linear regression using this combination of variables
+            r2, _, _ = fit_multilinear_regression(dh, independent_vars, var_names)
+            r2_list.append(r2)
+            combinations_list.append(str(var_names))
+            combinations_length_list.append(len(var_names))
     
-    for i in range(len(pvals)):
-        if pvals.iloc[i] < 0.05:
-            print(f'{vars[i]} affects elevation difference; p value: {np.round(pvals.iloc[i], 3)}')
+    # build and sort dataframe of R2 values for all possible combinations
+    r2_dict = {'r2':r2_list, 'combinations':combinations_list, 'comb_length':combinations_length_list}
+    df = pd.DataFrame(r2_dict)
+    df = df.sort_values(by=['r2'], ascending=False)
+    print(df)
+
+    # plot scatter and boxplots for R2 values, split by variables, sized by number of dimensions
+    plot_r2(df, var_names_all, args.outdir)
+
 
 if __name__ == "__main__":
     main()
 
 
-
 # EXTRA
 
-    # for var in vars: 
-    #     if var == 'slope':
-    #         dh, slope = import_variables(args.dh_file, args.area)
-    #     if var == 'roughness':
-    #         dh, roughness = import_variables(args.dh_file, args.area)
-    #     if var == 'power':
-    #         dh, power = import_variables(args.dh_file, args.area)
-    #     if var == 'coherence':
-    #         dh, coherence = import_variables(args.dh_file, args.area)
-    #     if var == 'poca_distance':
-    #         dh, poca_distance = import_variables(args.dh_file, args.area)
+# PLOT SEPARATE SCATTER FOR EACH VARIABLE (X DIMS, Y R2)
 
+    # fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(10,6))
 
-    # def fit_multilinear_regression(dh, slope, roughness, power, coherence, distance):
+    # for var, ax in zip(var_names, axs.ravel()):
+    #     df_filter = df[df.combinations.str.contains(var)]
+    #     ax.scatter(df_filter['comb_length'], df_filter['r2'])
 
-    # """
-    # Fit multi-linear regression to input variables. 
-    # Elevation difference (dh) as dependent variable
-    # Slope, roughness, power, coherence and distance as independent variables
+    #     ax.set_xlim(0,5)
+    #     ax.set_ylim(0,1)
 
-    # Args:
-    #     dh (np.ndarray): Array of elevation difference values
-    #     slope (np.ndarray): Array of slope values
-    #     roughness (np.ndarray): Array of roughness values
-    #     power (np.ndarray): Array of power values
-    #     coherence (np.ndarray): Array of coherence values
-    #     distance (np.ndarray): Array of distance values
+    #     ax.grid()
 
-    # Returns:
-    #     r2: R2 value (% of dependent variable explained by independent variables)
-    #     F_pval: F test p value (complex model performs better than simple models; if less than 0.05)
-    #     pvals: p values for independent variables (independent variable affects dependent variable; if less than 0.05)
+# BUILD MULTI LINEAR REGRESSION MODELS FOLLOWING THE ORDER OF THE CORRELATION STRENGTH
 
-    
-    # """
+    # # iterate through multi-linear regressions (add variables in order of correlation strength)
+    # # sort dictionary by strongest correlation
+    # independent_vars = []
+    # var_names = []
 
-    # dict = {'difference_abs': abs(dh), 'slope': slope, 'roughness': roughness, 'power': power, 'coherence': coherence, 'distance': distance}
-    # df = pd.DataFrame(dict)
+    # corr_coef_dict_sorted_keys = sorted(corr_coef_dict, key=corr_coef_dict.get, reverse=True) 
 
-    # x = df[['slope', 'roughness', 'power', 'coherence', 'distance']]
-    # y = df['difference']
-
-    # olsmod = sm.OLS(y, x).fit()
-
-    # r2 = olsmod.rsquared
-    # F_pval = olsmod.f_pvalue
-    # pvals = olsmod.pvalues
-
-    # return r2, F_pval, pvals
+    # for each variable, in order, use dataset in multilinear regression, before adding next variable
+    # for i in range(len(corr_coef_dict_sorted_keys)):
+    #     index = var_names_all.index(corr_coef_dict_sorted_keys[i])
+    #     independent_vars.append(independent_vars_all[index])
+    #     var_names.append(corr_coef_dict_sorted_keys[i])
+    #     fit_multilinear_regression(dh, independent_vars, var_names)
