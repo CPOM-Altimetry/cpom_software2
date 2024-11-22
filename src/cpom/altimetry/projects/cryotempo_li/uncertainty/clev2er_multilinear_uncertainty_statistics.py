@@ -271,7 +271,9 @@ def plot_r2(df, var_names, outdir):
 
     ax.legend()
 
-    plt.savefig(outdir)
+    outpath = outdir + '/r2_box_plots.png'
+
+    plt.savefig(outpath)
 
 
 # -------------------------------------------------------------------------------------------------------------
@@ -352,6 +354,9 @@ def main():
     df = pd.DataFrame(r2_dict)
     df = df.sort_values(by=['r2'], ascending=False)
     print(df)
+
+    # save dataframe to csv
+    df.to_csv(args.outdir + '/r2.csv')
 
     # plot scatter and boxplots for R2 values, split by variables, sized by number of dimensions
     plot_r2(df, var_names_all, args.outdir)
