@@ -37,6 +37,7 @@ Author: Karla Boxall
 import argparse
 import sys
 import itertools
+import glob
 
 import numpy as np
 import pandas as pd
@@ -50,44 +51,88 @@ from cpom.slopes.slopes import Slopes
 # Functions
 # ---------------------------------------------------------------------------------------------------------------------
 
-def import_variables(dh_file, area):
+def import_variables(indir, area):
 
     """
     Import the variable data associated with joined elevation difference values.
 
     Args:
-        dh_file (str): filepath to elevation difference file
+        indir (str): filepath to input directory with elevation difference files
         area (str): choice of ice sheet
 
     Returns:
-        dh (np.ndarray): Array of elevation difference values
-        slope (np.ndarray): Array of slope values
-        roughness (np.ndarray): Array of roughness values
-        power (np.ndarray): Array of power values
-        coherence (np.ndarray): Array of coherence values
-        poca_distance (np.ndarray): Array of distance values
+        dh_all (np.ndarray): Array of elevation difference values
+        slope_all (np.ndarray): Array of slope values
+        roughness_all (np.ndarray): Array of roughness values
+        power_all (np.ndarray): Array of power values
+        coherence_all (np.ndarray): Array of coherence values
+        poca_distance_all (np.ndarray): Array of distance values
 
     """
-    dh_data = np.load(dh_file, allow_pickle=True)
+    dh_all = []
+    lats_all = []
+    lons_all = []
+    power_all = []
+    coherence_all = []
+    poca_distance_all = []
+
+    for path in glob.glob(f'{indir}/**/*.npz', recursive=True):
+        
+        # extract data from each monthly file    
+        print("Path: ", path)
+        dh_data = np.load(path, allow_pickle=True)
+        dh = dh_data['dh']
+        lats = dh_data['lats']
+        lons = dh_data['lons']
+        power = dh_data.get("pow")
+        coherence = dh_data.get("coh")
+        poca_distance = dh_data.get("dis_poca")
+
+        # append monthly data to all data
+        dh_all.extend(dh)
+        lats_all.extend(lats)
+        lons_all.extend(lons)
+        power_all.extend(power)
+        coherence_all.extend(coherence)
+        poca_distance_all.extend(poca_distance)
+    
+    dh_all = np.asarray(dh_all)
+    power_all = np.asarray(power_all)
+    coherence_all = np.asarray(coherence_all)
+    poca_distance_all = np.asarray(poca_distance_all)
+    lats_all = np.asarray(lats_all)
+    lons_all = np.asarray(lons_all)
+
+    # dh_data = np.load(dh_file, allow_pickle=True)
 
     # Extract variables directly from difference dataset
-    lats = dh_data.get("lats")
-    lons = dh_data.get("lons")
-    dh = dh_data.get("dh")
+    # lats = dh_data.get("lats")
+    # lons = dh_data.get("lons")
+    # dh = dh_data.get("dh")
 
-    power = dh_data.get("pow")
-    coherence = dh_data.get("coh")
-    poca_distance = dh_data.get("dis_poca")
+    # power = dh_data.get("pow")
+    # coherence = dh_data.get("coh")
+    # poca_distance = dh_data.get("dis_poca")
 
     # Extract slope and roughness values from zarr files
     if area == 'antarctica_icesheets':
         this_slope = Slopes("rema_100m_900ws_slopes_zarr")
         this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
     
-    slope = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
-    roughness = this_roughness.interp_roughness(lats, lons, method="linear", xy_is_latlon=True)
+    print('interpolating slopes')
+    slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
+    print('interpolating roughness')
+    roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
 
-    return dh, slope, roughness, power, coherence, poca_distance
+    mask = ~np.isnan(slope)
+    slope = slope[mask]
+    roughness = roughness[mask]
+    power_all = power_all[mask]
+    coherence_all = coherence_all[mask]
+    poca_distance_all = poca_distance_all[mask]
+    dh_all = dh_all[mask]
+
+    return dh_all, slope, roughness, power_all, coherence_all, poca_distance_all
 
 
 def correlation(dh, independent_vars, var_names):
@@ -248,11 +293,10 @@ def main():
     )
 
     parser.add_argument(
-        "-dh_file",
+        "-dh_dir",
         "-dh",
         help=(
-            "path of elevation difference npz file (for example "
-            "/path/to/cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_antarctica_icesheets.npz)"
+            "directory of elevation difference npz file"
         ),
         type=str,
     )
@@ -270,7 +314,7 @@ def main():
     args = parser.parse_args()
 
     # import variables
-    dh, slope, roughness, power, coherence, poca_distance = import_variables(args.dh_file, args.area)
+    dh, slope, roughness, power, coherence, poca_distance = import_variables(args.dh_dir, args.area)
     var_names_all = ['slope', 'roughness', 'power', 'coherence', 'poca_distance']
     independent_vars_all = [slope, roughness, power, coherence, poca_distance]
 
