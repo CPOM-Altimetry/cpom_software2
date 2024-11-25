@@ -29,6 +29,8 @@ Author: Karla Boxall
 
 import argparse
 import sys
+import glob
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -228,7 +230,7 @@ def get_binned_values(
     power_bins: np.ndarray,
     coherence_bins: np.ndarray,
     poca_distance_bins: np.ndarray,
-) -> np.ndarray:
+) -> list:
 
     """
     Retrieve the calculated metric of elevation difference for given variable values (ie for given
@@ -248,7 +250,7 @@ def get_binned_values(
         poca_distance_bins (np.ndarray): Bins to categorise poca distance values.
 
     Returns:
-        np.ndarray: An array of median absolute elevation differences corresponding to the
+        list: An array of median absolute elevation differences corresponding to the
                     input values.
     """
     ingested_variables = []
@@ -312,13 +314,17 @@ def get_binned_values(
     # print(binned_table_df)
 
     if len(ingested_variables) == 2:
-        values = [binned_table_df.loc[ingested_variables[0][i]][ingested_variables[1][i]] for i in range(len(ingested_variables[0]))]
+        values = [binned_table_df.loc[
+            ingested_variables[0][i]][ingested_variables[1][i]] for i in range(len(ingested_variables[0]))]
     if len(ingested_variables) == 3:
-        values = [binned_table_df.loc[ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]] for i in range(len(ingested_variables[0]))]
+        values = [binned_table_df.loc[
+            ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]] for i in range(len(ingested_variables[0]))]
     if len(ingested_variables) == 4:
-        values = [binned_table_df.loc[ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]][ingested_variables[3][i]] for i in range(len(ingested_variables[0]))]
+        values = [binned_table_df.loc[
+            ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]][ingested_variables[3][i]] for i in range(len(ingested_variables[0]))]
     if len(ingested_variables) == 5:
-        values = [binned_table_df.loc[ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]][ingested_variables[3][i]][ingested_variables[4][i]] for i in range(len(ingested_variables[0]))]
+        values = [binned_table_df.loc[
+            ingested_variables[0][i]][ingested_variables[1][i]][ingested_variables[2][i]][ingested_variables[3][i]][ingested_variables[4][i]] for i in range(len(ingested_variables[0]))]
 
     # Retrieve the values using numpy indexing on the DataFrame values
     # values = [binned_table_df.loc[row_indices[i]][col1_indices[i]][col2_indices[i]][col3_indices[i]][col4_indices[i]] for i in range(len(row_indices))]
@@ -384,20 +390,26 @@ def fit_linear_model(
         var2 = var2.flatten()
     
     if len(ingested_variables)==3:
-        var1, var2, var3 = np.meshgrid(ingested_variables[0], ingested_variables[1], ingested_variables[2], indexing="ij")
+        var1, var2, var3 = np.meshgrid(
+            ingested_variables[0], ingested_variables[1], ingested_variables[2], 
+            indexing="ij")
         var1 = var1.flatten()
         var2 = var2.flatten()
         var3 = var3.flatten()
 
     if len(ingested_variables)==4:
-        var1, var2, var3, var4 = np.meshgrid(ingested_variables[0], ingested_variables[1], ingested_variables[2], ingested_variables[3], indexing="ij")
+        var1, var2, var3, var4 = np.meshgrid(
+            ingested_variables[0], ingested_variables[1], ingested_variables[2], 
+            ingested_variables[3], indexing="ij")
         var1 = var1.flatten()
         var2 = var2.flatten()
         var3 = var3.flatten()
         var4 = var4.flatten()
     
     if len(ingested_variables)==5:
-        var1, var2, var3, var4, var5 = np.meshgrid(ingested_variables[0], ingested_variables[1], ingested_variables[2], ingested_variables[3], ingested_variables[4], indexing="ij")
+        var1, var2, var3, var4, var5 = np.meshgrid(
+            ingested_variables[0], ingested_variables[1], ingested_variables[2], 
+            ingested_variables[3], ingested_variables[4], indexing="ij")
         var1 = var1.flatten()
         var2 = var2.flatten()
         var3 = var3.flatten()
@@ -513,6 +525,20 @@ def fit_linear_model(
 
     return linear_table
 
+
+def save_values_as_pickle(values: list, filename: str) -> None:
+
+    """Save the uncertainty values as a Pickle file.
+
+    Args:
+        values (list): The uncertainty values extracted from lookup table.
+        filename (str): The path to the file where the values will be saved.
+    """
+
+    with open(filename, "wb") as pkl_wb_obj:
+        pickle.dump(values, pkl_wb_obj)
+
+
 # -------------------------------------------------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------------------------------------------------
@@ -541,11 +567,10 @@ def main():
     )
 
     parser.add_argument(
-        "-dh_file",
+        "-dh_dir",
         "-dh",
         help=(
-            "path of elevation difference npz file (for example "
-            "/path/to/cs2_minus_is2_gt1lgt1rgt2lgt2rgt3lgt3r_p2p_diffs_antarctica_icesheets.npz)"
+            "path to directory of elevation difference npz files"
         ),
         type=str,
     )
@@ -555,6 +580,15 @@ def main():
         "-v",
         default="slope",
         help=("choose the co-variates: 'slope' (default) or 'roughness' or 'power' or 'coherence' or 'poca_distance'"),
+    )
+
+    parser.add_argument(
+        "-outdir",
+        "-o",
+        help=(
+            "path of output directory"
+        ),
+        type=str,
     )
 
     # read arguments from the command line
@@ -582,14 +616,14 @@ def main():
         this_slope = Slopes("rema_100m_900ws_slopes_zarr")
         this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
 
-    # Read npz file to get dh,lat,lon values
-    print(f"reading npz file {args.dh_file}...")
-    dh_data = np.load(args.dh_file, allow_pickle=True)
+    # # Read npz file to get dh,lat,lon values
+    # print(f"reading npz file {args.dh_file}...")
+    # dh_data = np.load(args.dh_file, allow_pickle=True)
 
-    # Extract lat, lon & elevation difference
-    lats = dh_data.get("lats")
-    lons = dh_data.get("lons")
-    dh = dh_data.get("dh")
+    # # Extract lat, lon & elevation difference
+    # lats = dh_data.get("lats")
+    # lons = dh_data.get("lons")
+    # dh = dh_data.get("dh")
 
     # set variables to None
     slope = None
@@ -597,28 +631,66 @@ def main():
     power = None
     coherence = None
     poca_distance = None
+
+    dh_all = []
+    lats_all = []
+    lons_all = []
+    power_all = []
+    coherence_all = []
+    poca_distance_all = []
+
+    # Read npz file to get dh,lat,lon values
+    for path in glob.glob(f'{args.dh_dir}/**/*.npz', recursive=True):
+        
+        # extract data from each monthly file    
+        print("Path: ", path)
+        dh_data = np.load(path, allow_pickle=True)
+        dh = dh_data['dh']
+        lats = dh_data['lats']
+        lons = dh_data['lons']
+
+        # append monthly data to all data
+        dh_all.extend(dh)
+        lats_all.extend(lats)
+        lons_all.extend(lons)
+
+        if 'power' in args.variables:
+            power = dh_data.get("pow")
+            power_all.extend(power)
+        if 'coherence' in args.variables:
+            coherence = dh_data.get("coh")
+            coherence_all.extend(coherence)
+        if 'poca_distance' in args.variables:
+            poca_distance = dh_data.get("dis_poca")
+            poca_distance_all.extend(poca_distance)
+    
+    dh_all = np.asarray(dh_all)
+    lats_all = np.asarray(lats_all)
+    lons_all = np.asarray(lons_all)
     
     # Extract variables
     if 'slope' in args.variables:
         print('Fetching slope data')
-        slope = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
+        slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
     if 'roughness' in args.variables:
         print('Fetching roughness data')
-        roughness = this_roughness.interp_roughness(lats, lons, method="linear", xy_is_latlon=True)
+        roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
     if 'power' in args.variables:
         print('Fetching power data')
-        power = dh_data.get("pow")
+        power_all = np.asarray(power_all)
     if 'coherence' in args.variables:
         print('Fetching coherence data')
-        coherence = dh_data.get("coh")
+        coherence_all = np.asarray(coherence_all)
     if 'poca_distance' in args.variables:
         print('Fetching poca distance data')
-        poca_distance = dh_data.get("dis_poca")
+        poca_distance_all = np.asarray(poca_distance_all)
+    
+    print()
     
     # calculate uncertainty lookup table
     print("calculating uncertainty table... ")
     binned_table = calc_uncertainty_table(
-        dh,
+        dh_all,
         slope,
         roughness,
         power,
@@ -663,38 +735,26 @@ def main():
     if 'poca_distance' in args.variables:
         poca_distance_values = [37, 82]
 
+    print("Getting uncertainty values from table...")
     # Extract the corresponding value from the binned_table_filled for test values
     values = get_binned_values(
         slope_values, roughness_values, power_values, coherence_values, poca_distance_values, binned_table_filled, 
         the_slope_bins, the_roughness_bins, the_power_bins, the_coherence_bins, the_poca_distance_bins
     )
     print(
-        f"Uncertainty for slope {slope_values} and roughness {roughness_values} and power {power_values} and coherence {coherence_values} and poca distance {poca_distance_values}: {values} m")
+        f"Uncertainty for slope {slope_values} and roughness {roughness_values} and power" +
+        f"{power_values} and coherence {coherence_values} and poca distance {poca_distance_values}: {values} m")
 
-    # Extract the corresponding value from the binned_table_filled for entire dataset
-    # print(f"Getting slope values from {this_slope.name}......")
-    # slope_values = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
-    # print(f"Getting roughness values from {this_roughness.name}...")
-    # roughness_values = this_roughness.interp_roughness(
-    #     lats, lons, method="linear", xy_is_latlon=True
-    # )
-    # print(f"Getting power values from [X] ...")
-    # NOTE: need to decide upon input data for this. Needs to be the power value for the lat/lon of any given elevation value.
-    # print(f"Getting coherence values from [X] ...")
-    # NOTE: need to decide upon input data for this. Needs to be the coherence value for the lat/lon of any given elevation value.
-    # print(f"Getting distance values from [X] ...")
-    # NOTE: need to decide upon input data for this. Needs to be the distance value for the lat/lon of any given elevation value.
-    # NOTE: ONLY NEED THE UNCERTAINTY VALUES FOR JOINED ELEVATION VALUES FOR THE UNCERTAINTY ASSESSMENT
-
-    # print("Getting uncertainty values from table...")
     # Extract the corresponding value from the binned_table
-    # values = get_binned_values(
-    #     slope_values, roughness_values, power_values, coherence_values, distance_values, binned_table_filled, the_slope_bins, the_roughness_bins, the_power_bins, the_coherence_bins, the_distance_bins
-    #     )
-    
-    # save the final uncertainties to a pickle table?
-    # insert code to do that here
+    values = get_binned_values(
+        slope, roughness, power, coherence, poca_distance, binned_table_filled, 
+        the_slope_bins, the_roughness_bins, the_power_bins, the_coherence_bins, the_poca_distance_bins
+        )
 
+    # save the final uncertainties to a pickle table
+    outpath = args.outdir + f'/{args.variables}_{args.method}_uncertainties.pickle'
+    save_values_as_pickle(values, outpath)
+    
 
 if __name__ == "__main__":
     main()
