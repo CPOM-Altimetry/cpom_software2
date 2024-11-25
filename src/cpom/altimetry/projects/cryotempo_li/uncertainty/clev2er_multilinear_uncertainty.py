@@ -313,6 +313,9 @@ def get_binned_values(
     binned_table_df = binned_table.stack(future_stack=True)
     # print(binned_table_df)
 
+    if len(ingested_variables) == 1:
+        values = [binned_table_df.loc[
+            ingested_variables[0][i]][0] for i in range(len(ingested_variables[0]))]
     if len(ingested_variables) == 2:
         values = [binned_table_df.loc[
             ingested_variables[0][i]][ingested_variables[1][i]] for i in range(len(ingested_variables[0]))]
@@ -384,6 +387,11 @@ def fit_linear_model(
     var5 = None
 
     # Reshaping data into long format for fitting
+    if len(ingested_variables)==1:
+        var1 = np.meshgrid(ingested_variables[0], indexing="ij")
+        var1 = np.asarray(var1)
+        var1 = var1.flatten()
+
     if len(ingested_variables)==2:
         var1, var2 = np.meshgrid(ingested_variables[0], ingested_variables[1], indexing="ij")
         var1 = var1.flatten()
@@ -444,6 +452,22 @@ def fit_linear_model(
     # power_clean = power[mask]
     # coherence_clean = coherence[mask]
     # poca_distance_clean = poca_distance[mask]
+
+    if len(ingested_variables)==1:
+        # Prepare the features matrix
+        x_matrix = np.vstack([var1_clean]).T
+        # Perform linear regression
+        reg = LinearRegression()
+        reg.fit(x_matrix, z_clean)
+        # Coefficients of the model
+        a = reg.coef_
+        b = reg.intercept_
+        # Fit function
+        def linear_fit(var1):
+            return a * var1 + b
+        # Apply the fit to the original grid
+        linear_table = pd.DataFrame(
+        linear_fit(var1).reshape(binned_table.shape), index=binned_table.index)
     
     if len(ingested_variables)==2:
         # Create interaction term (slope * roughness)
@@ -521,7 +545,10 @@ def fit_linear_model(
     # )
 
     # Replace negative values with values from the original table
-    linear_table = linear_table.where(linear_table >= 0, binned_table)
+    if len(ingested_variables)==1:
+        linear_table = linear_table.where(linear_table >= 0, binned_table, axis=0)
+    else:
+        linear_table = linear_table.where(linear_table >= 0, binned_table)
 
     return linear_table
 
@@ -677,13 +704,13 @@ def main():
         roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
     if 'power' in args.variables:
         print('Fetching power data')
-        power_all = np.asarray(power_all)
+        power = np.asarray(power_all)
     if 'coherence' in args.variables:
         print('Fetching coherence data')
-        coherence_all = np.asarray(coherence_all)
+        coherence = np.asarray(coherence_all)
     if 'poca_distance' in args.variables:
         print('Fetching poca distance data')
-        poca_distance_all = np.asarray(poca_distance_all)
+        poca_distance = np.asarray(poca_distance_all)
     
     print()
     
@@ -752,7 +779,7 @@ def main():
         )
 
     # save the final uncertainties to a pickle table
-    outpath = args.outdir + f'/{args.variables}_{args.method}_uncertainties.pickle'
+    outpath = args.outdir + f'/{args.variables}_{args.method}_uncertainties3.pickle'
     save_values_as_pickle(values, outpath)
     
 
