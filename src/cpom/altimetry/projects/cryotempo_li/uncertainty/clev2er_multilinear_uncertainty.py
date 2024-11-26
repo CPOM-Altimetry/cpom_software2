@@ -779,7 +779,7 @@ def main():
         )
 
     # save the final uncertainties to a pickle table
-    outpath = args.outdir + f'/{args.variables}_{args.method}_uncertainties3.pickle'
+    outpath = args.outdir + f'/{args.variables}_{args.method}_uncertainties.pickle'
     save_values_as_pickle(values, outpath)
     
 
