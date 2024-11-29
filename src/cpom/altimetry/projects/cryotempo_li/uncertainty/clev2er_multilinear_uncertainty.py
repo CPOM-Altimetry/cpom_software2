@@ -3,7 +3,10 @@ Script to generate Cryo-TEMPO uncertainty lookup table, from specified inputs.
 
 Uncertainty lookup table consists of binned difference values. Differences can be binned
 by 1-5 variables, and values for each bin can be calculated using a number of metrics 
-(median, MAD, RMSE, standard deviation upper estimate)
+(median, MAD, RMSE, standard deviation upper estimate).
+
+Mean 2D slices of lookup table are plotted. 
+Mean 2D slices of bin count and standard deviation are also plotted. 
 
 Only available for Antarctic currently.
 
@@ -17,8 +20,10 @@ Input is dh values, lat, lon from CS2-IS2 differences npz files, for example:
 cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
 
 example usage: 
-python clev2er_multilinear_uncertainty.py -area antarctica_icesheets -m median \
-    -dh_file ~/downloads/cs2_minus_is2_gt2lgt2r_p2p_diffs_antarctica_icesheets.npz
+python clev2er_multilinear_uncertainty.py -a antarctica_icesheets -m mad \
+    -dh_dir /media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/antarctica_icesheets/SIN/2020 \
+        -o /media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test \
+            -v slope,roughness,power,coherence,poca_distance
 
 Author: Karla Boxall
 
@@ -31,12 +36,15 @@ import argparse
 import sys
 import glob
 import pickle
+import itertools
 
 import numpy as np
 import pandas as pd
 import math
 from scipy.stats.distributions import chi2
 from sklearn.linear_model import LinearRegression
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from cpom.roughness.roughness import Roughness
 from cpom.slopes.slopes import Slopes
@@ -82,7 +90,8 @@ def calculate_binned_metric(
         binned_metric_pivot (pd.DataFrame): A pivot table where rows correspond to slope bins, columns to roughness 
                     and power bins, and values to the calculated elevation difference metric
                     within each bin.
-        ingested_variable_names (list): A list of the variable names ingested into script.
+        binned_count (pd.DataFrame): A dataframe containing the count within each bin
+        binned_stdev(pd.DataFrame): A dataframe containing the standard deviation within each bin
         
     """
 
@@ -168,9 +177,19 @@ def calculate_binned_metric(
         index=grouping_bins[0], columns=grouping_bins[1:], values="abs_delta_elevation"
     )
 
-    # print(binned_metric_pivot.stack(future_stack=True))
+    # count the number of datapoints in each bin
+    binned_count = (
+        data.assign(abs_delta_elevation=data["delta_elevation"].abs())
+        .groupby(grouping_bins)["abs_delta_elevation"].count().reset_index()
+    )
 
-    return binned_metric_pivot
+    # calculate the standard deviation of the datapoints within each bin
+    binned_stdev = (
+        data.assign(abs_delta_elevation=data["delta_elevation"].abs())
+        .groupby(grouping_bins)["abs_delta_elevation"].std().reset_index()
+    )
+
+    return binned_metric_pivot, binned_count, binned_stdev
 
 
 def calc_uncertainty_table(
@@ -207,16 +226,17 @@ def calc_uncertainty_table(
         method (str): Method to calculate the uncertainty ('median' 'mad' 'rmse' or 'std_ue'). Default is 'median'.
 
     Returns:
-        pd.DataFrame: A pivot table where rows correspond to slope bins, columns to additional variables,
+        binned_table (pd.DataFrame): A pivot table where rows correspond to slope bins, columns to additional variables,
                       and values to the uncertainty metric within each bin.
+        binned_count (pd.DataFrame): A dataframe containing the count within each bin
+        binned_stdev(pd.DataFrame): A dataframe containing the standard deviation within each bin
     """
-    binned_table = calculate_binned_metric(
+    binned_table, binned_count, binned_stdev = calculate_binned_metric(
         delta_elevation, slope, roughness, power, coherence, poca_distance,
         slope_bins, roughness_bins, power_bins, coherence_bins, poca_distance_bins, method,
     )
 
-    return binned_table
-
+    return binned_table, binned_count, binned_stdev
 
 def get_binned_values(
     slope_values: np.ndarray,
@@ -424,14 +444,6 @@ def fit_linear_model(
         var4 = var4.flatten()
         var5 = var5.flatten()
 
-    # slope, roughness, power, coherence, poca_distance = np.meshgrid(
-    #     slope_bins, roughness_bins, power_bins, coherence_bins, poca_distance_bins, indexing="ij")
-    # slope = slope.flatten()
-    # roughness = roughness.flatten()
-    # power = power.flatten()
-    # coherence = coherence.flatten()
-    # poca_distance = poca_distance.flatten()
-
     # Remove NaN values before fitting
     mask = ~np.isnan(z_values)
     z_clean = z_values[mask]
@@ -446,12 +458,6 @@ def fit_linear_model(
         var4_clean = var4[mask]
     if var5 is not None:
         var5_clean = var5[mask]
-
-    # slope_clean = slope[mask]
-    # roughness_clean = roughness[mask]
-    # power_clean = power[mask]
-    # coherence_clean = coherence[mask]
-    # poca_distance_clean = poca_distance[mask]
 
     if len(ingested_variables)==1:
         # Prepare the features matrix
@@ -523,26 +529,6 @@ def fit_linear_model(
             return a * var1 + b * var2 + c * var3 + d * var4 + e * var5 + f * var1 * var2 * var3 * var4 * var5 + g
         linear_table = pd.DataFrame(
         linear_fit(var1, var2, var3, var4, var5).reshape(binned_table.shape), index=binned_table.index, columns=binned_table.columns)
-    
-    # interaction_term = slope_clean * roughness_clean * power_clean * coherence_clean * poca_distance_clean
-    # x_matrix = np.vstack([slope_clean, roughness_clean, power_clean, coherence_clean, poca_distance_clean, interaction_term]).T
-
-    # Perform linear regression
-    # reg = LinearRegression()
-    # reg.fit(x_matrix, z_clean)
-
-    # Coefficients of the model
-    # a, b, c, d, e, f = reg.coef_
-    # g = reg.intercept_
-
-    # Fit function
-    # def linear_fit(slope, roughness, power, coherence, poca_distance):
-    #     return a * slope + b * roughness + c * power + d * coherence + e * poca_distance + f * slope * roughness * power * coherence * poca_distance + g
-
-    # Apply the fit to the original grid
-    # linear_table = pd.DataFrame(
-    #     linear_fit(slope, roughness, power, coherence, poca_distance).reshape(binned_table.shape), index=binned_table.index, columns=binned_table.columns
-    # )
 
     # Replace negative values with values from the original table
     if len(ingested_variables)==1:
@@ -564,6 +550,53 @@ def save_values_as_pickle(values: list, filename: str) -> None:
 
     with open(filename, "wb") as pkl_wb_obj:
         pickle.dump(values, pkl_wb_obj)
+    
+
+def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list):
+
+    """
+    Plots all combinations of mean 2D slices.
+
+    Args:
+        pivot_table (np.ndarray): Filled uncertainty lookup table as a pivot table.
+        outdir (str): The path to the file where the values will be saved.
+        plot_var (str): Variable being plotted (look_up_table, count or stdev)
+        ingested_vars (list): List of the ingested variable names
+
+    """
+    # lookup table input in pivot table format
+    if plot_var == 'look_up_table':
+        pivot_table = pd.melt(pivot_table, ignore_index=False)
+        values = 'value'
+    # count/stdev tables input as dataframes
+    else:
+        values = 'abs_delta_elevation'
+
+    # if only one variable, plot a 1D visualisation
+    if len(ingested_vars)==1:
+        data = pd.pivot_table(pivot_table, index=[f'{ingested_vars[0]}_bin'],values=values, observed=False)
+        _, ax = plt.subplots(figsize=(15, 6))
+        sns.heatmap(data, ax=ax)
+        filename = outpath + f'2dslice_{plot_var}_{ingested_vars[0]}.png'
+        plt.savefig(filename, bbox_inches='tight')
+
+    # if more than one variable
+    else:
+        # find all possible pair combinations
+        combinations = list(itertools.combinations(ingested_vars, 2))
+        for c in combinations:
+            indices = []
+            # find the indices of the combinations in input list of variables
+            for i in range(2):
+                index = ingested_vars.index(c[i])
+                indices.append(index)
+            
+            # isolate a given pair of variables from the pivot table and plot as MEAN 2D slice
+            data = pd.pivot_table(pivot_table, index=[f'{ingested_vars[indices[0]]}_bin'], columns=[f'{ingested_vars[indices[1]]}_bin'],values=values, observed=False)
+            _, ax = plt.subplots(figsize=(15, 6))
+            sns.heatmap(data, ax=ax)
+            filename = outpath + f'2dslice_{plot_var}_{ingested_vars[indices[0]]}{ingested_vars[indices[1]]}.png'
+            plt.savefig(filename, bbox_inches='tight')
 
 
 # -------------------------------------------------------------------------------------------------------------
@@ -631,26 +664,10 @@ def main():
         if variable not in ["slope", "roughness", "power", "coherence", "poca_distance"]:
             sys.exit(
                 f"{variable} not a valid varuable. Must be one of 'slope' (default) or 'roughness' or 'power' or 'coherence' or 'poca_distance")
-
-    # Define bins 
-    the_slope_bins = np.arange(0, 2.1, 0.1)  # Define slope bins in degrees (0.1 degree steps from 0 to 2 degrees)
-    the_roughness_bins = np.arange(0, 2.1, 0.1)  # Define roughness bins in meters (0.1 m steps from 0 to 2 meters)
-    the_power_bins = np.arange(0, 10, 1)  # Define power bins (1 steps from 0 to 9)
-    the_coherence_bins = np.arange(0, 1.1, 0.1)  # Define coherence bins (0.1 steps from 0 to 1)
-    the_poca_distance_bins = np.arange(0, 100, 10)  # Define distance bins (10 steps from 0 to 100)
-
+    
     if args.area == 'antarctica_icesheets':
         this_slope = Slopes("rema_100m_900ws_slopes_zarr")
         this_roughness = Roughness("rema_100m_900ws_roughness_zarr")
-
-    # # Read npz file to get dh,lat,lon values
-    # print(f"reading npz file {args.dh_file}...")
-    # dh_data = np.load(args.dh_file, allow_pickle=True)
-
-    # # Extract lat, lon & elevation difference
-    # lats = dh_data.get("lats")
-    # lons = dh_data.get("lons")
-    # dh = dh_data.get("dh")
 
     # set variables to None
     slope = None
@@ -694,29 +711,45 @@ def main():
     dh_all = np.asarray(dh_all)
     lats_all = np.asarray(lats_all)
     lons_all = np.asarray(lons_all)
+
+    # Define bins 
+    # the_slope_bins = np.arange(0, 2.1, 0.1)  # Define slope bins in degrees (0.1 degree steps from 0 to 2 degrees)
+    # the_roughness_bins = np.arange(0, 2.1, 0.1)  # Define roughness bins in meters (0.1 m steps from 0 to 2 meters)
+    # the_power_bins = np.arange(0, 10, 1)  # Define power bins (1 steps from 0 to 9)
+    # the_coherence_bins = np.arange(0, 1.1, 0.1)  # Define coherence bins (0.1 steps from 0 to 1)
+    # the_poca_distance_bins = np.arange(0, 100, 10)  # Define distance bins (10 steps from 0 to 100)
+
+    the_slope_bins = None
+    the_roughness_bins = None
+    the_power_bins = None
+    the_coherence_bins = None
+    the_poca_distance_bins = None
     
     # Extract variables
     if 'slope' in args.variables:
         print('Fetching slope data')
         slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        _, the_slope_bins = pd.qcut(slope, 10, labels=False, retbins=True)
     if 'roughness' in args.variables:
         print('Fetching roughness data')
         roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        _, the_roughness_bins = pd.qcut(roughness, 10, labels=False, retbins=True)
     if 'power' in args.variables:
         print('Fetching power data')
         power = np.asarray(power_all)
+        _, the_power_bins = pd.qcut(power, 10, labels=False, retbins=True)
     if 'coherence' in args.variables:
         print('Fetching coherence data')
         coherence = np.asarray(coherence_all)
+        _, the_coherence_bins = pd.qcut(coherence, 10, labels=False, retbins=True)
     if 'poca_distance' in args.variables:
         print('Fetching poca distance data')
         poca_distance = np.asarray(poca_distance_all)
-    
-    print()
-    
+        _, the_poca_distance_bins = pd.qcut(poca_distance, 10, labels=False, retbins=True)
+
     # calculate uncertainty lookup table
     print("calculating uncertainty table... ")
-    binned_table = calc_uncertainty_table(
+    binned_table, binned_count, binned_stdev = calc_uncertainty_table(
         dh_all,
         slope,
         roughness,
@@ -732,6 +765,10 @@ def main():
     )
     print(binned_table)
 
+    # plot the binned count as MEAN 2D slices
+    outpath = args.outdir + f'/{args.variables}_{args.method}_'
+    plot_2d_slices(binned_count, outpath, 'count', variables)
+
     # fill the nans using linear interpolation
     binned_table_filled = fit_linear_model(
         binned_table,
@@ -744,12 +781,18 @@ def main():
     )
     print(binned_table_filled)
 
+    # plot the plane fitted lookup table as 2D slices
+    outpath = args.outdir + f'/{args.variables}_{args.method}_'
+    plot_2d_slices(binned_table_filled, outpath, 'look_up_table', variables)
+
     slope_values = None
     roughness_values = None
     power_values = None
     coherence_values = None
     poca_distance_values = None
     
+    #### TEST UNCERTAINTY EXTRACTION ###
+
     # Test extraction from lookup table
     if 'slope' in args.variables:
         slope_values = [0.15, 0.4]  
@@ -772,6 +815,8 @@ def main():
         f"Uncertainty for slope {slope_values} and roughness {roughness_values} and power" +
         f"{power_values} and coherence {coherence_values} and poca distance {poca_distance_values}: {values} m")
 
+    #### EXTRACT UNCERTAINTIES ###
+
     # Extract the corresponding value from the binned_table
     values = get_binned_values(
         slope, roughness, power, coherence, poca_distance, binned_table_filled, 
@@ -785,3 +830,168 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# EXTRA CODE
+
+        # print(binned_metric_stats)
+
+        # print(binned_metric_stats.pivot(
+        # index=grouping_bins[0], columns=grouping_bins[1:], values="abs_delta_elevation"))
+
+        # print(binned_metric_stats[binned_metric_stats['power_bin'] == 0])
+        # print(binned_metric_stats[binned_metric_stats['coherence_bin'] == 0])
+        # print(binned_metric_stats[binned_metric_stats['poca_distance_bin'] == 0])
+
+        # df = binned_metric_stats[binned_metric_stats['poca_distance_bin'] == 0]
+        # data = pd.pivot_table(df, index=['power_bin'], columns=['coherence_bin'],values='abs_delta_elevation')
+        # print(data)
+        # f, ax = plt.subplots(figsize=(15, 6))
+        # sns.heatmap(data, ax=ax)
+        # plt.savefig('/media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test/test_2dslice_count.png', bbox_inches='tight')
+
+        # df = binned_metric_stats[binned_metric_stats['coherence_bin'] == 0]
+        # data = pd.pivot_table(df, index=['power_bin'], columns=['poca_distance_bin'],values='abs_delta_elevation')
+        # print(data)
+        # f, ax = plt.subplots(figsize=(15, 6))
+        # sns.heatmap(data, ax=ax)
+        # plt.savefig('/media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test/test_2dslice_count2.png', bbox_inches='tight')
+
+        # df = binned_metric_stats[binned_metric_stats['power_bin'] == 0]
+        # data = pd.pivot_table(df, index=['coherence_bin'], columns=['poca_distance_bin'],values='abs_delta_elevation')
+        # print(data)
+        # f, ax = plt.subplots(figsize=(15, 6))
+        # sns.heatmap(data, ax=ax)
+        # plt.savefig('/media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test/test_2dslice_count3.png', bbox_inches='tight')
+
+
+    # print(linear_table.loc[:][0])
+    # data = linear_table.loc[:][0] # so nearly there - just need to figure out how to select other combinations
+    # f, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # plt.savefig('/media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test/test_2dslice2.png')
+
+    # data = pd.pivot_table(binned_metric, index=['power_bin'], columns=['coherence_bin'],values='abs_delta_elevation')
+    # print(data)
+    # f, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # plt.savefig('/media/luna/boxallk/clev2er/uncertainty_assessment/uncertainty_tables/test/test_2dslice2.png')
+
+    # index (power), col1 (coherence), col2 (poca)
+    # linear_table.loc[:, (0.1,10)]  # index
+    # linear_table.loc[0, :]  # col1 (coherence) vs col2 (poca)
+    # linear_table.loc[:,0]  # index (power) vs col2 (poca)
+    # index (power) vs col2 (coherence)  THIS IS WRONG - NEED TO WORK THIS OUT
+
+    # code that works for power,coherence and poca distance
+
+    #     if plot_var == 'look_up_table':
+    #     df = pivot_table[pivot_table.index == 0]
+    #     data = pd.pivot_table(df, index=['coherence_bin'], columns=['poca_distance_bin'],values=values, observed=False)
+    #     _, ax = plt.subplots(figsize=(15, 6))
+    #     sns.heatmap(data, ax=ax)
+    #     filename = outpath + f'_2dslice1_{plot_var}.png'
+    #     plt.savefig(filename, bbox_inches='tight')
+
+    # elif plot_var == 'count' or plot_var == 'stdev':
+    #     df = pivot_table[pivot_table['power_bin'] == 0]
+    #     data = pd.pivot_table(df, index=['coherence_bin'], columns=['poca_distance_bin'],values=values, observed=False)
+    #     _, ax = plt.subplots(figsize=(15, 6))
+    #     sns.heatmap(data, ax=ax)
+    #     filename = outpath + f'_2dslice1_{plot_var}.png'
+    #     plt.savefig(filename, bbox_inches='tight')
+
+    # df = pivot_table[pivot_table['poca_distance_bin'] == 0]
+    # data = pd.pivot_table(df, index=['power_bin'], columns=['coherence_bin'],values=values, observed=False)
+    # _, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # filename = outpath + f'_2dslice2_{plot_var}.png'
+    # plt.savefig(filename, bbox_inches='tight')
+
+    # df = pivot_table[pivot_table['coherence_bin'] == 0]
+    # data = pd.pivot_table(df, index=['power_bin'], columns=['poca_distance_bin'],values=values, observed=False)
+    # _, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # filename = outpath + f'_2dslice3_{plot_var}.png'
+    # plt.savefig(filename, bbox_inches='tight')
+
+    # plot 2d slice other code
+
+        # if len(ingested_vars)==2:
+    #     data = pd.pivot_table(pivot_table, index=[f'{ingested_vars[0]}_bin'], columns=[f'{ingested_vars[1]}_bin'],values=values, observed=False)
+    #     _, ax = plt.subplots(figsize=(15, 6))
+    #     sns.heatmap(data, ax=ax)
+    #     filename = outpath + f'2dslice_{plot_var}_{ingested_vars[0]}{ingested_vars[1]}.png'
+    #     plt.savefig(filename, bbox_inches='tight')
+    
+    # if len(ingested_vars)>=3:
+    #     if plot_var == 'look_up_table':
+    #         df = pivot_table[pivot_table.index == 0]
+    #         data = pd.pivot_table(df, index=[f'{ingested_vars[1]}_bin'], columns=[f'{ingested_vars[2]}_bin'],values=values, observed=False)
+    #         _, ax = plt.subplots(figsize=(15, 6))
+    #         sns.heatmap(data, ax=ax)
+    #         filename = outpath + f'2dslice_{plot_var}_{ingested_vars[1]}{ingested_vars[2]}.png'
+    #         plt.savefig(filename, bbox_inches='tight')
+    #     else:
+    #         df = pivot_table[pivot_table[f'{ingested_vars[0]}_bin'] == 0]
+    #         data = pd.pivot_table(df, index=[f'{ingested_vars[1]}_bin'], columns=[f'{ingested_vars[2]}_bin'],values=values, observed=False)
+    #         _, ax = plt.subplots(figsize=(15, 6))
+    #         sns.heatmap(data, ax=ax)
+    #         filename = outpath + f'2dslice_{plot_var}_{ingested_vars[1]}{ingested_vars[2]}.png'
+    #         plt.savefig(filename, bbox_inches='tight')
+
+    #     df = pivot_table[pivot_table[f'{ingested_vars[2]}_bin'] == 0]
+    #     data = pd.pivot_table(df, index=[f'{ingested_vars[0]}_bin'], columns=[f'{ingested_vars[1]}_bin'],values=values, observed=False)
+    #     _, ax = plt.subplots(figsize=(15, 6))
+    #     sns.heatmap(data, ax=ax)
+    #     filename = outpath + f'2dslice_{plot_var}_{ingested_vars[0]}{ingested_vars[1]}.png'
+    #     plt.savefig(filename, bbox_inches='tight')
+
+    #     df = pivot_table[pivot_table[f'{ingested_vars[1]}_bin'] == 0]
+    #     data = pd.pivot_table(df, index=[f'{ingested_vars[0]}_bin'], columns=[f'{ingested_vars[2]}_bin'],values=values, observed=False)
+    #     _, ax = plt.subplots(figsize=(15, 6))
+    #     sns.heatmap(data, ax=ax)
+    #     filename = outpath + f'2dslice_{plot_var}_{ingested_vars[0]}{ingested_vars[2]}.png'
+    #     plt.savefig(filename, bbox_inches='tight')
+
+
+        # if plot_var == 'look_up_table':
+
+
+        # elif plot_var == 'count' or plot_var == 'stdev':
+        #     df = pivot_table[pivot_table['power_bin'] == 0]
+        #     data = pd.pivot_table(df, index=['coherence_bin'], columns=['poca_distance_bin'],values=values, observed=False)
+        #     _, ax = plt.subplots(figsize=(15, 6))
+        #     sns.heatmap(data, ax=ax)
+        #     filename = outpath + f'_2dslice1_{plot_var}.png'
+        #     plt.savefig(filename, bbox_inches='tight')
+
+    # df = pivot_table[pivot_table['poca_distance_bin'] == 0]
+    # data = pd.pivot_table(df, index=['power_bin'], columns=['coherence_bin'],values=values, observed=False)
+    # _, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # filename = outpath + f'_2dslice2_{plot_var}.png'
+    # plt.savefig(filename, bbox_inches='tight')
+
+    # df = pivot_table[pivot_table['coherence_bin'] == 0]
+    # data = pd.pivot_table(df, index=['power_bin'], columns=['poca_distance_bin'],values=values, observed=False)
+    # _, ax = plt.subplots(figsize=(15, 6))
+    # sns.heatmap(data, ax=ax)
+    # filename = outpath + f'_2dslice3_{plot_var}.png'
+    # plt.savefig(filename, bbox_inches='tight')
