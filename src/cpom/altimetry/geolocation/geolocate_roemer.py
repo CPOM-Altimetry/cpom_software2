@@ -1,5 +1,5 @@
 """
-cpom.altimetry.geolocation.gelocate_roemer.py
+cpom.altimetry.geolocation.geolocate_roemer.py
 
 # Purpose
 

@@ -859,6 +859,42 @@ class Polarplot:
             plt.show()
             plt.close()
 
+    # --------------------------------------------------------------------------------------------
+    # generate plot figure coordinates (ie png image coordinates) from input x,y in area
+    # projection coordinates. Purpose is for generating html image maps
+    def gen_plot_points_figure_coordinates(
+        self, x, y, figure_dpi, figsize=(12, 10), draw_axis_frame=True
+    ):
+        """
+        generate plot figure coordinates (ie png image coordinates) from input x,y in area
+        projection coordinates. Purpose is for generating html image maps
+
+        Args:
+            x (ndarray[float]): x coordinates in current area projection
+            y (ndarray[float]): y coordinates in current area projection
+            figure_dpi (float): dpi of figure
+            figsize (tuple, optional): figure size in inches. Defaults to (12, 10).
+            draw_axis_frame (bool, optional): Defaults to True.
+
+        Returns:
+            _type_: _description_
+        """
+        fig = plt.figure(figsize=figsize)  # width, height in inches
+        plt.gcf().set_dpi(figure_dpi)
+
+        ax, _, _ = self.setup_projection_and_extent(
+            self.thisarea.axes, draw_axis_frame=draw_axis_frame
+        )
+        fig.canvas.draw()
+        fx = []
+        fy = []
+        for xi, yi in zip(x, y):
+            p = ax.transData.transform((xi, yi))
+            fx.append(p[0])
+            fy.append(p[1])
+
+        return fx, fy
+
     def draw_stats(self, cbar, vals: np.ndarray):
         """plot stats info (min,max,mean,std,MAD,nvals) of vals
            positioned around colorbar axes
