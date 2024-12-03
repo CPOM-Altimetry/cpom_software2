@@ -33,7 +33,7 @@ $HOME/.bashrc or $HOME/.bash_profile file.
 
 - Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.
 - Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.
-- Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the *PATH*.
+- Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the *PATH*.
 - Set the shell's *ulimit -n* to allow enough file descriptors to be available for
     multi-processing.
 
@@ -43,7 +43,7 @@ adapted for your specific directory path):
 ```script
 export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
 export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
-export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}
+export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools:${PATH}
 # for multi-processing/shared mem support set ulimit
 # to make sure you have enough file descriptors available
 ulimit -n 8192
