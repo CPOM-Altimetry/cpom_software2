@@ -114,7 +114,7 @@ $HOME/.bashrc or $HOME/.bash_profile file.</p>
 <ul>
 <li>Set the <em>CPOM_SOFTWARE_DIR</em> environment variable to the root of the cpom software package.</li>
 <li>Add $CPOM_SOFTWARE_DIR/src to <em>PYTHONPATH</em>.</li>
-<li>Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the <em>PATH</em>.</li>
+<li>Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the <em>PATH</em>.</li>
 <li>Set the shell's <em>ulimit -n</em> to allow enough file descriptors to be available for
 multi-processing.</li>
 </ul>
@@ -124,7 +124,7 @@ adapted for your specific directory path):</p>
 
 <pre><code>export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
 export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
-export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}
+export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools:${PATH}
 # for multi-processing/shared mem support set ulimit
 # to make sure you have enough file descriptors available
 ulimit -n 8192
@@ -286,7 +286,7 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
 </span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>
 </span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="sd">- Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.</span>
 </span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="sd">- Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="sd">- Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the *PATH*.</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="sd">- Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the *PATH*.</span>
 </span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="sd">- Set the shell&#39;s *ulimit -n* to allow enough file descriptors to be available for</span>
 </span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="sd">    multi-processing.</span>
 </span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>
@@ -296,7 +296,7 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
 </span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">```script</span>
 </span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a><span class="sd">export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2</span>
 </span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools:${PATH}</span>
 </span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd"># for multi-processing/shared mem support set ulimit</span>
 </span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="sd"># to make sure you have enough file descriptors available</span>
 </span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a><span class="sd">ulimit -n 8192</span>
