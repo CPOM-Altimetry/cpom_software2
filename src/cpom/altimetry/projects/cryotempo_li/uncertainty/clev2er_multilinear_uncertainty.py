@@ -730,22 +730,27 @@ def main():
         print('Fetching slope data')
         slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
         _, the_slope_bins = pd.qcut(slope, 10, labels=False, retbins=True)
+        # the_slope_bins = np.linspace(min(slope), np.nanpercentile(slope, 99), 10)
     if 'roughness' in args.variables:
         print('Fetching roughness data')
         roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
         _, the_roughness_bins = pd.qcut(roughness, 10, labels=False, retbins=True)
+        # the_roughness_bins = np.linspace(min(roughness), np.nanpercentile(roughness, 99), 10)
     if 'power' in args.variables:
         print('Fetching power data')
         power = np.asarray(power_all)
         _, the_power_bins = pd.qcut(power, 10, labels=False, retbins=True)
+        # the_power_bins = np.linspace(min(power), np.nanpercentile(power, 99), 10)
     if 'coherence' in args.variables:
         print('Fetching coherence data')
         coherence = np.asarray(coherence_all)
         _, the_coherence_bins = pd.qcut(coherence, 10, labels=False, retbins=True)
+        # the_coherence_bins = np.linspace(min(coherence), np.nanpercentile(coherence, 99), 10)
     if 'poca_distance' in args.variables:
         print('Fetching poca distance data')
         poca_distance = np.asarray(poca_distance_all)
         _, the_poca_distance_bins = pd.qcut(poca_distance, 10, labels=False, retbins=True)
+        # the_poca_distance_bins = np.linspace(min(poca_distance), np.nanpercentile(poca_distance, 99), 10)
 
     # calculate uncertainty lookup table
     print("calculating uncertainty table... ")
