@@ -12,7 +12,7 @@ area_definition = {
         0.17,
     ),  # for default annot. pos of area name (map_only)
     "varname_annotation_position_xy_simple": (
-        0.31,
+        0.38,
         0.96,
     ),  # normalized position of default varname annotation in map_only plot
     "mask_long_name_position_simple": (

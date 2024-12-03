@@ -859,9 +859,6 @@ class Polarplot:
             plt.show()
             plt.close()
 
-    # --------------------------------------------------------------------------------------------
-    # generate plot figure coordinates (ie png image coordinates) from input x,y in area
-    # projection coordinates. Purpose is for generating html image maps
     def gen_plot_points_figure_coordinates(
         self, x, y, figure_dpi, figsize=(12, 10), draw_axis_frame=True
     ):

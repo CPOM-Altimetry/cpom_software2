@@ -21,14 +21,14 @@ area_definition = {
     "show_polygon_mask": False,  # show mask polygon
     "polygon_mask_color": "red",  # color to draw mask polygon
     "simple_axes": [  # define plot axis position in the map only plot
-        0.05,  # left
+        0.105,  # left
         0.04,  # bottom
         0.8,  # width (axes fraction)
         0.90,  # height (axes fraction)
     ],
     "vertical_colorbar_axes_simple": [
-        0.04,  # left
-        0.05,  # bottom
+        0.09,  # left
+        0.06,  # bottom
         0.02,  # width
         0.55,  # height (fraction of axes 0-1)
     ],  # [ left, bottom, width, height (fractions of axes)]
