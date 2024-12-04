@@ -20,7 +20,7 @@ import sys
 import numpy as np
 from netCDF4 import Dataset  # pylint: disable=no-name-in-module
 
-from cpom.areas.area_plot import Polarplot
+from cpom.areas.area_plot import Annotation, Polarplot
 
 
 def main():
@@ -65,10 +65,15 @@ def main():
     # Read dhdt file
 
     with Dataset(args.dhdt_filename) as nc:
-        # date = str(nc.data_start_time)
-        # month = int(date[5:7])
-        # year = int(date[0:4])
-        # title = "Elevation change gridded 5-year mean"
+        start_date = str(nc.data_start_time)
+        start_month = int(start_date[5:7])
+        start_year = int(start_date[0:4])
+        end_date = str(nc.data_end_time)
+        end_month = int(end_date[5:7])
+        end_year = int(end_date[0:4])
+
+        print(f"{start_month} {start_year}")
+        print(f"{end_month} {end_year}")
 
         lats = nc.variables["lat"][:].data
         lons = nc.variables["lon"][:].data
@@ -104,9 +109,81 @@ def main():
             "apply_hillshade_to_vals": args.hillshade,
         }
 
-        Polarplot(args.area, area_overrides).plot_points(
-            dataset, map_only=True, output_file=args.outfile
+        if "antarctic" in args.area:
+            xpos = 0.02
+            ypos = 0.85
+            ysep = 0.03
+        else:
+            xpos = 0.05
+            ypos = 0.8
+            ysep = 0.03
+
+        annot = Annotation(
+            xpos,
+            ypos,
+            "Period start of:",
+            None,
+            10,
         )
+        annotation_list = [annot]
+
+        annotation_list.append(
+            Annotation(
+                xpos,
+                ypos - ysep,
+                f"{start_month:02d} {start_year}",
+                None,
+                18,
+                fontweight="bold",
+            )
+        )
+
+        annotation_list.append(
+            Annotation(
+                xpos,
+                ypos - ysep * 2,
+                "Period end of:",
+                None,
+                10,
+            )
+        )
+
+        annotation_list.append(
+            Annotation(
+                xpos,
+                ypos - ysep * 3,
+                f"{end_month:02d} {end_year}",
+                None,
+                18,
+                fontweight="bold",
+            )
+        )
+
+        annotation_list.append(
+            Annotation(
+                0.33,
+                0.96,
+                "surface elevation change (m/yr)",
+                {
+                    "boxstyle": "round",  # Style of the box (e.g.,'round','square')
+                    "facecolor": "aliceblue",  # Background color of the box
+                    "alpha": 1.0,  # Transparency of the box (0-1)
+                    "edgecolor": "lightgrey",  # Color of the box edge
+                },
+                14,
+                fontweight="normal",
+            )
+        )
+
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            map_only=True,
+            output_file=args.outfile,
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+        )
+
+        print(f"Output: {args.outfile}")
 
 
 if __name__ == "__main__":
