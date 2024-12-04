@@ -321,7 +321,7 @@ def main():
     independent_vars_all = [slope, roughness, power, coherence, poca_distance]
 
     # calculate correlation coefficient for each variable with elevation difference
-    correlation(dh, independent_vars_all, var_names_all)
+    correlation(abs(dh), independent_vars_all, var_names_all)
 
     # set up empty lists
     combinations_list = []
