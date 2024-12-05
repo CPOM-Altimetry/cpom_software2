@@ -122,6 +122,33 @@ cd $CPOM_SOFTWARE_DIR
 poetry shell
 ```
 
+### Setup Pre-commit Hooks
+
+pre-commit hooks are static code analysis scripts which are run (and must be passed) before
+each git commit. For this project they include pylint, ruff, mypy, black, isort.
+
+To install pre-commit hooks, do the following: (note that the second line is not necessary if
+you have already loaded the virtual environment using `poetry shell`)
+
+```
+cd $CLEV2ER_BASE_DIR
+poetry shell
+pre-commit install
+pre-commit run --all-files
+```
+
+Now, whenever you make changes to your code, it is recommended to run the following
+in your current code directory.
+
+```pre-commit run --all-files```
+
+This will check that your code passes all static code
+tests prior to running git commit. Note that these same tests are also run when
+you do a new commit, ie using `git commit -a -m "commit message"`. If the tests fail
+you must correct the errors before proceeding, and then rerun the git commit.
+
+
+
 # Test Development
 
 Each module should have an associated pytest unit or integration test. Place these in
