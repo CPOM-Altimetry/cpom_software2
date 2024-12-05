@@ -34,7 +34,7 @@ $HOME/.bashrc or $HOME/.bash_profile file.
 - Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.
 - Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.
 - Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the *PATH*.
-- Set the shell's *ulimit -n* to allow enough file descriptors to be available for
+- Set the shell's *ulimit -n* to allow enough file descriptors to be available when using
     multi-processing.
 
 An example environment setup is shown below (the path in the first line should be
