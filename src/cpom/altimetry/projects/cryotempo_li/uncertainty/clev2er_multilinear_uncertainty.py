@@ -729,11 +729,13 @@ def main():
     if 'slope' in args.variables:
         print('Fetching slope data')
         slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        # the_slope_bins = np.arange(0, 2.1, 0.1)
         _, the_slope_bins = pd.qcut(slope, 10, labels=False, retbins=True)
         # the_slope_bins = np.linspace(min(slope), np.nanpercentile(slope, 99), 10)
     if 'roughness' in args.variables:
         print('Fetching roughness data')
         roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        # the_roughness_bins = np.arange(0, 2.1, 0.1)
         _, the_roughness_bins = pd.qcut(roughness, 10, labels=False, retbins=True)
         # the_roughness_bins = np.linspace(min(roughness), np.nanpercentile(roughness, 99), 10)
     if 'power' in args.variables:
