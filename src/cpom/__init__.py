@@ -131,7 +131,7 @@ To install pre-commit hooks, do the following: (note that the second line is not
 you have already loaded the virtual environment using `poetry shell`)
 
 ```
-cd $CLEV2ER_BASE_DIR
+cd $CPOM_SOFTWARE_DIR
 poetry shell
 pre-commit install
 pre-commit run --all-files
