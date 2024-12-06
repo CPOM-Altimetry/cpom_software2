@@ -33,8 +33,8 @@ $HOME/.bashrc or $HOME/.bash_profile file.
 
 - Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.
 - Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.
-- Add ${CPOM_SOFTWARE_DIR}/src/cpom/tools to the *PATH*.
-- Set the shell's *ulimit -n* to allow enough file descriptors to be available for
+- Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the *PATH*.
+- Set the shell's *ulimit -n* to allow enough file descriptors to be available when using
     multi-processing.
 
 An example environment setup is shown below (the path in the first line should be
@@ -43,7 +43,7 @@ adapted for your specific directory path):
 ```script
 export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
 export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
-export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/tools:${PATH}
+export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools:${PATH}
 # for multi-processing/shared mem support set ulimit
 # to make sure you have enough file descriptors available
 ulimit -n 8192
@@ -121,6 +121,33 @@ must first load the virtual environment using the `poetry shell` commands.
 cd $CPOM_SOFTWARE_DIR
 poetry shell
 ```
+
+### Setup Pre-commit Hooks
+
+pre-commit hooks are static code analysis scripts which are run (and must be passed) before
+each git commit. For this project they include pylint, ruff, mypy, black, isort.
+
+To install pre-commit hooks, do the following: (note that the second line is not necessary if
+you have already loaded the virtual environment using `poetry shell`)
+
+```
+cd $CPOM_SOFTWARE_DIR
+poetry shell
+pre-commit install
+pre-commit run --all-files
+```
+
+Now, whenever you make changes to your code, it is recommended to run the following
+in your current code directory.
+
+```pre-commit run --all-files```
+
+This will check that your code passes all static code
+tests prior to running git commit. Note that these same tests are also run when
+you do a new commit, ie using `git commit -a -m "commit message"`. If the tests fail
+you must correct the errors before proceeding, and then rerun the git commit.
+
+
 
 # Test Development
 
