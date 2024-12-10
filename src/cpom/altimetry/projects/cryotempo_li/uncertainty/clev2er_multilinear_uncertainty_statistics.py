@@ -317,8 +317,8 @@ def main():
 
     # import variables
     dh, slope, roughness, power, coherence, poca_distance = import_variables(args.dh_dir, args.area)
-    var_names_all = ['slope', 'roughness', 'power', 'coherence', 'poca_distance']
-    independent_vars_all = [slope, roughness, power, coherence, poca_distance]
+    var_names_all = ['slope', 'roughness', 'power', 'coherence'] #, 'poca_distance']
+    independent_vars_all = [slope, roughness, power, coherence] # poca_distance]
 
     # calculate correlation coefficient for each variable with elevation difference
     correlation(abs(dh), independent_vars_all, var_names_all)
