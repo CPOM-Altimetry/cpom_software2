@@ -2,6 +2,7 @@
 
 setup_file=./setup_env.sh
 
+export CPOM_SOFTWARE_DIR=$PWD
 
 echo "export CPOM_SOFTWARE_DIR=$PWD" > $setup_file
 if [ -z "${PYTHONPATH}" ]; then
@@ -64,4 +65,10 @@ fi
 curl -sSL https://install.python-poetry.org | python3 -
 
 poetry config virtualenvs.create true
+
+conda activate py312
+
+poetry env use python3.12
+poetry lock
+
 poetry install
