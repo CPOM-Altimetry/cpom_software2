@@ -1,101 +1,79 @@
 #!/usr/bin/env bash
+set -e  # Exit on any error
 
 setup_file=./setup_env.sh
-
 export CPOM_SOFTWARE_DIR=$PWD
 
 echo "export CPOM_SOFTWARE_DIR=$PWD" > $setup_file
+
 if [ -z "${PYTHONPATH}" ]; then
-    echo "export PYTHONPATH=$CPOM_SOFTWARE_DIR/src:$PYTHON_PATH" >> $setup_file
-else
     echo "export PYTHONPATH=$CPOM_SOFTWARE_DIR/src" >> $setup_file
+else
+    echo "export PYTHONPATH=$CPOM_SOFTWARE_DIR/src:$PYTHONPATH" >> $setup_file
 fi
 
 conda_used=0
 
-# Check if python3.12 is installed
+# Check if Python 3.12 is installed
 if command -v python3.12 &>/dev/null; then
-    echo "Python 3.12 is installed at "
+    echo "Python 3.12 is installed at:"
     command -v python3.12
     python3.12 -V
-
 else
     echo "Python 3.12 is not installed"
-    # Check if conda is installed
+
     if command -v conda &>/dev/null; then
-        echo "Conda is already installed, creating a new environment with Python 3.12..."
+        echo "Conda is installed. Creating a new environment with Python 3.12..."
         conda create -n py312 python=3.12 -y
-        echo "Python 3.12 environment 'py312' created."
-        conda activate py312
-        conda_used = 1
+        conda_used=1
     else
-        echo "Conda is not installed, installing Miniconda..."
+        echo "Conda is not installed. Installing Miniconda..."
         
-        # Download Miniconda installer for Linux or macOS (adjust URL for your platform)
         MINICONDA_INSTALLER="Miniconda3-latest-Linux-x86_64.sh"
-        
-        # For macOS, use the following line:
-        # MINICONDA_INSTALLER="Miniconda3-latest-MacOSX-x86_64.sh"
-        
-        # Download Miniconda installer
         wget https://repo.anaconda.com/miniconda/$MINICONDA_INSTALLER
-        
-        # Make the installer executable
         chmod +x $MINICONDA_INSTALLER
-        
-        # Install Miniconda (non-interactively)
         ./$MINICONDA_INSTALLER -b -p $HOME/miniconda
-        
-        # Initialize Conda
-        $HOME/miniconda/bin/conda init
-        
-        # Clean up the installer
         rm $MINICONDA_INSTALLER
-        
-        echo "Miniconda installed successfully."
 
-        # Create the environment with Python 3.12
+        # Initialize Conda
+        $HOME/miniconda/bin/conda init bash
+        exec bash  # Restart the shell
+
+        # Create the environment
         $HOME/miniconda/bin/conda create -n py312 python=3.12 -y
-        echo "Python 3.12 environment 'py312' created."
-
-        conda activate py312
-
         conda_used=1
     fi
 fi
 
+# Activate the Conda environment if used
+if [ "$conda_used" -eq 1 ]; then
+    source $HOME/miniconda/bin/activate py312
+fi
 
-# Install/reinstall Poetry using the official installer
-curl -sSL https://install.python-poetry.org | python3 -
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3.12 -
 
-# Make sure that poetry creates it's own venv and doesn't reuse conda
+# Configure Poetry
 poetry config virtualenvs.create true
-
-# If used activate the python3.12 conda env 
-test $conda_used -eq 1 && conda activate py312
-
-# Set poetry to use python 3.12
 poetry env use python3.12
 
-# sometimes necessary, if reinstalling
+# Lock and install dependencies
 poetry lock
-
-# install the packages
 poetry install
 
-export ppath=`poetry env info --path`
-
-echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH" >> $setup_file
-
+# Set up the PATH
+ppath=$(poetry env info --path)
+echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:\$PATH" >> $setup_file
 export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH
 
+# Pre-commit setup
 pre-commit install
 pre-commit autoupdate
 
+# Final message
 echo "Installation complete!"
-echo "to setup to use the CPOM Software v2:"
+echo "To use the CPOM Software v2:"
 echo "-------------------------------------"
 echo "cd $PWD"
 echo "poetry shell"
 echo ". setup_env.sh"
-
