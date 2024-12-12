@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Installation script for CPOM Software v2 on linux/macos
+
 set -e  # Exit on any error
 
 setup_file=./setup_env.sh

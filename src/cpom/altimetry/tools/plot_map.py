@@ -68,10 +68,10 @@ from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area, list_all_area_definition_names
 
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-return-statements
+# pylint: disable=too-many-lines
+
 
 # Colour constants for highlighting terminal output text
 RED = "\033[0;31m"  # pylint: disable=invalid-name
@@ -320,7 +320,6 @@ def main(args):
     """
 
     log = setup_logging()  # Initialize logging configuration
-    log.info("initializing log")
 
     # ----------------------------------------------------------------------
     # Process Command Line Arguments for tool
@@ -349,6 +348,17 @@ def main(args):
         "--area",
         "-a",
         help=("CPOM area definition name. See --list_areas for a full list"),
+        required=False,
+    )
+
+    parser.add_argument(
+        "--areadef_file",
+        "-df",
+        help=(
+            "[optional] path of CPOM area definition file. "
+            "Not necessary if using standard area definitions in cpom.areas.definitions."
+            " Can be used instead of standard area definitions"
+        ),
         required=False,
     )
 
@@ -477,7 +487,7 @@ def main(args):
 
     parser.add_argument(
         "--list_areas",
-        "-l",
+        "-ls",
         help=("list allowed area names and exit"),
         required=False,
         action="store_true",
@@ -647,7 +657,7 @@ def main(args):
         area_list = list_all_area_definition_names()
         mystr = f"{BLACK_BOLD}List of Available Area Names from CPOM Area Definitions{NC}"
         print("-" * (len(mystr) - 8))
-        print(str)
+        print(mystr)
         print("-" * (len(mystr) - 8))
         for area_name in area_list:
             print(f"{area_name}")
@@ -655,6 +665,14 @@ def main(args):
 
     if args.out_file and args.out_dir:
         sys.exit("{RED}Only one of --out_file and --out_dir allowed{NC}")
+
+    if args.areadef_file:
+        if not os.path.exists(args.areadef_file):
+            sys.exit(
+                f"{RED}area definition file does not exist: {args.areadef_file}{NC}\n"
+                "It should be an existing file called /somepath/<yourareaname>.py, "
+                "and have the same format as area definitions in src/cpom/areas/definitions"
+            )
 
     # ------------------------------------------------------------------------------------------
     #  Extract list of parameters and lat/lon names from arguments if available
@@ -865,7 +883,7 @@ def main(args):
                         datasets[i]["lons"].extend(lons)
                         datasets[i]["vals"].extend(vals)
 
-                        if not args.area and not def_area:
+                        if not args.area and not def_area and not args.areadef_file:
                             def_area = get_default_area(lats[0], filename)
                     if fnum == 0:
                         try:
@@ -878,15 +896,22 @@ def main(args):
             except IOError:
                 sys.exit(f"{RED}Can not open {filename}{NC}")
 
-    if not args.area and not def_area:
+    if not args.area and not def_area and not args.areadef_file:
         sys.exit(
             f"{RED}--area area_name{NC} missing. Use --list_areas to show available area names"
         )
 
-    if not def_area:
-        def_area = args.area
     try:
-        thisarea = Area(def_area)
+        if args.areadef_file:
+            thisarea = Area("none", area_filename=args.areadef_file)
+        elif args.area:
+            thisarea = Area(args.area)
+            def_area = args.area
+        elif def_area:
+            thisarea = Area(def_area)
+        else:
+            sys.exit("no area defined")
+
     except ImportError:
         sys.exit(
             f"{RED}Area name {BLUE}{def_area}{RED} not found in list of area definitions "
@@ -980,7 +1005,7 @@ def main(args):
                     datasets[i]["flag_values"] = unique_vals
                     datasets[i]["flag_names"] = [str(n) for n in unique_vals]
 
-    Polarplot(def_area).plot_points(
+    Polarplot(def_area, area_file=args.areadef_file).plot_points(
         *datasets,
         output_file=args.out_file,
         output_dir=args.out_dir,

@@ -119,7 +119,7 @@ class Annotation:
 class Polarplot:
     """class to create map plots of polar areas"""
 
-    def __init__(self, area: str, area_overrides: dict | None = None):
+    def __init__(self, area: str, area_overrides: dict | None = None, area_file: str | None = None):
         """class inititialization
 
         Args:
@@ -128,7 +128,7 @@ class Polarplot:
         """
         self.area = area
 
-        self.thisarea = Area(area, area_overrides)
+        self.thisarea = Area(area, area_overrides, area_filename=area_file)
 
         if self.thisarea.mask:
             self.thismask = self.thisarea.mask
