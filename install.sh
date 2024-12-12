@@ -30,7 +30,7 @@ else
         echo "Python 3.12 environment 'py312' created."
         if ! grep -q "conda.sh" <<<"$PATH"; then
             echo "Initializing Conda..."
-            $HOME/miniconda/bin/conda init bash
+            $CONDA_PREFIX/bin/conda init bash
             exec bash  # Restart the shell to ensure changes take effect
         fi
         conda activate py312
