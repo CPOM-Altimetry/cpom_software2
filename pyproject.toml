@@ -25,7 +25,7 @@ scikit-learn = "^1.5.2"
 [tool.poetry.group.dev.dependencies]
 black = "*"
 pre-commit = "*"
-pylint = "*"
+pylint = "^3.3.0"
 isort = "*"
 pytest = "^7.3.1"
 sphinx = "^7.0.1"

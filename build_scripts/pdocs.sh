@@ -6,8 +6,7 @@ current_branch=$(git rev-parse --abbrev-ref HEAD)
 # Check if the current branch is master
 if [ "$current_branch" = "main" ]; then
 echo "on $current_branch branch"
-pdoc -o docs src/cpom  --mermaid --logo "https://www.homepages.ucl.ac
-.uk/~ucasamu/cpom_logo.gif" --docformat google 
+pdoc -o docs src/cpom  --mermaid --logo "https://www.homepages.ucl.ac.uk/~ucasamu/cpom_logo.gif" --docformat google 
 retVal=$?
 if [ $retVal -ne 0 ]; then
     echo "pdoc failed"

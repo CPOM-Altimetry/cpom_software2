@@ -23,6 +23,25 @@ or with ssh:
 or with the GitHub CLI:
 `gh repo clone CPOM-Altimetry/cpom_software2`
 
+## Quick Setup
+
+This quick setup runs a script to do all the setup work.
+It is recommended in most cases (tested on macos, linux)
+
+Run the setup script:
+
+```
+cd cpom_software2
+./.setup.sh
+```
+
+This will install 
+
+- python 3.12
+- poetry
+- project packages (using poetry)
+- create a file ./setup_env.sh which you can use to setup the environment each time
+
 ## Shell Environment Setup
 
 The following shell environment variables need to be set to support package

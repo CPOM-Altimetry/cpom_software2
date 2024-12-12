@@ -11,14 +11,14 @@ else
     echo "export PYTHONPATH=$CPOM_SOFTWARE_DIR/src" >> $setup_file
 fi
 
-echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:$PATH" >> $setup_file
-
+conda_used=0
 
 # Check if python3.12 is installed
 if command -v python3.12 &>/dev/null; then
     echo "Python 3.12 is installed at "
     command -v python3.12
     python3.12 -V
+
 else
     echo "Python 3.12 is not installed"
     # Check if conda is installed
@@ -26,6 +26,8 @@ else
         echo "Conda is already installed, creating a new environment with Python 3.12..."
         conda create -n py312 python=3.12 -y
         echo "Python 3.12 environment 'py312' created."
+        conda activate py312
+        conda_used = 1
     else
         echo "Conda is not installed, installing Miniconda..."
         
@@ -57,6 +59,8 @@ else
         echo "Python 3.12 environment 'py312' created."
 
         conda activate py312
+
+        conda_used=1
     fi
 fi
 
@@ -67,8 +71,8 @@ curl -sSL https://install.python-poetry.org | python3 -
 # Make sure that poetry creates it's own venv and doesn't reuse conda
 poetry config virtualenvs.create true
 
-# Activate the python3.12 conda env temporarily
-conda activate py312
+# If used activate the python3.12 conda env 
+test $conda_used -eq 1 && conda activate py312
 
 # Set poetry to use python 3.12
 poetry env use python3.12
@@ -78,6 +82,10 @@ poetry lock
 
 # install the packages
 poetry install
+
+export ppath=`poetry env info --path`
+
+echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH" >> $setup_file
 
 echo "Installation complete!"
 echo "to setup to use the CPOM Software v2:"
