@@ -61,14 +61,28 @@ else
 fi
 
 
-# Install Poetry using the official installer
+# Install/reinstall Poetry using the official installer
 curl -sSL https://install.python-poetry.org | python3 -
 
+# Make sure that poetry creates it's own venv and doesn't reuse conda
 poetry config virtualenvs.create true
 
+# Activate the python3.12 conda env temporarily
 conda activate py312
 
+# Set poetry to use python 3.12
 poetry env use python3.12
+
+# sometimes necessary, if reinstalling
 poetry lock
 
+# install the packages
 poetry install
+
+echo "Installation complete!"
+echo "to setup to use the CPOM Software v2:"
+echo "-------------------------------------"
+echo "cd $PWD"
+echo "poetry shell"
+echo ". setup_env.sh"
+
