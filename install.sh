@@ -87,6 +87,11 @@ export ppath=`poetry env info --path`
 
 echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH" >> $setup_file
 
+export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH
+
+pre-commit install
+pre-commit autoupdate
+
 echo "Installation complete!"
 echo "to setup to use the CPOM Software v2:"
 echo "-------------------------------------"
