@@ -47,7 +47,7 @@ fi
 
 # Activate the Conda environment if used
 if [ "$conda_used" -eq 1 ]; then
-    source $HOME/miniconda/bin/activate py312
+    activate py312
 fi
 
 # Install Poetry
