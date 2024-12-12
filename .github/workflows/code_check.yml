@@ -43,6 +43,12 @@ jobs:
           key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-v3
 
       #----------------------------------------------
+      # install your root project, if required
+      #----------------------------------------------
+      - name: Reset poetry (remove this line)
+        run: poetry lock
+
+      #----------------------------------------------
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
