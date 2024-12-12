@@ -80,7 +80,7 @@ curl -sSL https://install.python-poetry.org | python3 -
 # Make sure that poetry creates it's own venv and doesn't reuse conda
 poetry config virtualenvs.create true
 
-if $conda_used ; then
+if [ $conda_used -eq 1 ] ; then
     if ! grep -q "conda.sh" <<<"$PATH"; then
         echo "Initializing Conda..."
         $HOME/miniconda/bin/conda init bash
