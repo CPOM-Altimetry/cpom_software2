@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-setup_file=/tmp/test.sh
+setup_file=./setup_env.sh
 
 
 echo "export CPOM_SOFTWARE_DIR=$PWD" > $setup_file
@@ -64,3 +64,4 @@ fi
 curl -sSL https://install.python-poetry.org | python3 -
 
 poetry config virtualenvs.create true
+poetry install
