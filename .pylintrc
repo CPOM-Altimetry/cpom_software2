@@ -4,5 +4,5 @@
 good-names=nc,i,j,x,y,z,xs,ys,m,n,p,q,ii,jj
 
 [MESSAGES CONTROL] 
-disable=trailing-whitespace, duplicate-code,too-many-arguments,too-many-locals,too-many-branches,too-many-statements
+disable=trailing-whitespace, duplicate-code,too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-branches,too-many-statements
 
