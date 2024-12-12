@@ -146,71 +146,76 @@ class Polarplot:
         transparent_background: bool = False,
         map_only: bool = False,
     ):
-        """function to plot one or more (lat,lon,val) datasets on polar maps
+        """
+        Plot one or more (lat, lon, val) datasets on polar maps.
 
+        ### Parameters
 
-        Args:
-            *data_sets (dict, optional) : data set dictionaries (you can have more than
-                    one dataset plotted by providing dataset1_dict,dataset2_dict2,...)
-                    Each dictionary contains the (lats,lons,vals) for a data set, and
-                    the optional tunable plot parameters for that data set only.
-                    Each data_set should consist of
-                    {
-                        # Required key/vals:
-                        "lats": np.array([]),
-                        "lons": np.array([]),
-                        "vals": np.array([]),
-                        #-----------------------------------------------
-                        # Optional, otherwise default values are used.
-                        #-----------------------------------------------
-                        "units": '', # units of vals
-                        "name": "unnamed", # str name of vals. Used to label plot.
-                                                 # 'unnamed' is used if not provided.
-                        "apply_area_mask_to_data": True, # bool, whether to apply the default area's
-                                                        # data Mask to this data set
-                        # --- flagging bad data for this data set, plotted in mini-map
-                        "fill_value": 9999, # fill value in vals to be ignored or None
-                        "valid_range": [min,max],# [min,max] or None. allowed vals range. flagged as
-                                                 # bad outside this range.
-                                                 # default is actual min,max of vals
-                        "minimap_val_scalefactor": 1.,# (float) scale the default
-                                                      # plot marker for bad data
-                        # -- flag type data settings --------------------------------
-                        "flag_values": [], # list of flag values. If used vals treated as flag data
-                        "flag_names": [], # list of flag names
-                        "flag_colors": [] # list of flag colors or colormap name to sample
-                        # --- color map, color bar
-                        "cmap_name": "RdYlBu_r", # colormap name to use for this dataset
-                        "cmap_over_color": "#A85754" or None
-                        "cmap_under_color": "#3E4371"  or None
-                        "cmap_extend": "both" # 'neither','min', 'max','both'
-                        "min_plot_range": None, # set the minimum range for the colorbar.
-                                           # if not set min(vals) will be used
-                        "max_plot_range": None, # set the maximum range for the colorbar
-                        # --- point size, alpha
-                        "plot_size_scale_factor": 1., # (float) scale the default plot marker
-                        "plot_alpha": 1.0, # transparency of this dataset plot (0..1)
-                    }
-            use_default_annotation (bool): if True display default dataset annotation else do not
-            annotation_list (list[Annotation]|None, optional): list of Annotation objects to display
-            logo_image (,optional): logo image to insert in plot as returned by
-                                    plt.imread('someimagefile.png')
-            logo_position (list,optional) : logo position as an axis rect list:
-                                        [left, bottom, width, height] , each are 0..1
+        - `*data_sets` (dict, optional):
+          One or more dataset dictionaries. Each dictionary must include the (lats, lons, vals)
+          for a dataset and optional tunable plot parameters. Structure:
+          ```python
+          {
+              "lats": np.array([]),             # Required: Latitude values
+              "lons": np.array([]),             # Required: Longitude values
+              "vals": np.array([]),             # Required: Data values
+              "units": '',                      # Optional: Units of `vals`
+              "name": "unnamed",                # Optional: Name of dataset
+              "apply_area_mask_to_data": True,  # Optional: Apply area mask to data
+              "fill_value": 9999,               # Optional: Fill value to ignore in `vals`
+              "valid_range": [min, max],        # Optional: Valid range for `vals`
+              "minimap_val_scalefactor": 1.0,   # Optional: Scale factor for bad data marker
+              "flag_values": [],                # Optional: List of flag values
+              "flag_names": [],                 # Optional: List of flag names
+              "flag_colors": [],                # Optional: Colors for flags or colormap
+              "cmap_name": "RdYlBu_r",          # Optional: Colormap name
+              "cmap_over_color": "#A85754",     # Optional: Over color for colormap
+              "cmap_under_color": "#3E4371",    # Optional: Under color for colormap
+              "cmap_extend": "both",            # Optional: Extend colormap
+              "min_plot_range": None,           # Optional: Min range for colorbar
+              "max_plot_range": None,           # Optional: Max range for colorbar
+              "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
+              "plot_alpha": 1.0,                # Optional: Marker transparency (0 to 1)
+          }
+          ```
 
-            output_dir (str,optional):  output directory to save plots instead of displaying them.
-                              if output_file not specified, plot saved with name of 1st data_set and
-                              area: <output_dir>/param_<data_set['name']>_<self.area>.png
-            output_file (str,optional): optionally override default output plot .png filename.
-                              if output_dir specified, saved as <output_dir>/output_file
-                              if no output_dir than output_file should contain the full path
-            dpi (int,optional): dpi to save image, default=85
-            transparent_background (bool, optional): set to have transparent background when saved
-                                 as png
-            map_only (bool): plot just the map plot (+ colorbar). No histograms or other elements.
+        - `use_default_annotation` (bool, optional, default: `True`):
+          Display default dataset annotations if `True`.
 
-        Raises:
-            ValueError: if data_set parameters (lat,lon,vals) do not have equal length
+        - `annotation_list` (list[Annotation] | None, optional):
+          List of `Annotation` objects to display.
+
+        - `logo_image` (optional):
+          Logo image to insert into the plot, as returned by `plt.imread('someimagefile.png')`.
+
+        - `logo_position` (tuple[float, float, float, float] | None, optional):
+          Logo position as an axis rectangle `[left, bottom, width, height]` (values 0–1).
+
+        - `output_dir` (str, optional, default: `""`):
+          Directory to save plots. If `output_file` is not specified, the default filename is:
+          ```
+          <output_dir>/param_<data_set['name']>_<self.area>.png
+          ```
+
+        - `output_file` (str, optional, default: `""`):
+          Override the default output filename. If `output_dir` is specified, the file is saved as:
+          ```
+          <output_dir>/output_file
+          ```
+
+        - `dpi` (int, optional, default: `85`):
+          DPI for saving the image.
+
+        - `transparent_background` (bool, optional, default: `False`):
+          Set to `True` for a transparent PNG background.
+
+        - `map_only` (bool, optional, default: `False`):
+          Plot only the map and colorbar, without histograms or other elements.
+
+        ### Raises
+
+        - `ValueError`:
+          Raised if `lat`, `lon`, and `vals` in a dataset do not have equal lengths.
         """
 
         # -----------------------------------------------------------------------------------------

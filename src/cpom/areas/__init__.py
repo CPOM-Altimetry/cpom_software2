@@ -14,6 +14,6 @@ contains code to handle the area definitions
 ## area_plot.py
 
 contains the Polarplot class. The main external function of the Polarplot class
-is  Polarplot(..).plot_area(..)
+is  Polarplot(..).plot_points(..)
 
 """
