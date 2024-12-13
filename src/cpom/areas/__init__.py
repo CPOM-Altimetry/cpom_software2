@@ -37,7 +37,8 @@ are some points that have invalid values between 5 and 10).
 
 You can scale the size of the points plotted in the main and ancillary maps using
 dataset parameters. For example to make the point size larger you might use:
- ("plot_size_scale_factor":10, and "minimap_val_scalefactor": 10,).
+ ("plot_size_scale_factor":10, and "minimap_val_scalefactor": 10,). Default point size
+ is 1.0. Note that it is not a linear scale, so some experimentation is required.
 
 ```
 import numpy as np
