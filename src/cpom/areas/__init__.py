@@ -14,15 +14,16 @@ contains code to handle the area definitions
 ## area_plot.py
 
 contains the Polarplot class. The main external function of the Polarplot class
-is:
+is **plot_points()**:
 
 `cpom.areas.area_plot.Polarplot.plot_points`
 
-## Examples of using Polarplot().plot_points()
-
 The purpose of Polarplot('some_area_name').plot_points() is to plot latitude, longitude, 
 and values on predefined area maps. plot_points() takes one or more dataset dictionaries as input, 
-containing the lat,lon,values and associated parameters.
+containing the lat,lon,values and associated parameters. For a full list of the data set options
+see `cpom.areas.area_plot.Polarplot.plot_points`.
+
+## Example 1 : plot two data sets on a basic map of Antarctica
 
 The following example plots 2 data sets on a basic map of Antarctica. 
 
@@ -59,8 +60,11 @@ Polarplot('antarctica').plot_points(dataset1,dataset2)
 
 ### Example 2: Map only (no histograms), hill shaded Antarctic map
 
-In this example we add the map_only=True option to plot_points(),
-and we change the map area definition name to antarctica_hs. (hs == hillshade).
+In this example we plot a single dataset, add the map_only=True option to plot_points() 
+to remove the default histograms,
+and we change the map area definition name to antarctica_hs. antarctica_hs is
+an area definition that applies a hill shaded DEM background and adds some
+bathymetry to the ocean.
 
 ```
 import numpy as np
