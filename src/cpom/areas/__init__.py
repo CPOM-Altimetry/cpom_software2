@@ -23,7 +23,7 @@ and values on predefined area maps. plot_points() takes one or more dataset dict
 containing the lat,lon,values and associated parameters. For a full list of the data set options
 see `cpom.areas.area_plot.Polarplot.plot_points`.
 
-## Example 1 : plot two data sets on a basic map of Antarctica
+### Example 1 : plot two data sets on a basic map of Antarctica
 
 The following example plots 2 data sets on a basic map of Antarctica. 
 
@@ -31,7 +31,13 @@ The following example plots 2 data sets on a basic map of Antarctica.
 * The second dataset is plotted using the viridis colormap 
       (the first uses the default colormap).
 
-**Note** that the histograms only apply to the first data set plotted.
+**Note** that the ancillary plots (histograms, etc) only apply to the first data set plotted.
+The top right map shows the locations of the invalid points (since we set a valid_range there
+are some points that have invalid values between 5 and 10).
+
+You can scale the size of the points plotted in the main and ancillary maps using
+dataset parameters. For example to make the point size larger you might use:
+ ("plot_size_scale_factor":10, and "minimap_val_scalefactor": 10,).
 
 ```
 import numpy as np
