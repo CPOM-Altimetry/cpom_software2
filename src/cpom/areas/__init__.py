@@ -51,6 +51,6 @@ Polarplot('antarctica').plot_points(dataset1,dataset2)
 
 ```
 
-`![](/cpom_software2/images/plot_points_example1.jpeg "")`
+`![](/cpom_software2/images/plot_points_example1.jpg "")`
 
 """
