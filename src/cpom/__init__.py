@@ -23,94 +23,25 @@ or with ssh:
 or with the GitHub CLI:
 `gh repo clone CPOM-Altimetry/cpom_software2`
 
-## Shell Environment Setup
+## Quick Setup
 
-The following shell environment variables need to be set to support package
-operations.
+This quick setup runs a script to do all the setup work.
+It is recommended in most cases (tested on macos, linux)
 
-In a bash shell this might be done by adding export lines to your 
-$HOME/.bashrc or $HOME/.bash_profile file.
-
-- Set the *CPOM_SOFTWARE_DIR* environment variable to the root of the cpom software package.
-- Add $CPOM_SOFTWARE_DIR/src to *PYTHONPATH*.
-- Add ${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools to the *PATH*.
-- Set the shell's *ulimit -n* to allow enough file descriptors to be available when using
-    multi-processing.
-
-An example environment setup is shown below (the path in the first line should be
-adapted for your specific directory path):
-
-```script
-export CPOM_SOFTWARE_DIR=/Users/someuser/software/cpom_software2
-export PYTHONPATH=$PYTHONPATH:$CPOM_SOFTWARE_DIR/src
-export PATH=${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/tools:${PATH}
-# for multi-processing/shared mem support set ulimit
-# to make sure you have enough file descriptors available
-ulimit -n 8192
-```
-
-## Python Requirement
-
-python v3.11 must be installed or available before proceeding.
-A recommended minimal method of installation of python 3.11 is using Miniconda.
-
-To install Python 3.11 using Miniconda, select the appropriate link for your operating system from:
-
-https://docs.anaconda.com/free/miniconda/miniconda-other-installer-links/
-
-For example, for **Linux** (select different installer for other operating systems),
-download the installer and install a minimal python 3.11 installation using:
-
-```script
-wget https://repo.anaconda.com/miniconda/Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-chmod +x Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-./Miniconda3-py311_24.1.2-0-Linux-x86_64.sh
-
-Do you wish the installer to initialize Miniconda3
-by running conda init? [yes|no] yes
-```
-You may need to start a new shell to refresh your environment before
-checking that python 3.11 is in your path.
-
-Check that python v3.11 is now available, by typing:
+Run the install script:
 
 ```
-python -V
+cd cpom_software2
+./install.sh
 ```
 
-## Virtual Environment and Package Requirements
+This will install 
 
-This project uses *poetry* (a dependency manager, see: https://python-poetry.org/) to manage
-package dependencies and virtual envs.
+- python 3.12
+- poetry
+- project packages (using poetry)
+- create a file ./setup_env.sh which is used to setup the correct environment variables
 
-First, you need to install *poetry* on your system using instructions from
-https://python-poetry.org/docs/#installation. Normally this just requires running:
-
-`curl -sSL https://install.python-poetry.org | python3 -`
-
-You should also then ensure that poetry is in your path, such that the command
-
-`poetry --version`
-
-returns the poetry version number. You may need to modify your
-PATH variable in order to achieve this.
-
-To make sure poetry is setup to use Python 3.11 virtual env when in the CLEV2ER base directory
-
-```
-cd $CPOM_SOFTWARE_DIR
-poetry env use $(which python3.11)
-```
-
-### Install Required Python packages using Poetry
-
-Run the following command to install python dependencies for this project
-(for info, it uses settings in pyproject.toml to know what to install)
-
-```
-cd $CPOM_SOFTWARE_DIR
-poetry install
-```
 
 ### Load the Virtual Environment
 
@@ -120,33 +51,8 @@ must first load the virtual environment using the `poetry shell` commands.
 ```
 cd $CPOM_SOFTWARE_DIR
 poetry shell
+. setup_env.sh
 ```
-
-### Setup Pre-commit Hooks
-
-pre-commit hooks are static code analysis scripts which are run (and must be passed) before
-each git commit. For this project they include pylint, ruff, mypy, black, isort.
-
-To install pre-commit hooks, do the following: (note that the second line is not necessary if
-you have already loaded the virtual environment using `poetry shell`)
-
-```
-cd $CPOM_SOFTWARE_DIR
-poetry shell
-pre-commit install
-pre-commit run --all-files
-```
-
-Now, whenever you make changes to your code, it is recommended to run the following
-in your current code directory.
-
-```pre-commit run --all-files```
-
-This will check that your code passes all static code
-tests prior to running git commit. Note that these same tests are also run when
-you do a new commit, ie using `git commit -a -m "commit message"`. If the tests fail
-you must correct the errors before proceeding, and then rerun the git commit.
-
 
 
 # Test Development

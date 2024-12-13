@@ -6,7 +6,7 @@ authors = ["Alan Muir <a.muir@ucl.ac.uk>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 numpy = "^1.26.4"
 scipy = "^1.14.0"
 netcdf4 = "1.6.5"
@@ -25,7 +25,7 @@ scikit-learn = "^1.5.2"
 [tool.poetry.group.dev.dependencies]
 black = "*"
 pre-commit = "*"
-pylint = "*"
+pylint = "^3.3.0"
 isort = "*"
 pytest = "^7.3.1"
 sphinx = "^7.0.1"
@@ -41,7 +41,7 @@ types-python-dateutil = "^2.9.0.20240316"
 profile = "black"
 
 [tool.mypy]
-python_version="3.11"
+python_version="3.12"
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -52,7 +52,7 @@ select = [
   #"I",   # isort : could replace actual isort, but currently causes conflicts
  # "UP",  # pyupgrade
 ]
-target-version = "py311"
+target-version = "py312"
 #fixable = ["I"]
 #fix = true
 

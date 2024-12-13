@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11'] # Define the Python versions here
+        python-version: ['3.12'] # Define the Python versions here
     steps:
       #----------------------------------------------
       #       check-out repo and set-up python
@@ -41,6 +41,12 @@ jobs:
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}-v3
+
+      #----------------------------------------------
+      # install your root project, if required
+      #----------------------------------------------
+      - name: Reset poetry (remove this line)
+        run: poetry lock
 
       #----------------------------------------------
       # install dependencies if cache does not exist
