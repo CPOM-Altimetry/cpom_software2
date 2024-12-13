@@ -57,5 +57,26 @@ Polarplot('antarctica').plot_points(dataset1,dataset2)
 
 ![my image](/cpom_software2/images/plot_points_example1.jpg "my image")
 
+### Example 2: Map only (no histograms), hill shaded Antarctic map
+
+In this example we add the map_only=True option to plot_points(),
+and we change the map area definition name to antarctica_hs. (hs == hillshade).
+
+```
+import numpy as np
+from cpom.areas.area_plot import Polarplot
+
+dataset1={
+    "lats": np.linspace(-80,-70,100),
+    "lons": np.linspace(0,5,100),
+    "vals": np.linspace(0,10,100),
+    "name": 'test_param',
+    "valid_range": [0,5],
+}
+
+Polarplot('antarctica_hs').plot_points(dataset1,map_only=True)
+```
+
+![my image](/cpom_software2/images/plot_points_example2.jpg "my image")
 
 """
