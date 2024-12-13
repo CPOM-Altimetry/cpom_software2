@@ -16,4 +16,6 @@ contains code to handle the area definitions
 contains the Polarplot class. The main external function of the Polarplot class
 is  Polarplot(..).plot_points(..)
 
+`cpom.areas.area_plot.Polarplot.plot_points`
+
 """
