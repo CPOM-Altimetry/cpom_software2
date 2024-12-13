@@ -27,9 +27,11 @@ see `cpom.areas.area_plot.Polarplot.plot_points`.
 
 The following example plots 2 data sets on a basic map of Antarctica. 
 
-    - The first dataset has a valid range set which will only plots vals within this range.
-    - The second dataset is plotted using the viridis colormap 
+* The first dataset has a valid range set which will only plots vals within this range.
+* The second dataset is plotted using the viridis colormap 
       (the first uses the default colormap).
+
+**Note** that the histograms only apply to the first data set plotted.
 
 ```
 import numpy as np
