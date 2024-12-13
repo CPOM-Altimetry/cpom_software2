@@ -45,9 +45,9 @@ import numpy as np
 from cpom.areas.area_plot import Polarplot
 
 dataset1={
-    "lats": np.linspace(-80,-70,100),
-    "lons": np.linspace(0,5,100),
-    "vals": np.linspace(0,10,100),
+    "lats": np.linspace(-80,-70,100), # example 100 latitude values between -80N and -70N
+    "lons": np.linspace(0,5,100),     # example 100 longitude values between 0 and 5 degs E.
+    "vals": np.linspace(0,10,100),    # example 100 data values between 0 and 10.
     "units": 'm',
     "name": 'test_param',
     "valid_range": [0,5],
@@ -80,9 +80,9 @@ import numpy as np
 from cpom.areas.area_plot import Polarplot
 
 dataset1={
-    "lats": np.linspace(-80,-70,100),
-    "lons": np.linspace(0,5,100),
-    "vals": np.linspace(0,10,100),
+    "lats": np.linspace(-80,-70,100), # example 100 latitude values between -80N and -70N
+    "lons": np.linspace(0,5,100),     # example 100 longitude values between 0 and 5 degs E.
+    "vals": np.linspace(0,10,100),    # example 100 data values between 0 and 10.
     "name": 'test_param',
     "valid_range": [0,5],
 }
@@ -91,5 +91,25 @@ Polarplot('antarctica_hs').plot_points(dataset1,map_only=True)
 ```
 
 ![my image](/cpom_software2/images/plot_points_example2.jpg "my image")
+
+### Example 3: Save the plot to a file /tmp/greenland.png
+
+In this case the plot of Greenland will not be displayed but will be saved to a png file.
+
+```
+import numpy as np
+from cpom.areas.area_plot import Polarplot
+
+dataset1={
+    "lats": np.linspace(80,50,100), # example 100 latitude values between -80N and -70N
+    "lons": np.linspace(300,340,100),     # example 100 longitude values between 0 and 5 degs E.
+    "vals": np.linspace(0,10,100),    # example 100 data values between 0 and 10.
+}
+
+Polarplot('greenland_hs').plot_points(dataset1,output_file='/tmp/greenland.png')
+```
+
+![my image](/cpom_software2/images/plot_points_example3.jpg "my image")
+
 
 """
