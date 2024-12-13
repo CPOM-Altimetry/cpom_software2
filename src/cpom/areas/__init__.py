@@ -24,7 +24,11 @@ The purpose of Polarplot('some_area_name').plot_points() is to plot latitude, lo
 and values on predefined area maps. plot_points() takes one or more dataset dictionaries as input, 
 containing the lat,lon,values and associated parameters.
 
-The following example plots 2 data sets on a basic map of Antarctica:
+The following example plots 2 data sets on a basic map of Antarctica. 
+
+    - The first dataset has a valid range set which will only plots vals within this range.
+    - The second dataset is plotted using the viridis colormap 
+      (the first uses the default colormap).
 
 ```
 import numpy as np
