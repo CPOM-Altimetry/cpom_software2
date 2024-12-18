@@ -1,5 +1,5 @@
 """
-Documentation for the CPOM Software Package, hosted on GitHub at
+Automated documentation for the CPOM Software Package, hosted on GitHub at
 [github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).
 
 # Installation
@@ -55,7 +55,45 @@ poetry shell
 ```
 
 
-# Test Development
+# Development
+
+## Development Process
+
+This section details the main development processes to contribute to the CPOM software.
+
+- Create a new feature branch
+
+  ```
+  git checkout -b yourinitials_featurename
+  ```
+- Create new local commits as you develop your feature
+
+  ```
+  git commit -a -m "commit description"
+  ```
+  
+  During the git commit the automated code checks (lint, mypy, ruff, etc) should run 
+  (using the pre-installed **pre-commit** tool). These must pass in order for the 
+  commit to succeed. 
+  If these checks do not run then your **pre-commit** setup (during installation) is not correct.
+  
+- push your branch to GitHub
+  ```
+  git push
+  ```
+
+- Create a **Pull Request (PR)** on GitHub for your new branch.
+  
+  This just starts a dialog on your new feature. You can continue to develop the feature with 
+  additional commits and pushes.
+
+  This will also automatically run the GitHub actions tests on your full branch. 
+  This runs the static code checks (as per pre-commit and also all the pytests in the full branch). 
+  The success or failure (including reasons) will be reported in the PR page.
+
+- Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.
+
+## Test Development
 
 Each module should have an associated pytest unit or integration test. Place these in
 a **tests/** directory inside your module directory. ie:
@@ -75,7 +113,7 @@ or
 
 `pytestmark = pytest.mark.non_core`
 
-# Documentation
+# Automatic Documentation
 
 Documentation is automatically generated to this page 
 https://cpom-altimetry.github.io/cpom_software2 

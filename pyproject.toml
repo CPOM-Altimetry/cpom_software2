@@ -20,6 +20,8 @@ imagecodecs = "^2023.3.16"
 pandas = "^2.2.3"
 seaborn = "^0.13.2"
 scikit-learn = "^1.5.2"
+spyder = "^6.0.3"
+spyder-kernels = "^3.0.2"
 
 
 [tool.poetry.group.dev.dependencies]

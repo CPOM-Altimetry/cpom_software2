@@ -45,8 +45,12 @@
     <li><a href="#installation-of-the-cpom-software-package">Installation of the CPOM Software Package</a></li>
     <li><a href="#quick-setup">Quick Setup</a></li>
   </ul></li>
-  <li><a href="#test-development">Test Development</a></li>
-  <li><a href="#documentation">Documentation</a></li>
+  <li><a href="#development">Development</a>
+  <ul>
+    <li><a href="#development-process">Development Process</a></li>
+    <li><a href="#test-development">Test Development</a></li>
+  </ul></li>
+  <li><a href="#automatic-documentation">Automatic Documentation</a></li>
 </ul>
 
 
@@ -76,7 +80,7 @@
                     <h1 class="modulename">
 cpom    </h1>
 
-                        <div class="docstring"><p>Documentation for the CPOM Software Package, hosted on GitHub at
+                        <div class="docstring"><p>Automated documentation for the CPOM Software Package, hosted on GitHub at
 <a href="https://github.com/CPOM-Altimetry/cpom_software2">github.com/CPOM-Altimetry/cpom_software2</a>.</p>
 
 <h1 id="installation">Installation</h1>
@@ -130,7 +134,42 @@ poetry shell
 . setup_env.sh
 </code></pre>
 
-<h1 id="test-development">Test Development</h1>
+<h1 id="development">Development</h1>
+
+<h2 id="development-process">Development Process</h2>
+
+<p>This section details the main development processes to contribute to the CPOM software.</p>
+
+<ul>
+<li><p>Create a new feature branch</p>
+
+<pre><code>git checkout -b yourinitials_featurename
+</code></pre></li>
+<li><p>Create new local commits as you develop your feature</p>
+
+<pre><code>git commit -a -m "commit description"
+</code></pre>
+
+<p>During the git commit the automated code checks (lint, mypy, ruff, etc) should run 
+(using the pre-installed <strong>pre-commit</strong> tool). These must pass in order for the 
+commit to succeed. 
+If these checks do not run then your <strong>pre-commit</strong> setup (during installation) is not correct.</p></li>
+<li><p>push your branch to GitHub</p>
+
+<pre><code>git push
+</code></pre></li>
+<li><p>Create a <strong>Pull Request (PR)</strong> on GitHub for your new branch.</p>
+
+<p>This just starts a dialog on your new feature. You can continue to develop the feature with 
+additional commits and pushes.</p>
+
+<p>This will also automatically run the GitHub actions tests on your full branch. 
+This runs the static code checks (as per pre-commit and also all the pytests in the full branch). 
+The success or failure (including reasons) will be reported in the PR page.</p></li>
+<li><p>Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.</p></li>
+</ul>
+
+<h2 id="test-development">Test Development</h2>
 
 <p>Each module should have an associated pytest unit or integration test. Place these in
 a <strong>tests/</strong> directory inside your module directory. ie:</p>
@@ -149,7 +188,7 @@ at the top of your test code:</p>
 
 <p><code>pytestmark = pytest.mark.non_core</code></p>
 
-<h1 id="documentation">Documentation</h1>
+<h1 id="automatic-documentation">Automatic Documentation</h1>
 
 <p>Documentation is automatically generated to this page 
 <a href="https://cpom-altimetry.github.io/cpom_software2">https://cpom-altimetry.github.io/cpom_software2</a> 
@@ -183,7 +222,7 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
                         <label class="view-source-button" for="mod-cpom-view-source"><span>View Source</span></label>
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="sd">Documentation for the CPOM Software Package, hosted on GitHub at</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="sd">Automated documentation for the CPOM Software Package, hosted on GitHub at</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">[github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a>
 </span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="sd"># Installation</span>
@@ -239,53 +278,91 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
 </span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="sd">```</span>
 </span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>
 </span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a><span class="sd"># Test Development</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a><span class="sd"># Development</span>
 </span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>
-</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a><span class="sd">Each module should have an associated pytest unit or integration test. Place these in</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a><span class="sd">a **tests/** directory inside your module directory. ie:</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>
-</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a><span class="sd">```</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a><span class="sd">mymodule.py</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a><span class="sd">tests/test_mymodule.py</span>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">```</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">If your test accesses data outside the repository then you need to exclude</span>
-</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">it from running on GitHub Actions CI. To do this just include one of the following</span>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">at the top of your test code:</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">`pytestmark = pytest.mark.requires_external_data`</span>
-</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>
-</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">or</span>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="sd">`pytestmark = pytest.mark.non_core`</span>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>
-</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd"># Documentation</span>
-</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>
-</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd">Documentation is automatically generated to this page </span>
-</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a><span class="sd">https://cpom-altimetry.github.io/cpom_software2 </span>
-</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a><span class="sd">from docstrings in the code when the **main** branch is updated on GitHub. </span>
-</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a><span class="sd">A few things to note:</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a><span class="sd">## Development Process</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>
+</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="sd">This section details the main development processes to contribute to the CPOM software.</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>
+</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a><span class="sd">- Create a new feature branch</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">  ```</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="sd">  git checkout -b yourinitials_featurename</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">  ```</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">- Create new local commits as you develop your feature</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">  ```</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">  git commit -a -m &quot;commit description&quot;</span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a><span class="sd">  ```</span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">  </span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">  During the git commit the automated code checks (lint, mypy, ruff, etc) should run </span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="sd">  (using the pre-installed **pre-commit** tool). These must pass in order for the </span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="sd">  commit to succeed. </span>
+</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd">  If these checks do not run then your **pre-commit** setup (during installation) is not correct.</span>
+</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">  </span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd">- push your branch to GitHub</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a><span class="sd">  ```</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a><span class="sd">  git push</span>
+</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a><span class="sd">  ```</span>
 </span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a>
-</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="sd">- docstrings should use Markdown syntax for basic formatting. See </span>
-</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a><span class="sd">  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).</span>
-</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="sd">- within each directory there should be a __init__.py file. The docstring in these files</span>
-</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a><span class="sd">    are displayed as the introduction page of that module or set of modules.</span>
-</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a><span class="sd">- the top level page (ie this page) is in **src/cpom/__init__.py**</span>
-</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a><span class="sd">- you can display images within docstrings by putting the images in </span>
-</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a><span class="sd">    **docs/images/**some_image.png and then in the module&#39;s docstring put</span>
-</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a><span class="sd">    `![](/cpom_software2/images/some_image.png &quot;&quot;)`. Note you should do a `git add docs/images`</span>
-</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a><span class="sd">    within your branch as well so that the image is included. See the docstring example in</span>
-</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a><span class="sd">    `cpom.altimetry.tools.plot_map`</span>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="sd">- you can create diagrams using **mermaid** syntax within the docstring. </span>
-</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="sd">  See this </span>
-</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a><span class="sd">  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).</span>
-</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="sd">- **documentation is only included in the web page when the main branch is updated** so</span>
-</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="sd">  you won&#39;t see any update when you modify a separate branch. Your docstrings will only be</span>
-</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">  processed after a successful pull request to the main branch.</span>
-</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a><span class="sd">- further info on how auto-documentation works from docstrings and more advanced syntax</span>
-</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a><span class="sd">  at the **pdoc** documentation: https://pdoc.dev/docs/pdoc.html#what-is-pdoc</span>
-</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a>
-</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="sd">- Create a **Pull Request (PR)** on GitHub for your new branch.</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a><span class="sd">  </span>
+</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="sd">  This just starts a dialog on your new feature. You can continue to develop the feature with </span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a><span class="sd">  additional commits and pushes.</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>
+</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a><span class="sd">  This will also automatically run the GitHub actions tests on your full branch. </span>
+</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a><span class="sd">  This runs the static code checks (as per pre-commit and also all the pytests in the full branch). </span>
+</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a><span class="sd">  The success or failure (including reasons) will be reported in the PR page.</span>
+</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>
+</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a><span class="sd">- Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>
+</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="sd">## Test Development</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
+</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="sd">Each module should have an associated pytest unit or integration test. Place these in</span>
+</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="sd">a **tests/** directory inside your module directory. ie:</span>
+</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a>
+</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a><span class="sd">```</span>
+</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a><span class="sd">mymodule.py</span>
+</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a><span class="sd">tests/test_mymodule.py</span>
+</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a><span class="sd">```</span>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a>
+</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a><span class="sd">If your test accesses data outside the repository then you need to exclude</span>
+</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a><span class="sd">it from running on GitHub Actions CI. To do this just include one of the following</span>
+</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a><span class="sd">at the top of your test code:</span>
+</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>
+</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a><span class="sd">`pytestmark = pytest.mark.requires_external_data`</span>
+</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>
+</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a><span class="sd">or</span>
+</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a>
+</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a><span class="sd">`pytestmark = pytest.mark.non_core`</span>
+</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a>
+</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a><span class="sd"># Automatic Documentation</span>
+</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a>
+</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a><span class="sd">Documentation is automatically generated to this page </span>
+</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a><span class="sd">https://cpom-altimetry.github.io/cpom_software2 </span>
+</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a><span class="sd">from docstrings in the code when the **main** branch is updated on GitHub. </span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a><span class="sd">A few things to note:</span>
+</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a>
+</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a><span class="sd">- docstrings should use Markdown syntax for basic formatting. See </span>
+</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a><span class="sd">  [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).</span>
+</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a><span class="sd">- within each directory there should be a __init__.py file. The docstring in these files</span>
+</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a><span class="sd">    are displayed as the introduction page of that module or set of modules.</span>
+</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a><span class="sd">- the top level page (ie this page) is in **src/cpom/__init__.py**</span>
+</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a><span class="sd">- you can display images within docstrings by putting the images in </span>
+</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a><span class="sd">    **docs/images/**some_image.png and then in the module&#39;s docstring put</span>
+</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a><span class="sd">    `![](/cpom_software2/images/some_image.png &quot;&quot;)`. Note you should do a `git add docs/images`</span>
+</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a><span class="sd">    within your branch as well so that the image is included. See the docstring example in</span>
+</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a><span class="sd">    `cpom.altimetry.tools.plot_map`</span>
+</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a><span class="sd">- you can create diagrams using **mermaid** syntax within the docstring. </span>
+</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a><span class="sd">  See this </span>
+</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a><span class="sd">  [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).</span>
+</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a><span class="sd">- **documentation is only included in the web page when the main branch is updated** so</span>
+</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a><span class="sd">  you won&#39;t see any update when you modify a separate branch. Your docstrings will only be</span>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="sd">  processed after a successful pull request to the main branch.</span>
+</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">- further info on how auto-documentation works from docstrings and more advanced syntax</span>
+</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a><span class="sd">  at the **pdoc** documentation: https://pdoc.dev/docs/pdoc.html#what-is-pdoc</span>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a>
+</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span></pre></div>
 
 
