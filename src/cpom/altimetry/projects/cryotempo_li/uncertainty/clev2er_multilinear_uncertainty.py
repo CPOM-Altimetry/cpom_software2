@@ -45,6 +45,7 @@ from scipy.stats.distributions import chi2
 from sklearn.linear_model import LinearRegression
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 
 from cpom.roughness.roughness import Roughness
 from cpom.slopes.slopes import Slopes
@@ -176,6 +177,9 @@ def calculate_binned_metric(
     binned_metric_pivot = binned_metric.pivot(
         index=grouping_bins[0], columns=grouping_bins[1:], values="abs_delta_elevation"
     )
+
+    # plot raw look up table
+    # plot_2d_slices(binned_metric, output_file ,'count', ['slope','coherence'], slope_bins[:-1], coherence_bins[:-1])
 
     # count the number of datapoints in each bin
     binned_count = (
@@ -552,7 +556,7 @@ def save_values_as_pickle(values: list, filename: str) -> None:
         pickle.dump(values, pkl_wb_obj)
     
 
-def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list):
+def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list, bins_1: list, bins_2: list):
 
     """
     Plots all combinations of mean 2D slices.
@@ -562,6 +566,8 @@ def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list
         outdir (str): The path to the file where the values will be saved.
         plot_var (str): Variable being plotted (look_up_table, count or stdev)
         ingested_vars (list): List of the ingested variable names
+        bins_1 (list): List of bin markers
+        bins_2 (list): List of bin markers
 
     """
     # lookup table input in pivot table format
@@ -595,6 +601,12 @@ def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list
             data = pd.pivot_table(pivot_table, index=[f'{ingested_vars[indices[0]]}_bin'], columns=[f'{ingested_vars[indices[1]]}_bin'],values=values, observed=False)
             _, ax = plt.subplots(figsize=(15, 6))
             sns.heatmap(data, ax=ax)
+            locs, _ = plt.yticks()
+            labels = [np.round(i, 2) for i in bins_1]
+            ax.set_yticks(locs, labels)
+            locs, _ = plt.xticks()
+            labels = [np.round(i, 2) for i in bins_2]
+            ax.set_xticks(locs, labels)
             filename = outpath + f'2dslice_{plot_var}_{ingested_vars[indices[0]]}{ingested_vars[indices[1]]}.png'
             plt.savefig(filename, bbox_inches='tight')
 
@@ -774,7 +786,20 @@ def main():
 
     # plot the binned count as MEAN 2D slices
     outpath = args.outdir + f'/{args.variables}_{args.method}_'
-    plot_2d_slices(binned_count, outpath, 'count', variables)
+
+    bins = []
+    if the_slope_bins is not None:
+        bins.append(the_slope_bins)
+    if the_roughness_bins is not None:
+        bins.append(the_roughness_bins)
+    if the_power_bins is not None:
+        bins.append(the_power_bins)
+    if the_coherence_bins is not None:
+        bins.append(the_coherence_bins)
+    if the_poca_distance_bins is not None:
+        bins.append(the_poca_distance_bins)
+
+    plot_2d_slices(binned_count, outpath, 'count', variables, bins[0][:-1], bins[1][:-1])
 
     # fill the nans using linear interpolation
     binned_table_filled = fit_linear_model(
@@ -790,7 +815,7 @@ def main():
 
     # plot the plane fitted lookup table as 2D slices
     outpath = args.outdir + f'/{args.variables}_{args.method}_'
-    plot_2d_slices(binned_table_filled, outpath, 'look_up_table', variables)
+    plot_2d_slices(binned_table_filled, outpath, 'look_up_table', variables, bins[0][:-1], bins[1][:-1])
 
     slope_values = None
     roughness_values = None
