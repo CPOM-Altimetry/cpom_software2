@@ -652,6 +652,10 @@ def main(args):
     # read arguments from the command line
     args = parser.parse_args(args)
 
+    if args.step:
+        if args.step > 20:
+            sys.exit(f"command line error: --step {args.step} : value in degs must be less than 20")
+
     # Print a list of available area definitions
     if args.list_areas:
         area_list = list_all_area_definition_names()
