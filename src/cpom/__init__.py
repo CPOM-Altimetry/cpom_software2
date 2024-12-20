@@ -87,11 +87,13 @@ This section details the main development processes to contribute to the CPOM so
   This just starts a dialog on your new feature. You can continue to develop the feature with 
   additional commits and pushes.
 
-  This will also automatically run the GitHub actions tests on your full branch. 
+  This will also automatically run the **GitHub Actions** tests on your full branch. 
   This runs the static code checks (as per pre-commit and also all the pytests in the full branch). 
   The success or failure (including reasons) will be reported in the PR page.
 
 - Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.
+
+- Once the review is passed, the feature will be merged in to the main branch.
 
 ## Test Development
 
