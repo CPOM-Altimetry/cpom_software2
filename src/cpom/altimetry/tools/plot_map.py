@@ -139,6 +139,9 @@ def get_default_param(
 
     print(f"finding default params for {filename}")
 
+    # S3 Thematic
+    if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
+        return "elevation_ocog_20_ku", "m"
     # CS2 L1b SIN
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
         return "lat_20_ku", "degs"
@@ -203,6 +206,10 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     print(f"finding default lat/lon parameters for {filename}")
 
     basename = os.path.basename(filename)
+
+    # S3 Thematic
+    if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
+        return "lat_20_ku", "lon_20_ku"
 
     # CS2 L1b
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
