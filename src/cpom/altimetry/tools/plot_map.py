@@ -139,8 +139,8 @@ def get_default_param(
 
     print(f"finding default params for {filename}")
 
-    # ENVISAT FDGR4ALT
-    if "EN1_F4A_ALT_TDP_LI" in basename:
+    # E2,E1 ENVISAT FDGR4ALT Land Ice
+    if "F4A_ALT_TDP_LI" in basename:
         return "expert/ice_sheet_elevation_ice1_roemer", "m"
 
     # S3 Thematic
@@ -216,8 +216,8 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
 
     basename = os.path.basename(filename)
 
-    # ENVISAT FDGR4ALT
-    if "EN1_F4A_ALT_TDP_LI" in basename:
+    # E2,E1 ENVISAT FDGR4ALT Land Ice
+    if "F4A_ALT_TDP_LI" in basename:
         return "expert/ice_sheet_lat_poca", "expert/ice_sheet_lon_poca"
 
     # S3 Thematic
