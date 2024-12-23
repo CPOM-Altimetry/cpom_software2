@@ -139,9 +139,18 @@ def get_default_param(
 
     print(f"finding default params for {filename}")
 
+    # ENVISAT FDGR4ALT
+    if "EN1_F4A_ALT_TDP_LI" in basename:
+        return "expert/ice_sheet_elevation_ice1_roemer", "m"
+
     # S3 Thematic
     if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
-        return "elevation_ocog_20_ku", "m"
+        if "SR_2_LAN_LI" in filename:
+            return "elevation_ocog_20_ku", "m"
+        if "SR_2_LAN_SI" in filename:
+            return "freeboard_20_ku", "m"
+        return "lat_20_ku", "degs"
+
     # CS2 L1b SIN
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
         return "lat_20_ku", "degs"
@@ -206,6 +215,10 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     print(f"finding default lat/lon parameters for {filename}")
 
     basename = os.path.basename(filename)
+
+    # ENVISAT FDGR4ALT
+    if "EN1_F4A_ALT_TDP_LI" in basename:
+        return "expert/ice_sheet_lat_poca", "expert/ice_sheet_lon_poca"
 
     # S3 Thematic
     if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
@@ -874,6 +887,13 @@ def main(args):
                 with Dataset(filename) as nc:
                     for i in range(num_data_sets):
                         vals = get_variable(nc, params[i])[:].data
+                        try:
+                            fill_value = get_variable(  # pylint: disable=protected-access
+                                nc, params[i]
+                            )._FillValue
+                            vals[vals == fill_value] = np.nan
+                        except AttributeError:
+                            pass
                         lats = get_variable(nc, latnames[i])[:].data
                         lons = get_variable(nc, lonnames[i])[:].data % 360.0
                         if len(bool_mask_params) == len(params):
