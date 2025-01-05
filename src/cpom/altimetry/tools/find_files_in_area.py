@@ -2,7 +2,37 @@
 # -*- coding: utf-8 -*-
 """cpom.altimetry.tools.find_files_in_area.py
 
-tool to find files (containing lat/lon locations) that contain locations within an area's mask
+# Purpose
+
+Tool to to find files within a specified directory (and default is to search recursive sub-dirs) 
+that contain lat/lon locations within a CPOM Area's
+mask or within a radius (km) of a specified lat,lon point. Optionally plot tracks 
+in area map. 
+
+# Examples
+
+For full list of command line options: 
+
+```
+find_files_in_area.py -h
+```
+
+example of finding a list of files in /some_dir and its sub-directories that
+pass over Greenland, printing just the list of files: 
+
+```
+find_files_in_area.py -d /some_dir -a greenland -fo
+```
+
+example of finding a list of files in /some_dir and its sub-directories that
+pass over Antarctica, also plotting the first 20 found files
+on a map: 
+
+```
+find_files_in_area.py -d /some_dir -a antarctica -p
+```
+
+
 """
 
 import argparse
@@ -223,8 +253,12 @@ def main(args):
     # initiate the command line parser
     parser = argparse.ArgumentParser(
         description=(
-            "Tool to to find files (containing lat/lon locations) that contain locations "
-            "within an area's mask"
+            "Tool to to find files within a specified directory (and default is to search "
+            "recursive sub-dirs) that contain "
+            "lat/lon locations within a CPOM Area's mask or within a radius (km) "
+            "of a specified lat,lon point. Optionally plot tracks in area map."
+            "\nexample of finding a list of files in /some_dir that pass over Greenland:"
+            " find_files_in_area.py -d /some_dir -a greenland -fo"
         )
     )
 
