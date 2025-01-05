@@ -8,6 +8,8 @@ import pytest
 
 from cpom.altimetry.tools.find_files_in_area import main
 
+pytestmark = pytest.mark.requires_external_data
+
 
 # Test various command line arg combinations complete successfully to produce a plot
 # by checking that the "plot completed ok" string is output at the end.
