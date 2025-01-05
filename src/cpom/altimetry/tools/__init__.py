@@ -7,7 +7,7 @@ The following command line tools are available:
 
 Plot variables from NetCDF file(s) on a selectable cryosphere map.
 
-`cpom.altimetry.tools.plot_map.py`
+`cpom.altimetry.tools`
 
 ## find_files_in_area.py
 
