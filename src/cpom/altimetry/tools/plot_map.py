@@ -209,7 +209,7 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
         filename (str): path of NetCDF file
 
     Returns:
-        str: parameter name or '' if not found
+        (str,str) : latname, lonname or ("","") if not found
     """
 
     print(f"finding default lat/lon parameters for {filename}")
