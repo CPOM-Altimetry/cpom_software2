@@ -355,6 +355,14 @@ def main(args):
     )
 
     parser.add_argument(
+        "--plot_file",
+        "-pf",
+        help=("[optional] save plot file to this filename as a png instead of displaying"),
+        required=False,
+        default="",
+    )
+
+    parser.add_argument(
         "--radius_search",
         "-rs",
         help=(
@@ -505,6 +513,7 @@ def main(args):
         }
         Polarplot(args.area, {"show_bad_data_map": False}).plot_points(
             data_set,
+            output_file=args.plot_file,
         )
 
     if file_number_found == 0 and not args.filename_only:
