@@ -41,6 +41,7 @@ import os
 import sys
 from typing import List
 
+import matplotlib
 import numpy as np
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
@@ -396,6 +397,9 @@ def main(args):
 
     if args.latname and not args.lonname:
         sys.exit("both --lonname and --latname must be used together")
+
+    if args.plot_file:
+        matplotlib.use("Agg")  # Use a non-interactive backend
 
     # Print a list of available area definitions
     if args.list_areas:
