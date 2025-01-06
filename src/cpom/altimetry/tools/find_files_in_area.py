@@ -18,18 +18,18 @@ find_files_in_area.py -h
 ```
 
 example of finding a list of files in /some_dir and its sub-directories that
-pass over Greenland, printing just the list of files: 
+pass over the Greenland ice sheet, printing just the list of files: 
 
 ```
-find_files_in_area.py -d /some_dir -a greenland -fo
+find_files_in_area.py -d /some_dir -a greenland_is -fo
 ```
 
 example of finding a list of files in /some_dir and its sub-directories that
-pass over Antarctica, also plotting the first 20 found files
+pass over the Antarctica ice sheet, also plotting the first 20 found files
 on a map: 
 
 ```
-find_files_in_area.py -d /some_dir -a antarctica -p
+find_files_in_area.py -d /some_dir -a antarctica_is -p
 ```
 
 
