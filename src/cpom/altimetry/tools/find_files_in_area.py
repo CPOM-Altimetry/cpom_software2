@@ -82,7 +82,9 @@ def find_nc_files(
             files = glob.glob(os.path.join(directory, "*.NC"))
 
     if max_files is not None:
+        print(max_files)
         if len(files) > max_files:
+            print(max_files)
             files = files[:max_files]
 
     if include_string:
