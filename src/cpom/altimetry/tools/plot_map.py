@@ -193,6 +193,9 @@ def get_default_param(
     if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
         # CRISTAL L1b LMC
         return "data_20/ku/tracker_range_calibrated", "m"
+    if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
+        # CRISTAL L1b LR
+        return "data_20/ku/tracker_range_calibrated", "m"
 
     print(
         f"{ORANGE}Format of {basename} not recognized - "
@@ -269,7 +272,9 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
         # CRISTAL L1b LMC
         return "data_20/ku/latitude", "data_20/ku/longitude"
-
+    if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
+        # CRISTAL L1b LR
+        return "data_20/ku/latitude", "data_20/ku/longitude"
     print(
         f"{ORANGE}Format of {basename} not recognized - "
         f"so not using defaults for lat/lon parameters{NC}"
@@ -757,6 +762,11 @@ def main(args):
                 params = [def_param]
                 units = [def_units]
                 num_data_sets = len(params)
+            else:
+                sys.exit(
+                    "No default parameter available for this file type. "
+                    "Please specify using --params"
+                )
         if num_data_sets > 0:
             if len(latnames) == 0 | len(lonnames) == 0:
                 def_latname, def_lonname = get_default_latlon_names(files[0])
@@ -764,7 +774,10 @@ def main(args):
                     latnames = [def_latname] * num_data_sets
                     lonnames = [def_lonname] * num_data_sets
                 else:
-                    sys.exit("{RED}requires --latname , --lonname command line args{NC}")
+                    sys.exit(
+                        "{RED}no default lat/lon parameters available, so please specify with"
+                        " --latname , --lonname command line args{NC}"
+                    )
                 if len(latnames) != num_data_sets:
                     latnames = [latnames[0]] * num_data_sets
                     lonnames = [lonnames[0]] * num_data_sets
