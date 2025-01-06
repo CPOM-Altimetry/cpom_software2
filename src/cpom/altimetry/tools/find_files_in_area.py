@@ -82,9 +82,7 @@ def find_nc_files(
             files = glob.glob(os.path.join(directory, "*.NC"))
 
     if max_files is not None:
-        print(max_files, len(files))
         if len(files) > max_files:
-            print(max_files)
             files = files[:max_files]
 
     if include_string:
@@ -404,7 +402,7 @@ def main(args):
 
     thisarea = Area(args.area)
 
-    files = find_nc_files(args.dir, not args.not_recursive, args.max_files, args.include)
+    files = find_nc_files(args.dir, not args.not_recursive, None, args.include)
 
     file_number_found = 0
     found_file_list = []
@@ -416,6 +414,10 @@ def main(args):
         target_lat, target_lon, radius = args.radius_search
 
     for file in files:
+
+        if args.max_files:
+            if file_number_found >= args.max_files:
+                break
 
         if args.latname and args.lonname:
             lat_name = args.latname
