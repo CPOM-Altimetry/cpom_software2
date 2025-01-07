@@ -68,12 +68,14 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
   Works with any netcdf file(s) containing latitude, longitude and parameter data,
   but also has knowledge of most common altimetry formats to self discover lat,lon names. 
   Contains command line options for many of the cpom Polarplot.plot_points() class function.
-  see `cpom.altimetry.tools.plot_map`
+  See `cpom.altimetry.tools.plot_map` for all options.
 
 - **find_files_in_area.py** 
   identify files within a directory (or recursive sub-dir) containing lat,lon locations within a 
-  cpom area mask or within a radius of a specified lat,lon point. 
-  see `cpom.altimetry.tools.find_files_in_area` 
+  cpom area mask or within a radius of a specified lat,lon point. For example you could
+  use it to find CS2 L1b files passing over the Greenland ice sheet for validation
+  purposes. Optionally plots the tracks as well. For all options see:
+  `cpom.altimetry.tools.find_files_in_area` 
 
 # Development
 
