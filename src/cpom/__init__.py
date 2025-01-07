@@ -64,7 +64,11 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 
 
 - **plot_map.py**
-  generic program to plot parameters from netcdf files(s) on cryosphere maps 
+  generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.
+  Works with any netcdf file(s) containing latitude, longitude and parameter data,
+  but also has knowledge of most common altimetry formats to self discover lat,lon names. 
+  Contains command line options for many of the cpom Polarplot.plot_points() class function.
+  see `cpom.altimetry.tools.plot_map`
 
 - **find_files_in_area.py** 
   identify files containing locations within a cpom area mask or within a 
