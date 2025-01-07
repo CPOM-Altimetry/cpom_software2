@@ -152,10 +152,11 @@ but also has knowledge of most common altimetry formats to self discover lat,lon
 Contains command line options for many of the cpom Polarplot.plot_points() class function.
 See <code><a href="cpom/altimetry/tools/plot_map.html">cpom.altimetry.tools.plot_map</a></code> for all options.</p></li>
 <li><p><strong>find_files_in_area.py</strong> 
-identify files within a directory (or recursive sub-dir) containing lat,lon locations within a 
-cpom area mask or within a radius of a specified lat,lon point. For example you could
-use it to find CS2 L1b files passing over the Greenland ice sheet for validation
-purposes. Optionally plots the tracks as well. For all options see:
+identify netcdf files within a directory (or recursive sub-dir) containing lat,lon 
+locations within a cpom area mask or within a radius of a specified lat,lon point. 
+For example you could use it to list CS2 L1b files passing over the Greenland ice 
+sheet for validation purposes. Optionally plots the tracks as well. 
+For all the many search options see:
 <code><a href="cpom/altimetry/tools/find_files_in_area.html">cpom.altimetry.tools.find_files_in_area</a></code> </p></li>
 </ul>
 
@@ -311,19 +312,19 @@ at the <strong>pdoc</strong> documentation: <a href="https://pdoc.dev/docs/pdoc.
 </span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="sd">This section provides a list of current tools available in the</span>
 </span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a><span class="sd">cpom software v2. This is in addition to in-code usage of the cpom v2 modules.</span>
 </span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">- **plot_map.py**</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="sd">  generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">  Works with any netcdf file(s) containing latitude, longitude and parameter data,</span>
-</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">  but also has knowledge of most common altimetry formats to self discover lat,lon names. </span>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">  Contains command line options for many of the cpom Polarplot.plot_points() class function.</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">  See `cpom.altimetry.tools.plot_map` for all options.</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a>
-</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a><span class="sd">- **find_files_in_area.py** </span>
-</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">  identify files within a directory (or recursive sub-dir) containing lat,lon locations within a </span>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">  cpom area mask or within a radius of a specified lat,lon point. For example you could</span>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="sd">  use it to find CS2 L1b files passing over the Greenland ice sheet for validation</span>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="sd">  purposes. Optionally plots the tracks as well. For all options see:</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a><span class="sd">- **plot_map.py**</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="sd">  generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="sd">  Works with any netcdf file(s) containing latitude, longitude and parameter data,</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">  but also has knowledge of most common altimetry formats to self discover lat,lon names. </span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">  Contains command line options for many of the cpom Polarplot.plot_points() class function.</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">  See `cpom.altimetry.tools.plot_map` for all options.</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">- **find_files_in_area.py** </span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a><span class="sd">  identify netcdf files within a directory (or recursive sub-dir) containing lat,lon </span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a><span class="sd">  locations within a cpom area mask or within a radius of a specified lat,lon point. </span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">  For example you could use it to list CS2 L1b files passing over the Greenland ice </span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="sd">  sheet for validation purposes. Optionally plots the tracks as well. </span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="sd">  For all the many search options see:</span>
 </span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd">  `cpom.altimetry.tools.find_files_in_area` </span>
 </span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>
 </span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd"># Development</span>

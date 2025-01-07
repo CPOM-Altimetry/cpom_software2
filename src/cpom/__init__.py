@@ -62,7 +62,6 @@ or the identical
 This section provides a list of current tools available in the
 cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 
-
 - **plot_map.py**
   generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.
   Works with any netcdf file(s) containing latitude, longitude and parameter data,
@@ -71,10 +70,11 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
   See `cpom.altimetry.tools.plot_map` for all options.
 
 - **find_files_in_area.py** 
-  identify files within a directory (or recursive sub-dir) containing lat,lon locations within a 
-  cpom area mask or within a radius of a specified lat,lon point. For example you could
-  use it to find CS2 L1b files passing over the Greenland ice sheet for validation
-  purposes. Optionally plots the tracks as well. For all options see:
+  identify netcdf files within a directory (or recursive sub-dir) containing lat,lon 
+  locations within a cpom area mask or within a radius of a specified lat,lon point. 
+  For example you could use it to list CS2 L1b files passing over the Greenland ice 
+  sheet for validation purposes. Optionally plots the tracks as well. 
+  For all the many search options see:
   `cpom.altimetry.tools.find_files_in_area` 
 
 # Development
