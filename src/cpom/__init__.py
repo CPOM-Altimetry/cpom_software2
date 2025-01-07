@@ -59,7 +59,7 @@ or the identical
 
 # Tool List
 
-This section provides a list of current tools available in the
+This section provides a list of current command line tools available in the
 cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 
 - **plot_map.py**
