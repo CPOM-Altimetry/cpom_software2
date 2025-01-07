@@ -71,8 +71,9 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
   see `cpom.altimetry.tools.plot_map`
 
 - **find_files_in_area.py** 
-  identify files containing locations within a cpom area mask or within a 
-  radius of a point
+  identify files within a directory (or recursive sub-dir) containing lat,lon locations within a 
+  cpom area mask or within a radius of a specified lat,lon point. 
+  see `cpom.altimetry.tools.find_files_in_area` 
 
 # Development
 
