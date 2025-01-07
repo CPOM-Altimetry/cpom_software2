@@ -60,7 +60,7 @@ or the identical
 # Tool List
 
 This section provides a list of current tools available in the
-cpom software v2. This is in addition to in-code usage of the modules.
+cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 
 | Tool | Purpose |
 | plot_map.py | generic program to plot parameters from netcdf 
