@@ -64,9 +64,9 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 
 | Tool | Purpose |
 | -------- | ------- |
-| plot_map.py | generic program to plot parameters from netcdf 
+| plot_map.py | generic program to plot parameters from netcdf<br> 
 files(s) on cryosphere maps | 
-| find_files_in_area.py | identify files containing locations within 
+| find_files_in_area.py | identify files containing locations within<br> 
 a cpom area mask or within a radius of a point |
 
 # Development
