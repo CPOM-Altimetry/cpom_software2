@@ -79,7 +79,7 @@ echo "eval \"$old_opts\"" >> $setup_and_run_file
 
 # Notify user the environment is ready
 echo "" >> $setup_and_run_file
-echo "echo \"Environment setup complete. You are now in the CryoTEMPO Land Ice Poetry virtual environment.\"" >> $setup_and_run_file
+echo "echo \"Environment setup complete. You are now in the CPOM Software v2 virtual environment.\"" >> $setup_and_run_file
 
 # Ensure the output script is executable
 chmod +x $setup_and_run_file

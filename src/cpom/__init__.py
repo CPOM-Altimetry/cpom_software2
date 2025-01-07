@@ -45,8 +45,8 @@ This will install
 
 ### Load the Virtual Environment
 
-Now you are all setup to go. Whenever you want to run any cpom software you
-must first load the virtual environment using the `poetry shell` commands.
+Now you are all setup to go. Whenever you want to run any cpom software tools you
+must first activate the virtual environment as follows:
 
 ```
 cd $CPOM_SOFTWARE_DIR
