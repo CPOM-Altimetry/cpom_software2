@@ -50,8 +50,11 @@ must first load the virtual environment using the `poetry shell` commands.
 
 ```
 cd $CPOM_SOFTWARE_DIR
-poetry shell
-. setup_env.sh
+source activate.sh
+```
+or the identical
+```
+. activate.sh
 ```
 
 
