@@ -85,6 +85,12 @@ def save_processed_files(output_dir: str, processed_files: set):
 def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     """
     Retrieve variable from NetCDF file, handling groups if necessary.
+
+    Args:
+        nc (Dataset) : netcdf Dataset object
+        nc_var_path (str) : netcdf variable name. If netcdf contains groups use /mygroup/param_name
+    Returns:
+        Dataset Variable (Variable) : the selected Dataset Variable
     """
     parts = nc_var_path.split("/")
     var = nc
