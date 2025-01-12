@@ -471,7 +471,7 @@ class Area:
         return self.lonlat_to_xy_transformer.transform(lons, lats)
 
     def xy_to_latlon(self, x: np.ndarray | float | list, y: np.ndarray | float | list):
-        """convert from x,y to latitide, longitiude in area's projection
+        """convert from x,y to latitide, longitude in area's projection
 
         Args:
             x (np.ndarray): x coordinates
@@ -625,3 +625,35 @@ class Area:
             indices_in_maskarea,
             indices_in_maskarea.size,
         )
+
+    def inside_area(self, lats: np.ndarray, lons: np.ndarray) -> tuple[np.ndarray, int]:
+        """find if input latitude and longitude locations are inside area's
+           extent and any mask
+
+        Args:
+            lats (np.ndarray): array of latitude values (degs N)
+            lons (np.ndarray): array of longitude values (degs E)
+
+        Returns:
+            bool_mask (ndarray[bool]): boolean mask of points inside
+            n_inside (int) : number of points inside mask
+        """
+
+        bool_mask = np.full_like(lats, False, dtype=bool)
+
+        if self.specify_by_bounding_lat:
+            (lats_inside, lons_inside, indices_inside_orig, n_inside) = self.inside_latlon_bounds(
+                lats, lons
+            )
+            x_inside, y_inside = self.latlon_to_xy(lats_inside, lons_inside)
+        else:
+            (lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside) = (
+                self.inside_xy_extent(lats, lons)
+            )
+        if n_inside > 0:
+            (indices_inside_mask, n_inside) = self.inside_mask(x_inside, y_inside)
+            if n_inside > 0:
+                indice_inside_orig = indices_inside_orig[indices_inside_mask]
+                bool_mask[indice_inside_orig] = True
+
+        return (bool_mask, n_inside)
