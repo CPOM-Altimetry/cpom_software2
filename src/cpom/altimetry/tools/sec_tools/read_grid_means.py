@@ -90,6 +90,8 @@ def main():
         f'{config["grid_name"]}_{int(config["bin_size"]/1000)}km_{config["dataset"]}',
     )
 
+    print(f"reading {parquet_path}")
+
     # 1) Read mean elevation per bin from your partitioned parquet
     df_means = read_mean_elevation(parquet_path)
 

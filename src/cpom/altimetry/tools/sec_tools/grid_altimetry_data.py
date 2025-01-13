@@ -41,6 +41,7 @@ import glob
 import json
 import logging
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -124,6 +125,36 @@ def grid_dataset(data_set: dict, regrid: bool = False):
         data_set["mission"],
         f'{data_set["grid_name"]}_{int(data_set["bin_size"]/1000)}km_{data_set["dataset"]}',
     )
+
+    try:
+        # Remove directory if it already exists
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+
+        # Create a fresh directory
+        os.makedirs(output_dir)
+
+    except PermissionError as pe:
+        log.error("Permission denied: %s", pe)
+        sys.exit(1)
+        # Optionally handle or re-raise the exception
+
+    except FileNotFoundError as fnfe:
+        log.error("File or directory not found: %s", fnfe)
+        sys.exit(1)
+
+        # This might occur if the path changes in between checks or if an intermediate
+        # directory doesn't exist. For rmtree, it's less common if you do `os.path.exists()`.
+
+    except OSError as ose:
+        # Catch-all for many other OS errors (e.g., invalid path, read-only filesystem)
+        log.error("OS error: %s", ose)
+        sys.exit(1)
+        # Handle or re-raise as needed
+
+    # If the directory already exists, remove it along with all sub-directories/files
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
 
     # Load the set of processed file identifiers
     processed_files = load_processed_files(output_dir)
