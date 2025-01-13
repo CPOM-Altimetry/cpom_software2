@@ -129,7 +129,8 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     try:
         # Remove directory if it already exists
         if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
+            if output_dir != "/" and data_set["mission"] in output_dir:
+                shutil.rmtree(output_dir)
 
         # Create a fresh directory
         os.makedirs(output_dir)
