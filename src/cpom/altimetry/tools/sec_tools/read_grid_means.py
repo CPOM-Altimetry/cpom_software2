@@ -53,7 +53,7 @@ def main():
 
     # 1) Read mean elevation per bin from your partitioned parquet
     df_means = read_mean_elevation(
-        "/Users/alanmuir/software/cpom_software2/src/cpom/altimetry/tools/sec_tools/test2.parquet"
+        "/Users/alanmuir/software/cpom_software2/src/cpom/altimetry/tools/sec_tools/test123"
     )
 
     # 2) Attach x_center and y_center columns

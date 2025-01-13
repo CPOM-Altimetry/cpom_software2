@@ -24,6 +24,16 @@ Example: gridding CryoTEMPO Baseline C001 over the Greenland ice-sheet
     -time time --l2_dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE \
     -pat **/CS_OFFL_SIR_TDP_LI*C001*.nc --unique_string -32 -3
 ```
+
+# TODO
+
+- Split into writing data frames every n rows
+- Check time parameter
+- Check x,y params - should they be diffs
+- Check direction param
+- add meta data to grid directory
+- separate logging for each stage? 
+
 """
 
 import argparse
@@ -99,7 +109,7 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def grid_dataset(data_set: dict, output_dir: str, max_files: int | None, regrid: bool = False):
+def grid_dataset(data_set: dict, regrid: bool = False):
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
     and store the resulting table in partitioned Parquet format with
@@ -107,7 +117,7 @@ def grid_dataset(data_set: dict, output_dir: str, max_files: int | None, regrid:
     """
 
     # Load the set of processed file identifiers
-    processed_files = load_processed_files(output_dir)
+    processed_files = load_processed_files(data_set["grid_output_dir"])
     if regrid:
         processed_files = set()
 
@@ -127,7 +137,7 @@ def grid_dataset(data_set: dict, output_dir: str, max_files: int | None, regrid:
     for n_file, file_path in enumerate(matching_files):
         log.info("%d : reading %s", n_file, file_path)
 
-        if max_files is not None and n_file > max_files:
+        if data_set["max_files"] is not None and n_file > data_set["max_files"]:
             break
 
         unique_str = file_path[data_set["unique_string"][0] : data_set["unique_string"][1]]
@@ -282,7 +292,7 @@ def grid_dataset(data_set: dict, output_dir: str, max_files: int | None, regrid:
     # so that each partition includes many (x_bin, y_bin) pairs.
     pq.write_to_dataset(
         table=arrow_table,
-        root_path=output_dir,
+        root_path=data_set["grid_output_dir"],
         partition_cols=["x_part", "y_part"],  # coarser partitioning
         use_dictionary=True,
         compression="snappy",  # or "zstd", "gzip", etc.
@@ -291,9 +301,9 @@ def grid_dataset(data_set: dict, output_dir: str, max_files: int | None, regrid:
     )
 
     # Save the updated set of processed files
-    save_processed_files(output_dir, processed_files)
+    save_processed_files(data_set["grid_output_dir"], processed_files)
 
-    log.info("Partitioned Parquet dataset written to: %s", output_dir)
+    log.info("Partitioned Parquet dataset written to: %s", data_set["grid_output_dir"])
     log.debug("  * Table shape: %s rows, %s columns", *final_df.shape)
     log.debug("  * Partition columns: x_part, y_part (20x coarser than x_bin, y_bin)")
 
@@ -484,9 +494,11 @@ def main(args):
         "elevation_param": args.elevation_param,  # elevation parameter in netcdf. use / for groups
         "power_param": args.power_param,  # power (backscatter) parameter in netcdf. / for groups
         "time_param": args.time_param,  # time parameter in netcdf. / for groups
+        "max_files": args.max_files,  # limit to this number of input files ingested
+        "grid_output_dir": args.output_dir,  # path of grid output dir to be created or updated
     }
 
-    grid_dataset(data_set, args.output_dir, max_files=args.max_files, regrid=args.regrid)
+    grid_dataset(data_set, regrid=args.regrid)
 
 
 if __name__ == "__main__":

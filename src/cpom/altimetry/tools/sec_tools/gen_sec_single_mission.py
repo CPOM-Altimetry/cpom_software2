@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""cpom.altimetry.tools.sec_tools.gen_sec_single_mission.py
+
+# Purpose
+
+Controller for generating single mission surface elevation change (SEC) data.
+
+Uses a run control file (rcf) to configure the following steps
+
+    1. gridding of L2 altimetry data for a mission as per grid_altimetry_data.py
+
+    
+"""
+
+import argparse
+import logging
+import os
+import sys
+
+import yaml
+
+from cpom.altimetry.tools.sec_tools.grid_altimetry_data import grid_dataset
+from cpom.logging_funcs.logging import set_loggers
+
+log = logging.getLogger(__name__)
+
+
+def main(args):
+    """
+    Main entry point for the script.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Controller for generating single mission surface elevation change (SEC) data. "
+        )
+    )
+
+    parser.add_argument(
+        "--debug",
+        "-d",
+        help="Output debug log messages to console",
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--regrid_mission",
+        "-rp",
+        help="regrid whole mission: removes previously gridded data",
+        action="store_true",
+    )
+
+    parser.add_argument("--rcf_filename", "-r", help="path of run control file", required=True)
+
+    parser.add_argument(
+        "--update_grids",
+        "-up",
+        help="update grid cycle files with latest mission data",
+        action="store_true",
+    )
+
+    args = parser.parse_args(args)
+
+    # ----------------------------------------------------------------------------------------------
+    # Create a logger for this tool to output to console
+    # ----------------------------------------------------------------------------------------------
+
+    default_log_level = logging.INFO
+    if args.debug:
+        default_log_level = logging.DEBUG
+    logfile = "/tmp/grid.log"
+    set_loggers(
+        log_file_info=logfile[:-3] + "info.log",
+        log_file_warning=logfile[:-3] + "warning.log",
+        log_file_error=logfile[:-3] + "errors.log",
+        log_file_debug=logfile[:-3] + "debug.log",
+        log_format="%(levelname)s : %(asctime)s %(name)s : %(message)s",
+        default_log_level=default_log_level,
+    )
+
+    # ----------------------------------------------------------------------------------------------
+    # Read run control file (rcf)
+    # ----------------------------------------------------------------------------------------------
+    # Read the raw YAML file as a string
+    with open(args.rcf_filename, "r", encoding="utf-8") as f:
+        raw_yaml = f.read()
+
+    # 2) Substitute environment variables in the string
+    #   we denote env vars with a simple syntax like: ${MY_VAR}
+    for key, value in os.environ.items():
+        placeholder = f"${{{key}}}"
+        raw_yaml = raw_yaml.replace(placeholder, value)
+
+    # 3) Now load the substituted YAML string
+    config = yaml.safe_load(raw_yaml)
+
+    # ----------------------------------------------------------------------------------------------
+    # Gridding Stage
+    # ----------------------------------------------------------------------------------------------
+
+    grid_dataset(config, regrid=args.regrid_mission)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
