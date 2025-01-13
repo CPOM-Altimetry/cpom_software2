@@ -300,6 +300,8 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     else:
         existing_data_behavior_str = "overwrite_or_ignore"
 
+    log.info("Writing grid to parquet file...")
+
     # Write to a partitioned dataset.
     # We'll partition by (x_part, y_part),
     # so that each partition includes many (x_bin, y_bin) pairs.
