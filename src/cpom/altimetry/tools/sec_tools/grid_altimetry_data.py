@@ -116,8 +116,17 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     coarser partitioning (x_part, y_part) = (x_bin//20, y_bin//20).
     """
 
+    # Form path of grid parquet directory as
+    # <grid_output_dir>/<mission>/<grid_name>_<binsize/1000>km_<dataset>
+
+    output_dir = os.path.join(
+        data_set["grid_output_dir"],
+        data_set["mission"],
+        f'{data_set["grid_name"]}_{int(data_set["bin_size"]/1000)}km_{data_set["dataset"]}',
+    )
+
     # Load the set of processed file identifiers
-    processed_files = load_processed_files(data_set["grid_output_dir"])
+    processed_files = load_processed_files(output_dir)
     if regrid:
         processed_files = set()
 
@@ -292,7 +301,7 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     # so that each partition includes many (x_bin, y_bin) pairs.
     pq.write_to_dataset(
         table=arrow_table,
-        root_path=data_set["grid_output_dir"],
+        root_path=output_dir,
         partition_cols=["x_part", "y_part"],  # coarser partitioning
         use_dictionary=True,
         compression="snappy",  # or "zstd", "gzip", etc.
@@ -301,9 +310,9 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     )
 
     # Save the updated set of processed files
-    save_processed_files(data_set["grid_output_dir"], processed_files)
+    save_processed_files(output_dir, processed_files)
 
-    log.info("Partitioned Parquet dataset written to: %s", data_set["grid_output_dir"])
+    log.info("Partitioned Parquet dataset written to: %s", output_dir)
     log.debug("  * Table shape: %s rows, %s columns", *final_df.shape)
     log.debug("  * Partition columns: x_part, y_part (20x coarser than x_bin, y_bin)")
 

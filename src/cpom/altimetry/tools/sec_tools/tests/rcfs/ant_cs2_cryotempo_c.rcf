@@ -2,13 +2,18 @@
 #    - note environment variables may be used using ${var} syntax
 
 # ------------------------------------------------------------------------------------
-# Gridding Parameters
+# Mission Parameters
 # ------------------------------------------------------------------------------------
-grid_name: antarctica            # str: GridArea name, e.g., greenland, antarctica
-area_filter: antarctica_is       # str: CPOM area name, used for masking input measurements
-                                #      examples: greenland_is, antarctica_is
-bin_size: 5000                  # int: Grid bin size in m, example: 5000
-l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE # str: base directory 
+
+mission: cs2 # e1, e2, ev, s3a, s3b, cs2
+
+# ------------------------------------------------------------------------------------
+# Data Set Parameters
+# ------------------------------------------------------------------------------------
+
+dataset: cryotempo_c001 # cryotempo_c001, fdgr4alt, etc
+#l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/ANTARC # str: base directory 
+l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/ANTARC
                                 # to resursively search for L2 files using search_pattern below
 search_pattern: '**/CS_OFFL_SIR_TDP_LI*C001*.nc'  # str: File glob recursive search pattern, e.g. '**/*.nc'
 unique_string: [-32, -3]        # A list of two integers, offsets from end of fname to create a 
@@ -18,6 +23,18 @@ longitude_param: longitude      # longitude name in netcdf. example: data/ku/lon
 elevation_param: elevation      # elevation parameter in netcdf. / for groups
 power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
 time_param: time                # time parameter in netcdf. / for groups
-max_files:  500                  # int: limit number of L2 files gridded to this number. 
+
+# ------------------------------------------------------------------------------------
+# Gridding Parameters
+# ------------------------------------------------------------------------------------
+grid_name: antarctica            # str: GridArea name, e.g., greenland, antarctica
+area_filter: antarctica_is       # str: CPOM area name, used for masking input measurements
+                                #      examples: greenland_is, antarctica_is
+bin_size: 5000                  # int: Grid bin size in m, example: 5000
+
+
+max_files:  100                 # int: limit number of L2 files gridded to this number. 
                                 # Leave empty for unlimited file ingest
-grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry/ant_cryotempo_c       # Path of grid output dir that is created or updated
+grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry       
+                                # Path of grid output dir that is created
+                                # <grid_output_dir>/<mission>/<grid_name>_<binsize/1000>km_<dataset>

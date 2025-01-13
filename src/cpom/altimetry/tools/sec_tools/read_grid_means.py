@@ -7,8 +7,12 @@ and calculate the mean elevation in each grid cell over the example Greenland gr
 
 """
 
+import argparse
+import os
+
 import duckdb
 import pandas as pd
+import yaml
 
 from cpom.areas.area_plot import Polarplot
 from cpom.gridding.gridareas import GridArea
@@ -47,14 +51,47 @@ def attach_xy_centers(df_means: pd.DataFrame, grid: GridArea) -> pd.DataFrame:
 
 
 def main():
-    """main tool function"""
+    """
+    Main entry point for the script.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Convert altimetry data into partitioned Parquet with ragged layout "
+            "and coarser partitioning."
+        )
+    )
+
+    parser.add_argument("--rcf_filename", "-r", help="path of run control file", required=True)
+
+    args = parser.parse_args()
+
+    # ----------------------------------------------------------------------------------------------
+    # Read run control file (rcf)
+    # ----------------------------------------------------------------------------------------------
+    # Read the raw YAML file as a string
+    with open(args.rcf_filename, "r", encoding="utf-8") as f:
+        raw_yaml = f.read()
+
+    # 2) Substitute environment variables in the string
+    #   we denote env vars with a simple syntax like: ${MY_VAR}
+    for key, value in os.environ.items():
+        placeholder = f"${{{key}}}"
+        raw_yaml = raw_yaml.replace(placeholder, value)
+
+    # 3) Now load the substituted YAML string
+    config = yaml.safe_load(raw_yaml)
+
     # Create (or load) your GridArea
-    grid = GridArea("greenland", 5000)  # 5 km bins in a polar stereographic projection, etc.
+    grid = GridArea(config["grid_name"], int(config["bin_size"]))
+
+    parquet_path = os.path.join(
+        config["grid_output_dir"],
+        config["mission"],
+        f'{config["grid_name"]}_{int(config["bin_size"]/1000)}km_{config["dataset"]}',
+    )
 
     # 1) Read mean elevation per bin from your partitioned parquet
-    df_means = read_mean_elevation(
-        "/Users/alanmuir/software/cpom_software2/src/cpom/altimetry/tools/sec_tools/test123"
-    )
+    df_means = read_mean_elevation(parquet_path)
 
     # 2) Attach x_center and y_center columns
     df_means = attach_xy_centers(df_means, grid)
@@ -69,7 +106,7 @@ def main():
 
     # 5) Plot the data (all points) with Polarplot
     #    Note: This works as long as 'lats', 'lons', and 'vals' all have the same shape (1D).
-    Polarplot("greenland_is").plot_points(dataset)
+    Polarplot(config["area_filter"]).plot_points(dataset)
 
 
 if __name__ == "__main__":
