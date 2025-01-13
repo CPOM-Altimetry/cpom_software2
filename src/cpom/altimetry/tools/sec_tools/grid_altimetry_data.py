@@ -142,9 +142,13 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     search_dir = data_set["l2_directory"]
     pattern = data_set["search_pattern"]
     matching_files = glob.glob(f"{search_dir}/{pattern}", recursive=True)
+    n_matching_files = len(matching_files)
+    if n_matching_files == 0:
+        log.error("No matching L2 files")
+        sys.exit()
 
     for n_file, file_path in enumerate(matching_files):
-        log.info("%d : reading %s", n_file, file_path)
+        log.info("%d/%d : reading %s", n_file, n_matching_files, file_path)
 
         if data_set["max_files"] is not None and n_file > data_set["max_files"]:
             break
