@@ -106,7 +106,7 @@ def main():
 
     # 5) Plot the data (all points) with Polarplot
     #    Note: This works as long as 'lats', 'lons', and 'vals' all have the same shape (1D).
-    Polarplot(config["area_filter"]).plot_points(dataset)
+    Polarplot(config["area_filter"]).plot_points(dataset, output_dir="/tmp")
 
 
 if __name__ == "__main__":
