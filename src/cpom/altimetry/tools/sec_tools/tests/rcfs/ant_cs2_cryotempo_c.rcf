@@ -1,0 +1,23 @@
+# YML format run control file for single mission SEC processing
+#    - note environment variables may be used using ${var} syntax
+
+# ------------------------------------------------------------------------------------
+# Gridding Parameters
+# ------------------------------------------------------------------------------------
+grid_name: antarctica            # str: GridArea name, e.g., greenland, antarctica
+area_filter: antarctica_is       # str: CPOM area name, used for masking input measurements
+                                #      examples: greenland_is, antarctica_is
+bin_size: 5000                  # int: Grid bin size in m, example: 5000
+l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE # str: base directory 
+                                # to resursively search for L2 files using search_pattern below
+search_pattern: '**/CS_OFFL_SIR_TDP_LI*C001*.nc'  # str: File glob recursive search pattern, e.g. '**/*.nc'
+unique_string: [-32, -3]        # A list of two integers, offsets from end of fname to create a 
+                                # unique string per L2 file, eg [-32, -3]
+latitude_param: latitude        # latitude name in netcdf. example: data/ku/latitude
+longitude_param: longitude      # longitude name in netcdf. example: data/ku/longitude
+elevation_param: elevation      # elevation parameter in netcdf. / for groups
+power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
+time_param: time                # time parameter in netcdf. / for groups
+max_files:  500                  # int: limit number of L2 files gridded to this number. 
+                                # Leave empty for unlimited file ingest
+grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry/ant_cryotempo_c       # Path of grid output dir that is created or updated
