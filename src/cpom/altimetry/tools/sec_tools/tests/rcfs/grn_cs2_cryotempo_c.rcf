@@ -32,9 +32,6 @@ area_filter: greenland_is       # str: CPOM area name, used for masking input me
                                 #      examples: greenland_is, antarctica_is
 bin_size: 5000                  # int: Grid bin size in m, example: 5000
 
-
-max_files:  100                 # int: limit number of L2 files gridded to this number. 
-                                # Leave empty for unlimited file ingest
 grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry       
-                                # Path of grid output dir that is created
+                                # Path of grid output dir containing parquets that is created
                                 # <grid_output_dir>/<mission>/<grid_name>_<binsize/1000>km_<dataset>
