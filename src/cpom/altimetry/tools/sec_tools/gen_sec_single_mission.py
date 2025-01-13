@@ -45,6 +45,14 @@ def main(args):
     )
 
     parser.add_argument(
+        "--max_files",
+        "-mf",
+        help="Restrict number of input L2 files (int)",
+        required=False,
+        type=int,
+    )
+
+    parser.add_argument(
         "--regrid_mission",
         "-rp",
         help="regrid whole mission: removes previously gridded data",
@@ -94,6 +102,9 @@ def main(args):
 
     # 3) Now load the substituted YAML string
     config = yaml.safe_load(raw_yaml)
+
+    if args.max_files:
+        config["max_files"] = args.max_files
 
     # ----------------------------------------------------------------------------------------------
     # Gridding Stage
