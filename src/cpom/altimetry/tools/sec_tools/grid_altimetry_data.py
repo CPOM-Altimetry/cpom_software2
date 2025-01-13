@@ -182,7 +182,7 @@ def grid_dataset(data_set: dict, regrid: bool = False):
     for n_file, file_path in enumerate(matching_files):
         log.info("%d/%d : reading %s", n_file, n_matching_files, file_path)
 
-        if data_set["max_files"] is not None and n_file > data_set["max_files"]:
+        if data_set.get("max_files", None) is not None and n_file > data_set["max_files"]:
             break
 
         unique_str = file_path[data_set["unique_string"][0] : data_set["unique_string"][1]]
