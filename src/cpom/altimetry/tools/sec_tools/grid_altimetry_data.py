@@ -115,6 +115,7 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
         # Mode 1: Full regrid => remove entire directory, then create fresh
         if os.path.exists(output_dir):
             if output_dir != "/" and data_set["mission"] in output_dir:  # safety check
+                log.info("Removing previous grid dir: %s ...", output_dir)
                 shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
 
