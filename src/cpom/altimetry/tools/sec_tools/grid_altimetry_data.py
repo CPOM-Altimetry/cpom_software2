@@ -106,6 +106,8 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
         f'{data_set["grid_name"]}_{int(data_set["bin_size"]/1000)}km_{data_set["dataset"]}',
     )
 
+    log.info("output_dir=%s", output_dir)
+
     # ----------------------------------------------------------------------
     # Decide how to handle existing data folder + set "existing_data_behavior"
     # ----------------------------------------------------------------------
@@ -136,11 +138,16 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
     grid = GridArea(data_set["grid_name"], data_set["bin_size"])
     thisarea = Area(data_set["area_filter"])
 
+    log.info("grid specification=%s", data_set["grid_name"])
+
     # ----------------------------------------------------------------------
     # Gather all matching files, identify unique years
     # ----------------------------------------------------------------------
     search_dir = data_set["l2_directory"]
     pattern = data_set["search_pattern"]
+
+    log.info("finding matching L2 files from %s/%s", search_dir, pattern)
+
     matching_files = glob.glob(f"{search_dir}/{pattern}", recursive=True)
     if not matching_files:
         log.error("No matching L2 files found in %s/%s", search_dir, pattern)
@@ -148,6 +155,9 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
 
     start_idx, end_idx = data_set["year_str_fname_indices"]
     unique_years = set()
+
+    log.info("finding unique years..")
+
     for file_path in matching_files:
         year_str = file_path[start_idx:end_idx]
         if len(year_str) != 4 or not year_str.isdigit():
