@@ -110,7 +110,7 @@ def main(args):
     # Gridding Stage
     # ----------------------------------------------------------------------------------------------
 
-    grid_dataset(config, regrid=args.regrid_mission)
+    grid_dataset(config, regrid=args.regrid_mission, update_year=None)
 
 
 if __name__ == "__main__":
