@@ -12,8 +12,8 @@ mission: cs2 # e1, e2, ev, s3a, s3b, cs2
 # ------------------------------------------------------------------------------------
 
 dataset: cryotempo_c001 # cryotempo_c001, fdgr4alt, etc
-l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/ANTARC # str: base directory 
-#l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/ANTARC
+#l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/ANTARC # str: base directory 
+l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/ANTARC
                                 # to resursively search for L2 files using search_pattern below
 search_pattern: '**/CS_OFFL_SIR_TDP_LI*C001*.nc'  # str: File glob recursive search pattern, e.g. '**/*.nc'
 latitude_param: latitude        # latitude name in netcdf. example: data/ku/latitude
