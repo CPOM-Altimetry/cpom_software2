@@ -2011,8 +2011,7 @@ class Polarplot:
             print("Plotting Antarctic Medium coastline..")
 
             fname = (
-                os.environ["CPOM_SOFTWARE_DIR"]
-                + "/cpom/resources/coastlines/Coastline_medium_res_line"
+                os.environ["CPOM_SOFTWARE_DIR"] + "/resources/coastlines/Coastline_medium_res_line"
                 "/Coastline_medium_res_line_WGS84.shp"
             )
             sf = shp.Reader(fname)
