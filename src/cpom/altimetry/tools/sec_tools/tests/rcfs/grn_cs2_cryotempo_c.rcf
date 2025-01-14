@@ -12,8 +12,8 @@ mission: cs2 # e1, e2, ev, s3a, s3b, cs2
 # ------------------------------------------------------------------------------------
 
 dataset: cryotempo_c001 # cryotempo_c001, fdgr4alt, etc
-#l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL # str: base directory 
-l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/GREENL
+l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL # str: base directory 
+#l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/GREENL
                                 # to resursively search for L2 files using search_pattern below
 search_pattern: '**/CS_OFFL_SIR_TDP_LI*C001*.nc'  # str: File glob recursive search pattern, e.g. '**/*.nc'
 unique_string: [-32, -3]        # A list of two integers, offsets from end of fname to create a 
@@ -23,6 +23,7 @@ longitude_param: longitude      # longitude name in netcdf. example: data/ku/lon
 elevation_param: elevation      # elevation parameter in netcdf. / for groups
 power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
 time_param: time                # time parameter in netcdf. / for groups
+year_str_fname_indices: [-48,-44] # indices of the start year in the filename from end of name
 
 # ------------------------------------------------------------------------------------
 # Gridding Parameters

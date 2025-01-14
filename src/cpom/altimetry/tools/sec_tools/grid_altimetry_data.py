@@ -1,44 +1,65 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""cpom.altimetry.tools.sec_tools.grid_altimetry_data.py
+"""
+cpom.altimetry.tools.sec_tools.grid_altimetry_data.py
 
-# Purpose
-
+Purpose
+-------
 Grid altimetry data for SEC (model fit) processing,
-but store each measurement (ragged arrays) in partitioned Parquet
-approach (by x_part, y_part = x_bin//20, y_bin//20).
+storing each measurement in a partitioned Parquet dataset, 
+partitioned by (year, x_part, y_part).
 
-# Inputs
+Supported modes:
+  1) Full regrid: remove entire dataset and rewrite from scratch for *all* years
+     (use --regrid)
+  2) Update/add a single year: only overwrite that year partition in the existing dataset
+     (use --update_year YYYY)
 
-# Outputs
+If neither is provided, the script exits with a usage message.
 
-Parquet directory containing partitioned Parquet files
+Example usage:
+--------------
+1) Full regrid (5km grid):
+   python grid_altimetry_data.py --regrid --binsize 5e3 --area greenland_is \
+       -o /cpnet/altimetry/landice/gridded_altimetry -g greenland \
+       -mi cs2 -da cryotempo_c001 \
+       -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
+       -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
+       --year_str_fname_indices -48 -44 \
+       --lat latitude \
+       --lon longitude \
+       --elev elevation \
+       --power backscatter \
+       --time time
 
-# Usage
-
-Example: gridding CryoTEMPO Baseline C001 over the Greenland ice-sheet
-```
-  python grid_altimetry_data.py --gridarea greenland \
-    -o test2.parquet --max_files 100  --regrid --binsize 5e3 --area greenland_is \
-    -elev elevation -lat latitude -lon longitude -power backscatter \
-    -time time --l2_dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE \
-    -pat **/CS_OFFL_SIR_TDP_LI*C001*.nc --unique_string -32 -3
-```
+2) Update year 2015 only:
+   python grid_altimetry_data.py --update_year 2015 --binsize 5e3 --area greenland_is \
+       -o /cpnet/altimetry/landice/gridded_altimetry -g greenland \
+       -mi cs2 -da cryotempo_c001 \
+       -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
+       -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
+       --year_str_fname_indices -48 -44 \
+       --lat latitude \
+       --lon longitude \
+       --elev elevation \
+       --power backscatter \
+       --time time
 
 # TODO
-
-- Split into writing data frames every n rows
+- add month column?
 - Check time parameter
 - Check x,y params - should they be diffs
 - Check direction param
 - add meta data to grid directory
-- separate logging for each stage? 
+
+remove load_processed_files(), etc. No need to do this any more.
 
 """
 
 import argparse
 import glob
-import json
+
+# import json
 import logging
 import os
 import shutil
@@ -51,58 +72,14 @@ import pyarrow.parquet as pq
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
 from cpom.areas.areas import Area
-
-# CPOM imports
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
 log = logging.getLogger(__name__)
 
 
-def load_processed_files(output_dir: str) -> set:
-    """
-    Load the set of already processed unique_str's from a JSON file.
-    Returns an empty set if no file found.
-
-    Args:
-        output_dir (str): path of top-level parquet directory
-    Returns:
-         (set) : set containing previously processed unique strings or empty set
-    """
-    processed_file_path = os.path.join(output_dir, "processed_files.json")
-    if os.path.exists(processed_file_path):
-        with open(processed_file_path, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
-
-
-def save_processed_files(output_dir: str, processed_files: set):
-    """
-    Save the set of processed unique_str's to a JSON file.
-
-    Args:
-        output_dir (str): path of top-level parquet directory
-        processed_files (set): containing processed unique strings
-    Returns:
-         None
-    """
-    processed_file_path = os.path.join(output_dir, "processed_files.json")
-
-    log.info("saving processed file list to: %s", processed_file_path)
-    with open(processed_file_path, "w", encoding="utf-8") as f:
-        json.dump(list(processed_files), f, indent=2)
-
-
 def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
-    """
-    Retrieve variable from NetCDF file, handling groups if necessary.
-
-    Args:
-        nc (Dataset) : netcdf Dataset object
-        nc_var_path (str) : netcdf variable name. If netcdf contains groups use /mygroup/param_name
-    Returns:
-        Dataset Variable (Variable) : the selected Dataset Variable
-    """
+    """Retrieve variable from NetCDF file, handling groups if necessary."""
     parts = nc_var_path.split("/")
     var = nc
     for part in parts:
@@ -110,413 +87,308 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def grid_dataset(data_set: dict, regrid: bool = False):
+def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
-    and store the resulting table in partitioned Parquet format with
-    coarser partitioning (x_part, y_part) = (x_bin//20, y_bin//20).
+    and store them in partitioned Parquet by (year, x_part, y_part).
+
+    Two modes:
+      1) regrid=True => remove entire dataset folder, write all years.
+      2) update_year=YYYY => only overwrite that year partition, keep other years as-is.
     """
 
-    # Form path of grid parquet directory as
-    # <grid_output_dir>/<mission>/<grid_name>_<binsize/1000>km_<dataset>
-
+    # ----------------------------------------------------------------------
+    # Determine output directory path
+    # ----------------------------------------------------------------------
     output_dir = os.path.join(
         data_set["grid_output_dir"],
         data_set["mission"],
         f'{data_set["grid_name"]}_{int(data_set["bin_size"]/1000)}km_{data_set["dataset"]}',
     )
 
-    try:
-        # Remove directory if it already exists
-        if os.path.exists(output_dir):
-            if output_dir != "/" and data_set["mission"] in output_dir:
-                shutil.rmtree(output_dir)
-
-        # Create a fresh directory
-        os.makedirs(output_dir)
-
-    except PermissionError as pe:
-        log.error("Permission denied: %s", pe)
-        sys.exit(1)
-        # Optionally handle or re-raise the exception
-
-    except FileNotFoundError as fnfe:
-        log.error("File or directory not found: %s", fnfe)
-        sys.exit(1)
-
-        # This might occur if the path changes in between checks or if an intermediate
-        # directory doesn't exist. For rmtree, it's less common if you do `os.path.exists()`.
-
-    except OSError as ose:
-        # Catch-all for many other OS errors (e.g., invalid path, read-only filesystem)
-        log.error("OS error: %s", ose)
-        sys.exit(1)
-        # Handle or re-raise as needed
-
-    # If the directory already exists, remove it along with all sub-directories/files
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-
-    # Load the set of processed file identifiers
-    processed_files = load_processed_files(output_dir)
+    # ----------------------------------------------------------------------
+    # Decide how to handle existing data folder + set "existing_data_behavior"
+    # ----------------------------------------------------------------------
     if regrid:
-        processed_files = set()
+        # Mode 1: Full regrid => remove entire directory, then create fresh
+        if os.path.exists(output_dir):
+            if output_dir != "/" and data_set["mission"] in output_dir:  # safety check
+                shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
-    # Prepare the grid
+        existing_data_behavior_str = "delete_matching"
+
+    else:
+        # Mode 2: Update a single year => do *not* remove the entire dataset
+        if not os.path.exists(output_dir):
+            log.error(
+                "Output directory %s does not exist. "
+                "Cannot update a year in a non-existent dataset!",
+                output_dir,
+            )
+            sys.exit(1)
+
+        existing_data_behavior_str = "delete_matching"
+
+    # ----------------------------------------------------------------------
+    # Setup grid and area
+    # ----------------------------------------------------------------------
     grid = GridArea(data_set["grid_name"], data_set["bin_size"])
     thisarea = Area(data_set["area_filter"])
 
-    # We'll gather data in a list of DataFrames (one per file).
-    # If you have memory concerns with large data, you can write in batches.
-    all_rows = []
-
-    # Find matching files
+    # ----------------------------------------------------------------------
+    # Gather all matching files, identify unique years
+    # ----------------------------------------------------------------------
     search_dir = data_set["l2_directory"]
     pattern = data_set["search_pattern"]
     matching_files = glob.glob(f"{search_dir}/{pattern}", recursive=True)
-    n_matching_files = len(matching_files)
-    if n_matching_files == 0:
-        log.error("No matching L2 files")
+    if not matching_files:
+        log.error("No matching L2 files found with search pattern!")
         sys.exit()
 
-    for n_file, file_path in enumerate(matching_files):
-        log.info("%d/%d : reading %s", n_file, n_matching_files, file_path)
+    start_idx, end_idx = data_set["year_str_fname_indices"]
+    unique_years = set()
+    for file_path in matching_files:
+        year_str = file_path[start_idx:end_idx]
+        if len(year_str) != 4 or not year_str.isdigit():
+            log.error("Invalid year string '%s' from file %s", year_str, file_path)
+            sys.exit(1)
+        unique_years.add(year_str)
 
-        if data_set.get("max_files", None) is not None and n_file > data_set["max_files"]:
-            break
+    unique_years_list = sorted(unique_years)
+    log.info("Unique years found in files: %s", unique_years_list)
 
-        unique_str = file_path[data_set["unique_string"][0] : data_set["unique_string"][1]]
-        log.debug("unique_str=%s", unique_str)
+    # Decide which years to process
+    if regrid:
+        # regrid => all years
+        years_to_process = unique_years_list
+    else:
+        # update_year => only that year
+        if update_year not in unique_years_list:
+            log.error(
+                "Requested update_year=%s but no files exist for that year! Exiting.", update_year
+            )
+            sys.exit(1)
+        years_to_process = [update_year]
 
-        # --- Check if already processed ---
-        if unique_str in processed_files:
-            log.info("Skipping file %s (unique_str=%s) - already processed", file_path, unique_str)
+    # ----------------------------------------------------------------------
+    # Process each year
+    # ----------------------------------------------------------------------
+    n_files_ingested = 0
+    max_files = data_set.get("max_files")
+
+    for year_str in years_to_process:
+        log.info("Processing year: %s", year_str)
+        files_this_year = [fp for fp in matching_files if fp[start_idx:end_idx] == year_str]
+        if not files_this_year:
+            log.info("No files for year=%s, skipping", year_str)
             continue
 
-        with Dataset(file_path) as nc:
-            # Extract lat/lon
-            try:
-                lats = get_variable(nc, data_set["latitude_param"])[:].data
-                lons = get_variable(nc, data_set["longitude_param"])[:].data % 360.0
-            except (KeyError, IndexError):
-                log.error(
-                    "No latitude or longitude parameter %s found in %s",
-                    data_set["latitude_param"],
-                    file_path,
-                )
-                continue
+        n_files_this_year = len(files_this_year)
 
-            # Convert lat/lon -> (x, y)
-            x_coords, y_coords = thisarea.latlon_to_xy(lats, lons)
+        log.info("Number of files found for year: %d", n_files_this_year)
 
-            # Area filter
-            bool_mask, n_inside = thisarea.inside_area(lats, lons)
-            if n_inside == 0:
-                log.debug("No points inside area: %s", thisarea.name)
-                continue
+        year_rows = []
 
-            # Elevation
-            try:
-                elevations = get_variable(nc, data_set["elevation_param"])[:].data
-            except (IndexError, KeyError):
-                log.error(
-                    "No elevation parameter %s found in %s", data_set["elevation_param"], file_path
-                )
-                continue
+        for n_file, file_path in enumerate(files_this_year):
+            if max_files is not None and n_files_ingested >= max_files:
+                break
 
-            try:
-                fill_value = get_variable(  # pylint: disable=protected-access
-                    nc, data_set["elevation_param"]
-                )._FillValue
-                elevations[elevations == fill_value] = np.nan
-            except AttributeError:
-                log.debug("No _FillValue attribute found for elevation param")
-
-            # Power
-            try:
-                power = get_variable(nc, data_set["power_param"])[:].data
-            except (IndexError, KeyError):
-                log.error("No power parameter %s found in %s", data_set["power_param"], file_path)
-                continue
-
-            try:
-                fill_value = get_variable(  # pylint: disable=protected-access
-                    nc, data_set["power_param"]
-                )._FillValue
-                power[power == fill_value] = np.nan
-            except AttributeError:
-                log.debug("No _FillValue attribute found for power param")
-
-            # Combine mask with valid data
-            bool_mask = bool_mask & np.isfinite(elevations) & np.isfinite(power)
-            if bool_mask.sum() == 0:
-                log.warning("No valid measurements after elevation & power ingest: %s", file_path)
-                continue
-
-            # Subset
-            x_valid = x_coords[bool_mask]
-            y_valid = y_coords[bool_mask]
-            elev_valid = elevations[bool_mask]
-            pwr_valid = power[bool_mask]
-
-            # Convert to grid bins
-            x_bin = ((x_valid - grid.minxm) / grid.binsize).astype(int)
-            y_bin = ((y_valid - grid.minym) / grid.binsize).astype(int)
-
-            # Read ascending info (example logic, adapt as needed)
-            ascending_locs = np.ones_like(x_valid, dtype=bool)
-            try:
-                if nc.ascending_start_record == "None" and nc.descending_start_record != "None":
-                    ascending_locs[:] = False
-                elif nc.descending_start_record == "None" and nc.ascending_start_record != "None":
-                    ascending_locs[:] = True
-                else:
-                    if nc.ascending_start_record == 0 and nc.descending_start_record > 0:
-                        ascending_locs[nc.descending_start_record :] = False
-                    elif nc.descending_start_record == 0 and nc.ascending_start_record > 0:
-                        ascending_locs[: nc.ascending_start_record] = False
-            except AttributeError:
-                log.error("Error reading ascending_start_record in %s", file_path)
-                continue
-
-            # Possibly read time or other parameters
-            try:
-                time_data = get_variable(nc, data_set["time_param"])[:].data
-                time_valid = time_data[bool_mask]
-            except (KeyError, IndexError):
-                log.error("No time_param found or error reading time in %s", file_path)
-                continue
-
-            # Build DataFrame for this file
-            df = pd.DataFrame(
-                {
-                    "x_bin": x_bin,
-                    "y_bin": y_bin,
-                    "xi": x_valid,
-                    "yi": y_valid,
-                    "elevation": elev_valid,
-                    "power": pwr_valid,
-                    "ascending": ascending_locs,
-                    "time": time_valid,
-                }
+            log.info(
+                "Processing file:%d/%d  %s (year=%s)",
+                n_file,
+                n_files_this_year,
+                file_path,
+                year_str,
             )
+            n_files_ingested += 1
 
-            # -----------------------------
-            # Coarser partitioning (factor=20)
-            #   x_part = x_bin // 20
-            #   y_part = y_bin // 20
-            # You can pick a factor that suits your data size vs. number of partitions.
-            # -----------------------------
-            df["x_part"] = df["x_bin"] // 20
-            df["y_part"] = df["y_bin"] // 20
+            with Dataset(file_path) as nc:
+                # lat/lon
+                try:
+                    lats = get_variable(nc, data_set["latitude_param"])[:].data
+                    lons = get_variable(nc, data_set["longitude_param"])[:].data % 360.0
+                except (KeyError, IndexError):
+                    log.warning("No lat/lon in %s, skipping", file_path)
+                    continue
 
-            all_rows.append(df)
+                x_coords, y_coords = thisarea.latlon_to_xy(lats, lons)
+                bool_mask, n_inside = thisarea.inside_area(lats, lons)
+                if n_inside == 0:
+                    log.debug("No points inside area for %s", file_path)
+                    continue
 
-            processed_files.add(unique_str)
+                # elevation
+                try:
+                    elevs = get_variable(nc, data_set["elevation_param"])[:].data
+                except (KeyError, IndexError):
+                    log.warning("No elevation in %s, skipping", file_path)
+                    continue
+                try:
+                    fill_elev = get_variable(  # pylint: disable=protected-access
+                        nc, data_set["elevation_param"]
+                    )._FillValue
+                    elevs[elevs == fill_elev] = np.nan
+                except AttributeError:
+                    pass
 
-    # Concatenate all data into a single DataFrame
-    if len(all_rows) == 0:
-        log.info("No data found. Exiting.")
-        return
+                # power
+                try:
+                    pwr = get_variable(nc, data_set["power_param"])[:].data
+                except (KeyError, IndexError):
+                    log.warning("No power in %s, skipping", file_path)
+                    continue
+                try:
+                    fill_pwr = get_variable(  # pylint: disable=protected-access
+                        nc, data_set["power_param"]
+                    )._FillValue
+                    pwr[pwr == fill_pwr] = np.nan
+                except AttributeError:
+                    pass
 
-    log.info("Number of rows %d", len(all_rows))
+                # time
+                try:
+                    time_data = get_variable(nc, data_set["time_param"])[:].data
+                except (KeyError, IndexError):
+                    log.warning("No time in %s, skipping", file_path)
+                    continue
 
-    final_df = pd.concat(all_rows, ignore_index=True)
+                # combine mask
+                bool_mask = bool_mask & np.isfinite(elevs) & np.isfinite(pwr)
+                if bool_mask.sum() == 0:
+                    log.debug("No valid data left in %s after mask", file_path)
+                    continue
 
-    # Convert to an Arrow table
-    arrow_table = pa.Table.from_pandas(final_df)
+                # subset
+                x_valid = x_coords[bool_mask]
+                y_valid = y_coords[bool_mask]
+                elev_valid = elevs[bool_mask]
+                pwr_valid = pwr[bool_mask]
+                time_valid = time_data[bool_mask]
 
-    # append behaviour
-    if regrid:
-        existing_data_behavior_str = "delete_matching"
-    else:
-        existing_data_behavior_str = "overwrite_or_ignore"
+                # bin
+                x_bin = ((x_valid - grid.minxm) / grid.binsize).astype(int)
+                y_bin = ((y_valid - grid.minym) / grid.binsize).astype(int)
 
-    log.info("Writing grid to parquet file...")
+                # ascending logic
+                ascending_locs = np.ones_like(x_valid, dtype=bool)
+                try:
+                    if nc.ascending_start_record == "None" and nc.descending_start_record != "None":
+                        ascending_locs[:] = False
+                    elif (
+                        nc.descending_start_record == "None" and nc.ascending_start_record != "None"
+                    ):
+                        ascending_locs[:] = True
+                except AttributeError:
+                    pass
 
-    # Write to a partitioned dataset.
-    # We'll partition by (x_part, y_part),
-    # so that each partition includes many (x_bin, y_bin) pairs.
-    pq.write_to_dataset(
-        table=arrow_table,
-        root_path=output_dir,
-        partition_cols=["x_part", "y_part"],  # coarser partitioning
-        use_dictionary=True,
-        compression="snappy",  # or "zstd", "gzip", etc.
-        existing_data_behavior=existing_data_behavior_str,  # "delete_matching",
-        # "overwrite_or_ignore"
-    )
+                # build DataFrame
+                df = pd.DataFrame(
+                    {
+                        "year": year_str,
+                        "x_bin": x_bin,
+                        "y_bin": y_bin,
+                        "xi": x_valid,
+                        "yi": y_valid,
+                        "elevation": elev_valid,
+                        "power": pwr_valid,
+                        "ascending": ascending_locs,
+                        "time": time_valid,
+                    }
+                )
+                df["x_part"] = df["x_bin"] // 20
+                df["y_part"] = df["y_bin"] // 20
 
-    # Save the updated set of processed files
-    save_processed_files(output_dir, processed_files)
+                year_rows.append(df)
+
+        if not year_rows:
+            log.info("No data for year=%s", year_str)
+            continue
+
+        year_df = pd.concat(year_rows, ignore_index=True)
+        log.info(
+            "Writing year=%s => %d total rows from %d files",
+            year_str,
+            len(year_df),
+            len(files_this_year),
+        )
+
+        arrow_table = pa.Table.from_pandas(year_df)
+        pq.write_to_dataset(
+            table=arrow_table,
+            root_path=output_dir,
+            partition_cols=["year", "x_part", "y_part"],
+            use_dictionary=True,
+            compression="snappy",
+            existing_data_behavior=existing_data_behavior_str,
+        )
+
+        del year_rows
+        del year_df
+        del arrow_table
 
     log.info("Partitioned Parquet dataset written to: %s", output_dir)
-    log.debug("  * Table shape: %s rows, %s columns", *final_df.shape)
-    log.debug("  * Partition columns: x_part, y_part (20x coarser than x_bin, y_bin)")
 
 
 def main(args):
-    """
-    Main entry point for the script.
-    """
+    """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description=(
-            "Convert altimetry data into partitioned Parquet with ragged layout "
-            "and coarser partitioning."
+            "Convert altimetry data into partitioned Parquet with ragged layout. "
+            "Supports regridding everything or updating a single year."
         )
     )
 
-    parser.add_argument(
-        "--area",
-        "-a",
-        help=(
-            "area for data filtering/masking of input measurements. "
-            "Valid area names in cpom.areas.definition.<area_name>.py. Example: greenland_is"
-        ),
-        required=True,
-    )
+    # Required arguments
+    parser.add_argument("--area", "-a", required=True)
+    parser.add_argument("--binsize", "-b", required=True, type=float)
+    parser.add_argument("--dataset", "-da", required=True)
+    parser.add_argument("--elevation_param", "-elev", required=True)
+    parser.add_argument("--gridarea", "-g", required=True)
+    parser.add_argument("--l2_dir", "-dir", required=True)
+    parser.add_argument("--lat_param", "-lat", required=True)
+    parser.add_argument("--lon_param", "-lon", required=True)
+    parser.add_argument("--mission", "-mi", required=True)
+    parser.add_argument("--output_dir", "-o", required=True)
+    parser.add_argument("--power_param", "-power", required=True)
+    parser.add_argument("--search_pattern", "-pat", required=True)
+    parser.add_argument("--time_param", "-time", required=True)
+    parser.add_argument("--year_str_fname_indices", "-ys", nargs=2, type=int, required=True)
 
-    parser.add_argument(
-        "--binsize",
-        "-b",
-        help=("grid binsize in m, default=5e3 == 5km"),
-        required=True,
-        type=float,
-    )
+    # Optional
+    parser.add_argument("--max_files", "-mf", type=int)
 
+    # The two mutually exclusive modes
     parser.add_argument(
-        "--debug",
-        "-d",
-        help="Output debug log messages to console",
-        required=False,
+        "--regrid",
+        "-r",
         action="store_true",
-    )
-
-    parser.add_argument(
-        "--elevation_param",
-        "-elev",
-        help=(
-            "name of elevation parameter to use in L2 netcdf files. If netcdf contains groups, "
-            "use / to seperate. example data/ku/elevation"
-        ),
-        required=True,
-    )
-
-    parser.add_argument(
-        "--gridarea",
-        "-g",
-        help=(
-            "output grid area specification name. Valid names in "
-            "cpom.gridding.gridarea.py:all_grid_areas"
-        ),
-        required=True,
-    )
-
-    parser.add_argument(
-        "--l2_dir",
-        "-dir",
-        help="L2 base directory to recursively search for L2 files using the search pattern: "
-        "example for CryoTEMPO: /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE",
-        required=True,
-    )
-
-    # 'l2_directory': '/cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE',
-
-    parser.add_argument(
-        "--lat_param",
-        "-lat",
-        help=(
-            "name of latitude parameter to use in L2 netcdf files. If netcdf contains groups use / "
-            "to seperate. example data/ku/latitude"
-        ),
-        required=True,
-    )
-
-    parser.add_argument(
-        "--lon_param",
-        "-lon",
-        help=(
-            "name of longitude parameter to use in L2 netcdf files. If netcdf contains groups use /"
-            "to seperate. example data/ku/longitude"
-        ),
-        required=True,
-    )
-
-    parser.add_argument(
-        "--max_files",
-        "-mf",
-        help="Restrict number of input L2 files (int)",
-        required=False,
-        type=int,
+        help="Remove entire dataset and re-write from scratch for all years.",
     )
     parser.add_argument(
-        "--output_dir",
-        "-o",
-        help="Path of output partitioned Parquet dataset",
-        required=True,
-        type=str,
+        "--update_year", help="Overwrite data for only this single year (e.g. 2015)."
     )
 
-    parser.add_argument(
-        "--power_param",
-        "-power",
-        help=(
-            "name of power (backscatter) parameter to use in L2 netcdf files. If netcdf contains "
-            "groups, use / to seperate. example data/ku/backscatter"
-        ),
-        required=True,
-    )
-
-    parser.add_argument("--regrid", "-r", help="[optional]", required=False, action="store_true")
-
-    parser.add_argument(
-        "--search_pattern",
-        "-pat",
-        help=(
-            "search pattern for L2 file discovery. Example for CryoTEMPO C001: "
-            "**/CS_OFFL_SIR_TDP_LI*C001*.nc"
-        ),
-        required=True,
-    )
-
-    #'search_pattern': '**/CS_OFFL_SIR_TDP_LI*C001*.nc',
-
-    # add long and short argument
-    parser.add_argument(
-        "--scenario",
-        "-s",
-        default="operational",
-        help="id name used to name the grid processing chain. Default is : operational",
-    )
-
-    parser.add_argument(
-        "--time_param",
-        "-time",
-        help=(
-            "name of time parameter to use in L2 netcdf files. If netcdf contains "
-            "groups, use / to seperate. example data/ku/time"
-        ),
-        required=True,
-    )
-
-    parser.add_argument(
-        "--unique_string",
-        "-us",
-        help=("offsets from end of file name to provide a unique string. example: -32 -3"),
-        required=True,
-        nargs=2,
-        type=int,
-    )
+    parser.add_argument("--debug", "-d", action="store_true")
 
     args = parser.parse_args(args)
 
-    # ----------------------------------------------------------------------------------------------
-    # Create a logger for this tool to output to console
-    # ----------------------------------------------------------------------------------------------
+    # 1) Check that user provided EXACTLY one of: regrid or update_year
+    if args.regrid and args.update_year:
+        log.error("Cannot specify both --regrid and --update_year simultaneously.")
+        sys.exit(1)
 
+    if not args.regrid and not args.update_year:
+        log.error(
+            "You must specify one of --regrid (full rewrite) or --update_year YEAR (update only)."
+        )
+        sys.exit(1)
+
+    # 2) Set up logging
     default_log_level = logging.INFO
     if args.debug:
         default_log_level = logging.DEBUG
+
     logfile = "/tmp/grid.log"
     set_loggers(
         log_file_info=logfile[:-3] + "info.log",
@@ -527,25 +399,27 @@ def main(args):
         default_log_level=default_log_level,
     )
 
-    # Example data_set dictionary
+    # 3) Build data_set dict
     data_set = {
-        "grid_name": args.gridarea,  # GridArea name: is 'greenland'
-        "area_filter": args.area,  # CPOM area name, used for masking input measurements
-        "bin_size": args.binsize,  # grid binsize to use, example: 5e3 (for 5km grid)
-        "l2_directory": args.l2_dir,  # L2 base dir to recursively search for L2 files,
-        "search_pattern": args.search_pattern,  # search pattern for L2 file discovery
-        "unique_string": args.unique_string,  # offsets from end of fname to
-        # create a unique string per L2 file, eg -32 -3
-        "latitude_param": args.lat_param,  # latitude name in netcdf. example: data/ku/latitude
-        "longitude_param": args.lon_param,  # longitude name in netcdf. example: data/ku/longitude
-        "elevation_param": args.elevation_param,  # elevation parameter in netcdf. use / for groups
-        "power_param": args.power_param,  # power (backscatter) parameter in netcdf. / for groups
-        "time_param": args.time_param,  # time parameter in netcdf. / for groups
-        "max_files": args.max_files,  # limit to this number of input files ingested
-        "grid_output_dir": args.output_dir,  # path of grid output dir to be created or updated
+        "dataset": args.dataset,
+        "year_str_fname_indices": args.year_str_fname_indices,
+        "mission": args.mission,
+        "grid_name": args.gridarea,
+        "area_filter": args.area,
+        "bin_size": args.binsize,
+        "l2_directory": args.l2_dir,
+        "search_pattern": args.search_pattern,
+        "latitude_param": args.lat_param,
+        "longitude_param": args.lon_param,
+        "elevation_param": args.elevation_param,
+        "power_param": args.power_param,
+        "time_param": args.time_param,
+        "max_files": args.max_files,
+        "grid_output_dir": args.output_dir,
     }
 
-    grid_dataset(data_set, regrid=args.regrid)
+    # 4) Run gridding in the chosen mode
+    grid_dataset(data_set, regrid=args.regrid, update_year=args.update_year)
 
 
 if __name__ == "__main__":

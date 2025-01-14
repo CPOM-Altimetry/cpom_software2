@@ -23,6 +23,7 @@ longitude_param: longitude      # longitude name in netcdf. example: data/ku/lon
 elevation_param: elevation      # elevation parameter in netcdf. / for groups
 power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
 time_param: time                # time parameter in netcdf. / for groups
+year_str_fname_indices: [-48,-44] # indices of the start year in the filename from end of name
 
 # ------------------------------------------------------------------------------------
 # Gridding Parameters
