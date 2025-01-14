@@ -242,7 +242,7 @@ def main():
             "vals": df_means["mean_elev"].values,
             "name": f"{args.year}" if args.year else "All Years",
         }
-        Polarplot(config["area_filter"]).plot_points(dataset_for_plot)
+        Polarplot(config["area_filter"]).plot_points(dataset_for_plot, output_dir="/tmp")
 
 
 if __name__ == "__main__":
