@@ -143,7 +143,7 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
     pattern = data_set["search_pattern"]
     matching_files = glob.glob(f"{search_dir}/{pattern}", recursive=True)
     if not matching_files:
-        log.error("No matching L2 files found with search pattern!")
+        log.error("No matching L2 files found in %s/%s", search_dir, pattern)
         sys.exit()
 
     start_idx, end_idx = data_set["year_str_fname_indices"]
