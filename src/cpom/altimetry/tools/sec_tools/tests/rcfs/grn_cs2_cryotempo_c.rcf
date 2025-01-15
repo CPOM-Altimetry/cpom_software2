@@ -21,6 +21,7 @@ longitude_param: longitude      # longitude name in netcdf. example: data/ku/lon
 elevation_param: elevation      # elevation parameter in netcdf. / for groups
 power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
 time_param: time                # time parameter in netcdf. / for groups
+time_secs_to_1950: -1577836800  # time constant in seconds to adjust to 00:00 1/1/1950
 yyyymm_str_fname_indices: [-48,-42] # indices of the start YYYYMM in the filename from end of name
 
 # ------------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ longitude_param: longitude      # longitude name in netcdf. example: data/ku/lon
 elevation_param: elevation      # elevation parameter in netcdf. / for groups
 power_param: backscatter        # power (backscatter) parameter in netcdf. / for groups
 time_param: time                # time parameter in netcdf. / for groups
+time_secs_to_1950: -1577836800  # time constant in seconds to adjust to 00:00 1/1/1950
 yyyymm_str_fname_indices: [-48,-42] # indices of the start YYYYMM in the filename from end of name
 
 # ------------------------------------------------------------------------------------
@@ -28,8 +29,8 @@ yyyymm_str_fname_indices: [-48,-42] # indices of the start YYYYMM in the filenam
 # ------------------------------------------------------------------------------------
 grid_name: antarctica            # str: GridArea name, e.g., greenland, antarctica
 area_filter: antarctica_is       # str: CPOM area name, used for masking input measurements
-                                #      examples: greenland_is, antarctica_is
-bin_size: 5000                  # int: Grid bin size in m, example: 5000
+                                 #      examples: greenland_is, antarctica_is
+bin_size: 5000                   # int: Grid bin size in m, example: 5000
 
 grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry       
                                 # Path of grid output dir containing parquets that is created

@@ -343,14 +343,19 @@ def grid_dataset(
                 except AttributeError:
                     pass
 
-                # time
+                # time parameter
+                #    - CryoTEMPO units of time are UTC seconds since 00:00:00 1-Jan-2000
+                #    - S3 Thematic LI, time_20_ku:units = "seconds since 2000-01-01 00:00:00.0" ;
+                #    - FDGR4ALT: expert/time:units = "seconds since 1950-01-01 00 :00 :00.00 " ;
                 try:
                     time_data = get_variable(nc, data_set["time_param"])[:].data
                 except (KeyError, IndexError):
-                    log.warning("No time in %s, skipping", file_path)
+                    log.warning("No time parameter in %s, skipping", file_path)
                     total_files_rejected += 1
                     files_rejected += 1
                     continue
+
+                time_data += data_set["time_secs_to_1950"]
 
                 # combine mask
                 bool_mask = bool_mask & np.isfinite(elevs) & np.isfinite(pwr)
@@ -596,8 +601,7 @@ def main(args):
             "This results in a folder hierarchy such as year=YYYY/month=MM/x_part=.../y_part=..."
             "  . Note that finer partitioning (i.e. by month) may significantly increase the number"
             "  of output files, which can increase write times and, for very large datasets,"
-            " write times and, for very large datasets, potentially affect read performance "
-            "depending upon the query types."
+            " potentially affect read performance depending upon the query types."
         ),
         required=False,
         action="store_true",
