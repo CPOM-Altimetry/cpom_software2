@@ -10,7 +10,15 @@ Uses a run control file (rcf) to configure the following steps
 
     1. gridding of L2 altimetry data for a mission as per grid_altimetry_data.py
 
-    
+# Examples
+
+Grid CryoTEMPO Baseline C001 over AIS for all 14 years (2010-2024)
+
+``` 
+gen_sec_single_mission.py --rcf tests/rcfs/ant_cs2_cryotempo_c.rcf -rp
+```
+This took: ~5 hrs (MSSLXBD server), using ~ 10GB RAM
+
 """
 
 import argparse
@@ -62,10 +70,12 @@ def main(args):
     parser.add_argument("--rcf_filename", "-r", help="path of run control file", required=True)
 
     parser.add_argument(
-        "--update_grids",
-        "-up",
-        help="update grid cycle files with latest mission data",
-        action="store_true",
+        "--update_year",
+        "-y",
+        help=(
+            "YYYY : update the gridded data archive with a specific year YYYY."
+            "Example: --update_year 2015"
+        ),
     )
 
     args = parser.parse_args(args)
@@ -107,10 +117,13 @@ def main(args):
         config["max_files"] = args.max_files
 
     # ----------------------------------------------------------------------------------------------
-    # Gridding Stage
+    # Optional Gridding Stage
     # ----------------------------------------------------------------------------------------------
 
-    grid_dataset(config, regrid=args.regrid_mission, update_year=None)
+    if args.regrid_mission or args.update_year:
+        grid_dataset(config, regrid=args.regrid_mission, update_year=args.update_year)
+    else:
+        log.info("No gridding options chosen")
 
 
 if __name__ == "__main__":

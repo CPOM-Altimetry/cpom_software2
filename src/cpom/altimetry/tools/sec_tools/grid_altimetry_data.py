@@ -87,7 +87,7 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
+def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=True) -> None:
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
     and store them in partitioned Parquet by (year, x_part, y_part).
@@ -95,7 +95,39 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
     Two modes:
       1) regrid=True => remove entire dataset folder, write all years.
       2) update_year=YYYY => only overwrite that year partition, keep other years as-is.
+
+    Args:
+        data_set (dict) : dictionary of gridding parameters.
+
+            data_set = {
+                "dataset": str, # cryotempo_c001
+                "year_str_fname_indices": (int,int), # neg indices in fname of start YYYY
+                "mission": str, # cs2, e1,e2,ev,s3a,s3b,is2
+                "grid_name": str,  # GridArea name: is 'greenland'
+                "area_filter": str,  # CPOM area name, used for masking input measurements
+                "bin_size": int,  # grid binsize to use, example: 5e3 (for 5km grid)
+                "l2_directory": str,  # L2 base dir to recursively search for L2 files,
+                "search_pattern": str,  # search pattern for L2 file discovery
+                "latitude_param": str,  # latitude name in netcdf. example: data/ku/latitude
+                "longitude_param": str,  # longitude name in netcdf. example: data/ku/longitude
+                "elevation_param": str,  # elevation parameter in netcdf. use / for groups
+                "power_param": str,  # power (backscatter) parameter in netcdf. / for groups
+                "time_param": str,  # time parameter in netcdf. / for groups
+                "max_files": int,  # limit to this number of input files ingested
+                "grid_output_dir": str,  # base path of grid output dir to be created or updated
+            }
+        regrid (bool) : if True remove any previous grid parquet and regrid from scratch.
+                        if False, then will try updating the year given in update_year
+        update_year (str) : YYYY. year to update. If regrid is True this is ignored and can be set
+                            to ""
+        confirm_regrid (bool): if True user is prompted to confirm regrid before any previous
+                            data set is overwritten.
+
     """
+
+    if not regrid and len(update_year) != 4:
+        log.error("update_year must be provided if regrid is False")
+        sys.exit(1)
 
     # ----------------------------------------------------------------------
     # Determine output directory path
@@ -116,7 +148,18 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
         if os.path.exists(output_dir):
             if output_dir != "/" and data_set["mission"] in output_dir:  # safety check
                 log.info("Removing previous grid dir: %s ...", output_dir)
-                shutil.rmtree(output_dir)
+                if confirm_regrid:
+                    response = (
+                        input("Confirm removal of previous grid archive? (y/n): ").strip().lower()
+                    )
+                    if response == "y":
+                        shutil.rmtree(output_dir)
+                    else:
+                        print("Exiting as user requested not to overwrite grid archive")
+                        sys.exit(0)
+            else:
+                log.error("invalid output_dir path: %s", output_dir)
+                sys.exit(1)
         os.makedirs(output_dir, exist_ok=True)
 
         existing_data_behavior_str = "delete_matching"
@@ -206,11 +249,11 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str) -> None:
                 break
 
             log.info(
-                "Processing file:%d/%d  %s (year=%s)",
+                "Processing file from %s: %d/%d  %s ",
+                year_str,
                 n_file,
                 n_files_this_year,
                 file_path,
-                year_str,
             )
             n_files_ingested += 1
 
@@ -351,36 +394,167 @@ def main(args):
     )
 
     # Required arguments
-    parser.add_argument("--area", "-a", required=True)
-    parser.add_argument("--binsize", "-b", required=True, type=float)
-    parser.add_argument("--dataset", "-da", required=True)
-    parser.add_argument("--elevation_param", "-elev", required=True)
-    parser.add_argument("--gridarea", "-g", required=True)
-    parser.add_argument("--l2_dir", "-dir", required=True)
-    parser.add_argument("--lat_param", "-lat", required=True)
-    parser.add_argument("--lon_param", "-lon", required=True)
-    parser.add_argument("--mission", "-mi", required=True)
-    parser.add_argument("--output_dir", "-o", required=True)
-    parser.add_argument("--power_param", "-power", required=True)
-    parser.add_argument("--search_pattern", "-pat", required=True)
-    parser.add_argument("--time_param", "-time", required=True)
-    parser.add_argument("--year_str_fname_indices", "-ys", nargs=2, type=int, required=True)
+    parser.add_argument(
+        "--area",
+        "-a",
+        help=(
+            "area for data filtering/masking of input measurements. "
+            "Valid area names in cpom.areas.definition.<area_name>.py. Example: greenland_is"
+        ),
+        required=True,
+    )
 
-    # Optional
-    parser.add_argument("--max_files", "-mf", type=int)
+    parser.add_argument(
+        "--binsize",
+        "-b",
+        help=("grid binsize in m, default=5e3 == 5km"),
+        required=True,
+        type=float,
+    )
 
-    # The two mutually exclusive modes
+    parser.add_argument(
+        "--dataset",
+        "-da",
+        help=("string identifying L2 data set: valid values are: cryotempo_c001"),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--debug",
+        "-d",
+        help="Output debug log messages to console",
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--elevation_param",
+        "-elev",
+        help=(
+            "name of elevation parameter to use in L2 netcdf files. If netcdf contains groups, "
+            "use / to seperate. example data/ku/elevation"
+        ),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--gridarea",
+        "-g",
+        help=(
+            "output grid area specification name. Valid names in "
+            "cpom.gridding.gridarea.py:all_grid_areas"
+        ),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--l2_dir",
+        "-dir",
+        help="L2 base directory to recursively search for L2 files using the search pattern: "
+        "example for CryoTEMPO: /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--lat_param",
+        "-lat",
+        help=(
+            "name of latitude parameter to use in L2 netcdf files. If netcdf contains groups use / "
+            "to seperate. example data/ku/latitude"
+        ),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--lon_param",
+        "-lon",
+        help=(
+            "name of longitude parameter to use in L2 netcdf files. If netcdf contains groups use /"
+            "to seperate. example data/ku/longitude"
+        ),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--max_files",
+        "-mf",
+        help="Restrict number of input L2 files (int)",
+        required=False,
+        type=int,
+    )
+
+    parser.add_argument(
+        "--mission",
+        "-mi",
+        help=("mission of data set: e1, e2, ev, s3a, s3b, cs2, is2"),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--output_dir",
+        "-o",
+        help=(
+            "Base path to create or update the gridded data set Parquet format files"
+            "Actual parquet directory is formed from: <output_dir>/<mission>/<grid_name>_"
+            "<binsize in km>km_<dataset name>"
+        ),
+        required=True,
+        type=str,
+    )
+
+    parser.add_argument(
+        "--power_param",
+        "-power",
+        help=(
+            "name of power (backscatter) parameter to use in L2 netcdf files. If netcdf contains "
+            "groups, use / to seperate. example data/ku/backscatter"
+        ),
+        required=True,
+    )
+
     parser.add_argument(
         "--regrid",
         "-r",
         action="store_true",
         help="Remove entire dataset and re-write from scratch for all years.",
     )
+
+    parser.add_argument(
+        "--search_pattern",
+        "-pat",
+        help=(
+            "search pattern for L2 file discovery. Example for CryoTEMPO C001: "
+            "**/CS_OFFL_SIR_TDP_LI*C001*.nc"
+        ),
+        required=True,
+    )
+
+    parser.add_argument(
+        "--time_param",
+        "-time",
+        help=(
+            "name of time parameter to use in L2 netcdf files. If netcdf contains "
+            "groups, use / to seperate. example data/ku/time"
+        ),
+        required=True,
+    )
+
     parser.add_argument(
         "--update_year", help="Overwrite data for only this single year (e.g. 2015)."
     )
 
-    parser.add_argument("--debug", "-d", action="store_true")
+    parser.add_argument(
+        "--year_str_fname_indices",
+        "-ys",
+        help=(
+            "int int : negative indices from end of L2 file name or path which point to the "
+            "YYYY start year in the name. For example with CryoTEMPO L2 files, this is: "
+            "-48 -44"
+        ),
+        nargs=2,
+        type=int,
+        required=True,
+    )
 
     args = parser.parse_args(args)
 
