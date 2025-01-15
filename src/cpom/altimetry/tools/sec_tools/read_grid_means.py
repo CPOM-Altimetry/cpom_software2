@@ -12,6 +12,7 @@ Optionally, plot all years, per-year, or a single specified year.
 """
 
 import argparse
+import json
 import os
 
 import duckdb
@@ -74,7 +75,7 @@ def read_mean_elevation_by_year(parquet_path: str) -> pd.DataFrame:
     return df_means
 
 
-def read_mean_elevation_for_single_year(parquet_path: str, year_str: str) -> pd.DataFrame:
+def read_mean_elevation_for_single_year(parquet_path: str, year_val: int) -> pd.DataFrame:
     """
     Query all partitioned parquet files to get average (mean) elevation per
     (x_bin, y_bin) *only for the specified year*.
@@ -84,15 +85,43 @@ def read_mean_elevation_for_single_year(parquet_path: str, year_str: str) -> pd.
     parquet_glob = f"{parquet_path}/**/*.parquet"
 
     # We'll filter using a WHERE clause for the specified year.
-    # The partition column 'year' is stored as a string if you wrote it as year_str.
-    # If year was stored as an integer, you might need 'WHERE year = 2015' (no quotes).
+
     query = f"""
         SELECT
             x_bin,
             y_bin,
             AVG(elevation) AS mean_elev
         FROM parquet_scan('{parquet_glob}')
-        WHERE year = '{year_str}'
+        WHERE year = {year_val}
+        GROUP BY x_bin, y_bin
+        ORDER BY x_bin, y_bin
+    """
+
+    con = duckdb.connect()
+    df_means = con.execute(query).df()
+    con.close()
+    return df_means
+
+
+def read_mean_elevation_for_single_month(
+    parquet_path: str, year_val: int, month_val: int
+) -> pd.DataFrame:
+    """
+    Query all partitioned parquet files to get average (mean) elevation per
+    (x_bin, y_bin) *only for the specified year AND month*.
+
+    Returns a DataFrame with columns: [x_bin, y_bin, mean_elev].
+    """
+    parquet_glob = f"{parquet_path}/**/*.parquet"
+
+    query = f"""
+        SELECT
+            x_bin,
+            y_bin,
+            AVG(elevation) AS mean_elev
+        FROM parquet_scan('{parquet_glob}')
+        WHERE year = {year_val}  -- integer comparison, no quotes
+          AND month = {month_val}
         GROUP BY x_bin, y_bin
         ORDER BY x_bin, y_bin
     """
@@ -120,13 +149,26 @@ def main():
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Read partitioned Parquet (potentially partitioned by year, x_part, y_part) "
+            "Read partitioned Parquet (potentially partitioned by year, month, x_part, y_part) "
             "and calculate the mean elevation per grid cell."
         )
     )
 
     parser.add_argument(
-        "--rcf_filename", "-r", help="Path of run control file (YAML)", required=False
+        "--grid_dir",
+        "-gd",
+        help=(
+            "Path of grid directory to load grid and meta-data from."
+            "Used instead of rcf name. No need for both as meta-data loaded automatically"
+        ),
+        required=False,
+    )
+
+    parser.add_argument(
+        "--rcf_filename",
+        "-r",
+        help=("Path of run control file (YAML). Use instead of --grid_dir"),
+        required=False,
     )
     parser.add_argument(
         "--by_year",
@@ -135,8 +177,21 @@ def main():
     )
     parser.add_argument(
         "--year",
+        "-y",
         help="If specified, compute mean only for this single year (e.g. 2015).",
         required=False,
+        type=int,
+    )
+
+    parser.add_argument(
+        "--month",
+        "-m",
+        help=(
+            "If specified, compute mean only for this single month of year (e.g. 01/2015)."
+            "Use with --year"
+        ),
+        required=False,
+        type=int,
     )
 
     args = parser.parse_args()
@@ -145,7 +200,11 @@ def main():
     # 1) Load configuration (optionally from a YAML run-control file).
     #    If not provided, we fall back to a hard-coded default dictionary.
     # ----------------------------------------------------------------------------------------------
-    if args.rcf_filename:
+    if args.grid_dir:
+        with open(os.path.join(args.grid_dir, "grid_meta.json"), "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+    elif args.rcf_filename:
         with open(args.rcf_filename, "r", encoding="utf-8") as f:
             raw_yaml = f.read()
 
@@ -184,15 +243,22 @@ def main():
     #    - Else if --by_year, group by year.
     #    - Else read across all years (combined).
     # ----------------------------------------------------------------------------------------------
-    if args.year:
+    if args.year and args.month:
+        print(f"Computing means for single month: {args.month:02d}/{args.year}")
+        df_means = read_mean_elevation_for_single_month(parquet_path, args.year, args.month)
+        plot_name = f"{args.month:02d}/{args.year}"
+    elif args.year:
         print(f"Computing means for single year: {args.year}")
         df_means = read_mean_elevation_for_single_year(parquet_path, args.year)
+        plot_name = f"{args.year}"
     elif args.by_year:
         print("Computing means PER YEAR (all years) ...")
         df_means = read_mean_elevation_by_year(parquet_path)
+        plot_name = "by year"
     else:
         print("Computing means ACROSS ALL YEARS (combined)...")
         df_means = read_mean_elevation_all_years(parquet_path)
+        plot_name = "all years"
 
     print(f"Number of rows in the aggregated DataFrame: {len(df_means)}")
 
@@ -240,9 +306,12 @@ def main():
             "lats": df_means["lat_center"].values,
             "lons": df_means["lon_center"].values,
             "vals": df_means["mean_elev"].values,
-            "name": f"{args.year}" if args.year else "All Years",
+            "name": plot_name,
         }
-        Polarplot(config["area_filter"]).plot_points(dataset_for_plot, output_dir="/tmp")
+        Polarplot(config["area_filter"]).plot_points(
+            dataset_for_plot,
+            # output_dir="/tmp"
+        )
 
 
 if __name__ == "__main__":

@@ -61,8 +61,19 @@ def main(args):
     )
 
     parser.add_argument(
+        "--no_confirm",
+        "-nc",
+        help=(
+            "when regridding, do not ask for user confirmation to delete previous grid archive."
+            "By default the user will be prompted before grid archive for this scenario is "
+            "overwritten."
+        ),
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--regrid_mission",
-        "-rp",
+        "-rg",
         help="regrid whole mission: removes previously gridded data",
         action="store_true",
     )
@@ -76,6 +87,8 @@ def main(args):
             "YYYY : update the gridded data archive with a specific year YYYY."
             "Example: --update_year 2015"
         ),
+        type=int,
+        default=None,
     )
 
     args = parser.parse_args(args)
@@ -121,7 +134,12 @@ def main(args):
     # ----------------------------------------------------------------------------------------------
 
     if args.regrid_mission or args.update_year:
-        grid_dataset(config, regrid=args.regrid_mission, update_year=args.update_year)
+        grid_dataset(
+            config,
+            regrid=args.regrid_mission,
+            update_year=args.update_year,
+            confirm_regrid=not args.no_confirm,
+        )
     else:
         log.info("No gridding options chosen")
 

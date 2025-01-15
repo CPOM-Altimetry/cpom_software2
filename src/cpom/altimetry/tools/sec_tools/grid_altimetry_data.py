@@ -25,7 +25,7 @@ Example usage:
        -mi cs2 -da cryotempo_c001 \
        -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
        -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
-       --year_str_fname_indices -48 -44 \
+       --yyyymm_str_fname_indices -48 -44 \
        --lat latitude \
        --lon longitude \
        --elev elevation \
@@ -38,7 +38,7 @@ Example usage:
        -mi cs2 -da cryotempo_c001 \
        -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
        -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
-       --year_str_fname_indices -48 -44 \
+       --yyyymm_str_fname_indices -48 -44 \
        --lat latitude \
        --lon longitude \
        --elev elevation \
@@ -58,8 +58,7 @@ remove load_processed_files(), etc. No need to do this any more.
 
 import argparse
 import glob
-
-# import json
+import json
 import logging
 import os
 import shutil
@@ -87,13 +86,16 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=True) -> None:
+def grid_dataset(
+    data_set: dict, regrid: bool, update_year: int | None = None, confirm_regrid=True
+) -> None:
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
     and store them in partitioned Parquet by (year, x_part, y_part).
 
     Two modes:
-      1) regrid=True => remove entire dataset folder, write all years.
+      1) regrid=True => remove entire dataset folder, write all years or if update_year
+         also specified just that year
       2) update_year=YYYY => only overwrite that year partition, keep other years as-is.
 
     Args:
@@ -101,7 +103,7 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
 
             data_set = {
                 "dataset": str, # cryotempo_c001
-                "year_str_fname_indices": (int,int), # neg indices in fname of start YYYY
+                "yyyymm_str_fname_indices": (int,int), # neg indices in fname of start YYYY
                 "mission": str, # cs2, e1,e2,ev,s3a,s3b,is2
                 "grid_name": str,  # GridArea name: is 'greenland'
                 "area_filter": str,  # CPOM area name, used for masking input measurements
@@ -118,14 +120,13 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
             }
         regrid (bool) : if True remove any previous grid parquet and regrid from scratch.
                         if False, then will try updating the year given in update_year
-        update_year (str) : YYYY. year to update. If regrid is True this is ignored and can be set
-                            to ""
+        update_year (int|None) : YYYY. year to update. Is set only this year will be ingested
         confirm_regrid (bool): if True user is prompted to confirm regrid before any previous
                             data set is overwritten.
 
     """
 
-    if not regrid and len(update_year) != 4:
+    if not regrid and update_year is None:
         log.error("update_year must be provided if regrid is False")
         sys.exit(1)
 
@@ -162,8 +163,6 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                 sys.exit(1)
         os.makedirs(output_dir, exist_ok=True)
 
-        existing_data_behavior_str = "delete_matching"
-
     else:
         # Mode 2: Update a single year => do *not* remove the entire dataset
         if not os.path.exists(output_dir):
@@ -173,8 +172,6 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                 output_dir,
             )
             sys.exit(1)
-
-        existing_data_behavior_str = "delete_matching"
 
     # ----------------------------------------------------------------------
     # Setup grid and area
@@ -197,65 +194,105 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
         log.error("No matching L2 files found in %s/%s", search_dir, pattern)
         sys.exit()
 
-    start_idx, end_idx = data_set["year_str_fname_indices"]
+    start_idx, end_idx = data_set["yyyymm_str_fname_indices"]
+    yr_start_idx = start_idx
+    yr_end_idx = end_idx - 2
+    month_start_idx = start_idx + 4
+    month_end_idx = end_idx
+
     unique_years = set()
 
     log.info("finding unique years..")
 
     for file_path in matching_files:
-        year_str = file_path[start_idx:end_idx]
-        if len(year_str) != 4 or not year_str.isdigit():
-            log.error("Invalid year string '%s' from file %s", year_str, file_path)
+        year_val = int(file_path[yr_start_idx:yr_end_idx])
+        month_val = int(file_path[month_start_idx:month_end_idx])
+
+        if not 1900 <= year_val <= 2100:
+            log.error("Invalid year: %d in file %s", year_val, file_path)
             sys.exit(1)
-        unique_years.add(year_str)
+        if not 1 <= month_val <= 12:
+            log.error("Invalid month: %d in file %s", month_val, file_path)
+            sys.exit(1)
+
+        unique_years.add(year_val)
 
     unique_years_list = sorted(unique_years)
     log.info("Unique years found in files: %s", unique_years_list)
 
     # Decide which years to process
-    if regrid:
+
+    if regrid and update_year is not None:
+        if update_year not in unique_years_list:
+            log.error(
+                "Requested update_year=%s but no files exist for that year! Exiting.", update_year
+            )
+
+            sys.exit(1)
+        years_to_process = [update_year]
+    elif regrid:
         # regrid => all years
         years_to_process = unique_years_list
     else:
         # update_year => only that year
         if update_year not in unique_years_list:
             log.error(
-                "Requested update_year=%s but no files exist for that year! Exiting.", update_year
+                "Requested update_year =%d but no files exist for that year! Exiting.", update_year
             )
+
             sys.exit(1)
         years_to_process = [update_year]
 
+    log.info("Years to process: %s", str(years_to_process))
     # ----------------------------------------------------------------------
     # Process each year
     # ----------------------------------------------------------------------
-    n_files_ingested = 0
+    total_files_ingested = 0
+    total_files_rejected = 0
+    years_ingested = []
+    years_files_ingested = []
+    years_files_rejected = []
+
     max_files = data_set.get("max_files")
 
-    for year_str in years_to_process:
-        log.info("Processing year: %s", year_str)
-        files_this_year = [fp for fp in matching_files if fp[start_idx:end_idx] == year_str]
+    for year in years_to_process:
+        files_ingested = 0
+        files_rejected = 0
+        log.info("Processing year: %d", year)
+        files_this_year = [fp for fp in matching_files if int(fp[yr_start_idx:yr_end_idx]) == year]
         if not files_this_year:
-            log.info("No files for year=%s, skipping", year_str)
+            log.info("No files for year=%d, skipping", year)
             continue
 
         n_files_this_year = len(files_this_year)
+
+        years_ingested.append(year)
 
         log.info("Number of files found for year: %d", n_files_this_year)
 
         year_rows = []
 
         for n_file, file_path in enumerate(files_this_year):
-            if max_files is not None and n_files_ingested >= max_files:
+            if max_files is not None and total_files_ingested >= max_files:
                 break
 
+            # parse month from the file path
+            month = int(file_path[month_start_idx:month_end_idx])  # e.g. int('03')
+            if month < 1 or month > 12:
+                log.warning("Invalid month '%d' in file %s", month, file_path)
+                files_rejected += 1
+                total_files_rejected += 1
+                continue
+
             log.info(
-                "Processing file from %s: %d/%d  %s ",
-                year_str,
+                "Processing file from %d: %d/%d  %s ",
+                year,
                 n_file,
                 n_files_this_year,
                 file_path,
             )
-            n_files_ingested += 1
+            total_files_ingested += 1
+            files_ingested += 1
 
             with Dataset(file_path) as nc:
                 # lat/lon
@@ -264,12 +301,16 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                     lons = get_variable(nc, data_set["longitude_param"])[:].data % 360.0
                 except (KeyError, IndexError):
                     log.warning("No lat/lon in %s, skipping", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
 
                 x_coords, y_coords = thisarea.latlon_to_xy(lats, lons)
                 bool_mask, n_inside = thisarea.inside_area(lats, lons)
                 if n_inside == 0:
                     log.debug("No points inside area for %s", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
 
                 # elevation
@@ -277,6 +318,8 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                     elevs = get_variable(nc, data_set["elevation_param"])[:].data
                 except (KeyError, IndexError):
                     log.warning("No elevation in %s, skipping", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
                 try:
                     fill_elev = get_variable(  # pylint: disable=protected-access
@@ -291,6 +334,8 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                     pwr = get_variable(nc, data_set["power_param"])[:].data
                 except (KeyError, IndexError):
                     log.warning("No power in %s, skipping", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
                 try:
                     fill_pwr = get_variable(  # pylint: disable=protected-access
@@ -305,12 +350,16 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                     time_data = get_variable(nc, data_set["time_param"])[:].data
                 except (KeyError, IndexError):
                     log.warning("No time in %s, skipping", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
 
                 # combine mask
                 bool_mask = bool_mask & np.isfinite(elevs) & np.isfinite(pwr)
                 if bool_mask.sum() == 0:
                     log.debug("No valid data left in %s after mask", file_path)
+                    total_files_rejected += 1
+                    files_rejected += 1
                     continue
 
                 # subset
@@ -337,9 +386,11 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
                     pass
 
                 # build DataFrame
+                # build DataFrame
                 df = pd.DataFrame(
                     {
-                        "year": year_str,
+                        "year": year,
+                        "month": month,
                         "x_bin": x_bin,
                         "y_bin": y_bin,
                         "xi": x_valid,
@@ -355,14 +406,17 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
 
                 year_rows.append(df)
 
+        years_files_ingested.append(files_ingested)
+        years_files_rejected.append(files_rejected)
+
         if not year_rows:
-            log.info("No data for year=%s", year_str)
+            log.info("No data for year=%d", year)
             continue
 
         year_df = pd.concat(year_rows, ignore_index=True)
         log.info(
-            "Writing year=%s => %d total rows from %d files",
-            year_str,
+            "Writing year=%d => %d total rows from %d files",
+            year,
             len(year_df),
             len(files_this_year),
         )
@@ -371,10 +425,10 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
         pq.write_to_dataset(
             table=arrow_table,
             root_path=output_dir,
-            partition_cols=["year", "x_part", "y_part"],
+            partition_cols=["year", "month", "x_part", "y_part"],
             use_dictionary=True,
             compression="snappy",
-            existing_data_behavior=existing_data_behavior_str,
+            existing_data_behavior="delete_matching",
         )
 
         del year_rows
@@ -382,6 +436,29 @@ def grid_dataset(data_set: dict, regrid: bool, update_year: str, confirm_regrid=
         del arrow_table
 
     log.info("Partitioned Parquet dataset written to: %s", output_dir)
+
+    # ----------------------------------------------------------------------
+    # Save data_set dictionary as JSON in the top-level parquet directory
+    # ----------------------------------------------------------------------
+
+    data_set["years_ingested"] = years_ingested
+    data_set["years_files_ingested"] = years_files_ingested
+    data_set["years_files_rejected"] = years_files_rejected
+    data_set["total_l2_files_rejected"] = total_files_rejected
+    data_set["total_l2_files_ingested"] = total_files_ingested
+    data_set["grid_xmin"] = grid.minxm
+    data_set["grid_ymin"] = grid.minym
+    data_set["grid_crs"] = grid.coordinate_reference_system
+    data_set["grid_x_size"] = grid.grid_x_size
+    data_set["grid_y_size"] = grid.grid_y_size
+
+    meta_json_path = os.path.join(output_dir, "grid_meta.json")
+    try:
+        with open(meta_json_path, "w", encoding="utf-8") as f:
+            json.dump(data_set, f, indent=2)
+        log.info("Wrote data_set metadata to %s", meta_json_path)
+    except OSError as e:
+        log.error("Failed to write grid_meta.json: %s", e)
 
 
 def main(args):
@@ -540,11 +617,16 @@ def main(args):
     )
 
     parser.add_argument(
-        "--update_year", help="Overwrite data for only this single year (e.g. 2015)."
+        "--update_year",
+        help=(
+            "YYYY (int): Overwrite data for only this single year (e.g. 2015)."
+            "example --update_year 2015"
+        ),
+        type=int,
     )
 
     parser.add_argument(
-        "--year_str_fname_indices",
+        "--yyyymm_str_fname_indices",
         "-ys",
         help=(
             "int int : negative indices from end of L2 file name or path which point to the "
@@ -587,7 +669,7 @@ def main(args):
     # 3) Build data_set dict
     data_set = {
         "dataset": args.dataset,
-        "year_str_fname_indices": args.year_str_fname_indices,
+        "yyyymm_str_fname_indices": args.yyyymm_str_fname_indices,
         "mission": args.mission,
         "grid_name": args.gridarea,
         "area_filter": args.area,
