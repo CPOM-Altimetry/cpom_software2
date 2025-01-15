@@ -34,3 +34,19 @@ bin_size: 5000                  # int: Grid bin size in m, example: 5000
 grid_output_dir:  /cpnet/altimetry/landice/gridded_altimetry       
                                 # Path of grid output dir containing parquets that is created
                                 # <grid_output_dir>/<mission>/<grid_name>_<binsize/1000>km_<dataset>
+
+partition_by_month: False
+# If set to True, the Parquet dataset will be partitioned by both year and month
+# (in addition to the coarser spatial partitions defined below). This results in a folder
+# hierarchy such as year=YYYY/month=MM/x_part=.../y_part=... . Note that finer partitioning
+# (i.e. by month) may significantly increase the number of output files, which can increase
+# write times and, for very large datasets, potentially affect read performance depending
+# upon the query types.
+
+partition_xy_chunking: 20
+# This parameter sets the chunking factor for spatial partitioning.
+# Individual grid cells (identified by x_bin and y_bin) are grouped into larger partitions 
+# by dividing them by this factor. For example, a value of 20 means that the coarser partition 
+# columns (x_part, y_part) will be computed as x_bin//20 and y_bin//20.
+# Adjust this value to control the trade-off between file size and number of partitions.
+

@@ -30,7 +30,7 @@ Example usage:
        --lon longitude \
        --elev elevation \
        --power backscatter \
-       --time time
+       --time time \
 
 2) Update year 2015 only:
    python grid_altimetry_data.py --update_year 2015 --binsize 5e3 --area greenland_is \
@@ -46,13 +46,10 @@ Example usage:
        --time time
 
 # TODO
-- add month column?
 - Check time parameter
 - Check x,y params - should they be diffs
 - Check direction param
-- add meta data to grid directory
 
-remove load_processed_files(), etc. No need to do this any more.
 
 """
 
@@ -117,6 +114,7 @@ def grid_dataset(
                 "time_param": str,  # time parameter in netcdf. / for groups
                 "max_files": int,  # limit to this number of input files ingested
                 "grid_output_dir": str,  # base path of grid output dir to be created or updated
+                "partition_by_month": bool, # if True partition parquet files by year AND month
             }
         regrid (bool) : if True remove any previous grid parquet and regrid from scratch.
                         if False, then will try updating the year given in update_year
@@ -385,24 +383,28 @@ def grid_dataset(
                 except AttributeError:
                     pass
 
-                # build DataFrame
-                # build DataFrame
-                df = pd.DataFrame(
-                    {
-                        "year": year,
-                        "month": month,
-                        "x_bin": x_bin,
-                        "y_bin": y_bin,
-                        "xi": x_valid,
-                        "yi": y_valid,
-                        "elevation": elev_valid,
-                        "power": pwr_valid,
-                        "ascending": ascending_locs,
-                        "time": time_valid,
-                    }
-                )
-                df["x_part"] = df["x_bin"] // 20
-                df["y_part"] = df["y_bin"] // 20
+                # Build the base dictionary that is always included
+                data_dict = {
+                    "year": year,  # 'year' comes from your outer loop variable (an int)
+                    "x_bin": x_bin,
+                    "y_bin": y_bin,
+                    "xi": x_valid,
+                    "yi": y_valid,
+                    "elevation": elev_valid,
+                    "power": pwr_valid,
+                    "ascending": ascending_locs,
+                    "time": time_valid,
+                }
+
+                # Conditionally add the 'month' key if partitioning by month is enabled
+                if data_set["partition_by_month"]:
+                    data_dict["month"] = month
+
+                # Build the DataFrame
+                df = pd.DataFrame(data_dict)
+
+                df["x_part"] = df["x_bin"] // data_set["partition_xy_chunking"]
+                df["y_part"] = df["y_bin"] // data_set["partition_xy_chunking"]
 
                 year_rows.append(df)
 
@@ -422,10 +424,16 @@ def grid_dataset(
         )
 
         arrow_table = pa.Table.from_pandas(year_df)
+
+        if data_set["partition_by_month"]:
+            partition_cols = ["year", "month", "x_part", "y_part"]
+        else:
+            partition_cols = ["year", "x_part", "y_part"]
+
         pq.write_to_dataset(
             table=arrow_table,
             root_path=output_dir,
-            partition_cols=["year", "month", "x_part", "y_part"],
+            partition_cols=partition_cols,
             use_dictionary=True,
             compression="snappy",
             existing_data_behavior="delete_matching",
@@ -580,6 +588,37 @@ def main(args):
     )
 
     parser.add_argument(
+        "--partition_by_month",
+        "-pm",
+        help=(
+            "If set to True, the Parquet dataset will be partitioned by both year and month"
+            " (in addition to the coarser spatial partitions defined below). "
+            "This results in a folder hierarchy such as year=YYYY/month=MM/x_part=.../y_part=..."
+            "  . Note that finer partitioning (i.e. by month) may significantly increase the number"
+            "  of output files, which can increase write times and, for very large datasets,"
+            " write times and, for very large datasets, potentially affect read performance "
+            "depending upon the query types."
+        ),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--partition_xy_chunking",
+        "-px",
+        help=(
+            "This parameter sets the chunking factor for spatial partitioning. "
+            "Individual grid cells (identified by x_bin and y_bin) are grouped into larger "
+            "partitions by dividing them by this factor. For example, a value of 20 means"
+            " that the coarser partition columns (x_part, y_part) will be computed as x_bin//20 "
+            "and y_bin//20. Adjust this value to control the trade-off between file size and "
+            "number of partitions.."
+        ),
+        required=False,
+        default=20,
+    )
+
+    parser.add_argument(
         "--power_param",
         "-power",
         help=(
@@ -683,6 +722,8 @@ def main(args):
         "time_param": args.time_param,
         "max_files": args.max_files,
         "grid_output_dir": args.output_dir,
+        "partition_by_month": args.partition_by_month,
+        "partition_xy_chunking": args.partition_xy_chunking,
     }
 
     # 4) Run gridding in the chosen mode
