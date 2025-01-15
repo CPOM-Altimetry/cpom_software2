@@ -858,6 +858,7 @@ class Polarplot:
             if ".png" != plot_filename[-4:]:
                 plot_filename += ".png"
             log.info("Saving plot to %s at %d dpi", plot_filename, dpi)
+            print(f"Saving plot to: {plot_filename} at {dpi} dpi")
             plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
 
         else:
