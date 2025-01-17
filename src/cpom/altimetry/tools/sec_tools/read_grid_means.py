@@ -194,6 +194,17 @@ def main():
         type=int,
     )
 
+    parser.add_argument(
+        "--plot_to_file",
+        "-pf",
+        help=(
+            "filename: instead of plotting to current display, plot to a named file"
+            "example: --plot_to_file /tmp/test.png"
+        ),
+        required=False,
+        type=str,
+    )
+
     args = parser.parse_args()
 
     # ----------------------------------------------------------------------------------------------
@@ -310,7 +321,7 @@ def main():
         }
         Polarplot(config["area_filter"]).plot_points(
             dataset_for_plot,
-            # output_dir="/tmp"
+            output_dir=None if not args.plot_to_file else args.plot_to_file,
         )
 
 
