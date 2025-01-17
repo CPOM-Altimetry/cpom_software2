@@ -46,9 +46,9 @@ Example usage:
        --time time
 
 # TODO
-- Check time parameter
 - Check x,y params - should they be diffs
 - Check direction param
+- Check other params required?
 
 
 """
@@ -67,6 +67,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
+from cpom.altimetry.datasets.altdatasets import AltDataset
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -176,6 +177,7 @@ def grid_dataset(
     # ----------------------------------------------------------------------
     grid = GridArea(data_set["grid_name"], data_set["bin_size"])
     thisarea = Area(data_set["area_filter"])
+    this_dataset = AltDataset(data_set["dataset"])
 
     log.info("grid specification=%s", data_set["grid_name"])
 
@@ -344,6 +346,9 @@ def grid_dataset(
                     pass
 
                 # time parameter
+                #    - Note a constant is added to the returned time in seconds from
+                #      data_set["time_secs_to_1950"] so that all times are referenced to
+                #      00:00 1/1/1950
                 #    - CryoTEMPO units of time are UTC seconds since 00:00:00 1-Jan-2000
                 #    - S3 Thematic LI, time_20_ku:units = "seconds since 2000-01-01 00:00:00.0" ;
                 #    - FDGR4ALT: expert/time:units = "seconds since 1950-01-01 00 :00 :00.00 " ;
@@ -355,7 +360,12 @@ def grid_dataset(
                     files_rejected += 1
                     continue
 
+                # Add the time constant so that times are referenced to 00:00 1/1/1950
                 time_data += data_set["time_secs_to_1950"]
+
+                # Direction parameter (nadir ascending/descending) at each measurement point
+
+                ascending_points = this_dataset.find_measurement_directions(nc)
 
                 # combine mask
                 bool_mask = bool_mask & np.isfinite(elevs) & np.isfinite(pwr)
@@ -371,22 +381,13 @@ def grid_dataset(
                 elev_valid = elevs[bool_mask]
                 pwr_valid = pwr[bool_mask]
                 time_valid = time_data[bool_mask]
+                ascending_valid = ascending_points[bool_mask]
 
                 # bin
-                x_bin = ((x_valid - grid.minxm) / grid.binsize).astype(int)
-                y_bin = ((y_valid - grid.minym) / grid.binsize).astype(int)
+                # x_bin = ((x_valid - grid.minxm) / grid.binsize).astype(int)
+                # y_bin = ((y_valid - grid.minym) / grid.binsize).astype(int)
 
-                # ascending logic
-                ascending_locs = np.ones_like(x_valid, dtype=bool)
-                try:
-                    if nc.ascending_start_record == "None" and nc.descending_start_record != "None":
-                        ascending_locs[:] = False
-                    elif (
-                        nc.descending_start_record == "None" and nc.ascending_start_record != "None"
-                    ):
-                        ascending_locs[:] = True
-                except AttributeError:
-                    pass
+                x_bin, y_bin = grid.get_col_row_from_x_y(x_valid, y_valid)
 
                 # Build the base dictionary that is always included
                 data_dict = {
@@ -397,7 +398,7 @@ def grid_dataset(
                     "yi": y_valid,
                     "elevation": elev_valid,
                     "power": pwr_valid,
-                    "ascending": ascending_locs,
+                    "ascending": ascending_valid,
                     "time": time_valid,
                 }
 
