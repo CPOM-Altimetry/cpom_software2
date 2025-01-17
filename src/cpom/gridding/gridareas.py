@@ -365,6 +365,31 @@ class GridArea:
             self.minym + row * self.binsize + (self.halfbinsize)
         )
 
+    def get_xy_relative_to_cellcentres(
+        self, x: Union[float, np.ndarray], y: Union[float, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Returns the offsets in x and y from the centers of the grid cells
+        that the input x,y points are located in.
+
+        Args:
+            x (Union[float, np.ndarray]): The x-coordinate or an array of x-coordinates.
+            y (Union[float, np.ndarray]): The y-coordinate or an array of y-coordinates.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: A tuple containing the x and y offsets from the
+            center of the grid cell that each input x,y point is located in.
+            If inputs are scalars, the outputs will be scalar arrays.
+        """
+        # 1. Get integer grid column and row for each x,y
+        col, row = self.get_col_row_from_x_y(x, y)
+
+        # 2. Compute the offsets from the cell center
+        offset_x = x - (self.minxm + col * self.binsize + self.halfbinsize)
+        offset_y = y - (self.minym + row * self.binsize + self.halfbinsize)
+
+        return offset_x, offset_y
+
     def transform_x_y_to_lat_lon(self, x, y):
         """
         returns latitude and longitude E of cell centre from the arrays of x,y

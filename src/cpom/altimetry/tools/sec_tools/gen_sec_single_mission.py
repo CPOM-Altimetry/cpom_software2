@@ -19,12 +19,17 @@ gen_sec_single_mission.py --rcf tests/rcfs/ant_cs2_cryotempo_c.rcf -rp
 ```
 This took: ~5 hrs (MSSLXBD server), using ~ 10GB RAM
 
+# TODO
+
+Add timing
+
 """
 
 import argparse
 import logging
 import os
 import sys
+import time
 
 import yaml
 
@@ -38,6 +43,7 @@ def main(args):
     """
     Main entry point for the script.
     """
+
     parser = argparse.ArgumentParser(
         description=(
             "Controller for generating single mission surface elevation change (SEC) data. "
@@ -134,12 +140,22 @@ def main(args):
     # ----------------------------------------------------------------------------------------------
 
     if args.regrid_mission or args.update_year:
+
+        start_time = time.time()  # Record the start time
+
         grid_dataset(
             config,
             regrid=args.regrid_mission,
             update_year=args.update_year,
             confirm_regrid=not args.no_confirm,
         )
+
+        end_time = time.time()  # Record the end time
+        elapsed_time = end_time - start_time
+        # Convert elapsed time to HH:MM:SS
+        hours, remainder = divmod(int(elapsed_time), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        log.info("Elapsed time for gridding: %02d:%02d:%02d", hours, minutes, seconds)
     else:
         log.info("No gridding options chosen")
 

@@ -3,17 +3,21 @@
 """
 cpom.altimetry.tools.sec_tools.read_grid_means.py
 
-Purpose
--------
+# Purpose
+
 Example tool to read partitioned parquet files produced by the revised
 grid_altimetry_data.py (which partitions by [year, x_part, y_part])
 and calculate the mean elevation in each 5km grid cell.
 Optionally, plot all years, per-year, or a single specified year.
+
+# TODO
+
 """
 
 import argparse
 import json
 import os
+import time
 
 import duckdb
 import pandas as pd
@@ -236,6 +240,8 @@ def main():
             "dataset": "cryotempo_c001",
         }
 
+    start_time = time.time()  # Record the start time
+
     # ----------------------------------------------------------------------------------------------
     # 2) Construct the path to your partitioned dataset
     # ----------------------------------------------------------------------------------------------
@@ -292,6 +298,14 @@ def main():
     df_means["lat_center"] = lat_arr
     df_means["lon_center"] = lon_arr
 
+    end_time = time.time()  # Record the end time
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to HH:MM:SS
+    hours, remainder = divmod(int(elapsed_time), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    print(f"Elapsed time: {hours:02}:{minutes:02}:{seconds:02}")
+
     # ----------------------------------------------------------------------------------------------
     # 6) Example: Plot the data as points using Polarplot
     # ----------------------------------------------------------------------------------------------
@@ -318,6 +332,7 @@ def main():
             "lons": df_means["lon_center"].values,
             "vals": df_means["mean_elev"].values,
             "name": plot_name,
+            "plot_size_scale_factor": 0.1,
         }
         Polarplot(config["area_filter"]).plot_points(
             dataset_for_plot,

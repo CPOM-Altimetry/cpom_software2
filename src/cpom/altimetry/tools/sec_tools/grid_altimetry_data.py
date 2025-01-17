@@ -46,8 +46,7 @@ Example usage:
        --time time
 
 # TODO
-- Check x,y params - should they be diffs
-- Check direction param
+- direction (ascending) calc for other missions
 - Check other params required?
 
 
@@ -60,6 +59,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 
 import numpy as np
 import pandas as pd
@@ -124,6 +124,8 @@ def grid_dataset(
                             data set is overwritten.
 
     """
+
+    start_time = time.time()  # Record the start time
 
     if not regrid and update_year is None:
         log.error("update_year must be provided if regrid is False")
@@ -387,15 +389,20 @@ def grid_dataset(
                 # x_bin = ((x_valid - grid.minxm) / grid.binsize).astype(int)
                 # y_bin = ((y_valid - grid.minym) / grid.binsize).astype(int)
 
+                # Get the nKm grid cell indices for the track x,y locations
                 x_bin, y_bin = grid.get_col_row_from_x_y(x_valid, y_valid)
+
+                # Store the difference to cell centre, rather than actual x,y
+                # Get the x,y offsets from grid point center coordinates
+                xoffset, yoffset = grid.get_xy_relative_to_cellcentres(x_valid, y_valid)
 
                 # Build the base dictionary that is always included
                 data_dict = {
                     "year": year,  # 'year' comes from your outer loop variable (an int)
                     "x_bin": x_bin,
                     "y_bin": y_bin,
-                    "xi": x_valid,
-                    "yi": y_valid,
+                    "x_cell_offset": xoffset,
+                    "y_cell_offset": yoffset,
                     "elevation": elev_valid,
                     "power": pwr_valid,
                     "ascending": ascending_valid,
@@ -465,6 +472,15 @@ def grid_dataset(
     data_set["grid_crs"] = grid.coordinate_reference_system
     data_set["grid_x_size"] = grid.grid_x_size
     data_set["grid_y_size"] = grid.grid_y_size
+
+    end_time = time.time()  # Record the end time
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to HH:MM:SS
+    hours, remainder = divmod(int(elapsed_time), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    data_set["gridding_time"] = f"{hours:02}:{minutes:02}:{seconds:02}"
 
     meta_json_path = os.path.join(output_dir, "grid_meta.json")
     try:
