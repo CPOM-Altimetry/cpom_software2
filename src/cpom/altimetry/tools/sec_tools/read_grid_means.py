@@ -321,7 +321,7 @@ def main():
         }
         Polarplot(config["area_filter"]).plot_points(
             dataset_for_plot,
-            output_dir=None if not args.plot_to_file else args.plot_to_file,
+            output_file=None if not args.plot_to_file else args.plot_to_file,
         )
 
 
