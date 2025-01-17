@@ -13,6 +13,8 @@ Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of
 History:
 Updated 24/09/21 by Lin Gilbert to use pyproj CRS rather than Proj
 """
+from typing import Tuple, Union
+
 import numpy as np
 from pyproj import CRS, Transformer  # co-ord transforms and definitions
 
@@ -302,18 +304,32 @@ class GridArea:
     def get_ncols_nrows(self):
         """
         returns the number of grid columns (x) and rows (y) for a given bin size in m
+
+        Returns:
+            ncols, nrows (int,int): number of grid columns (x) and rows (y)
         """
 
         ncols = int(self.grid_x_size / self.binsize)
         nrows = int(self.grid_y_size / self.binsize)
         return ncols, nrows
 
-    def get_col_row_from_x_y(self, x, y):
+    def get_col_row_from_x_y(
+        self, x: Union[float, np.ndarray], y: Union[float, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        returns the grid column and row for a given x,y and bin size in m
+        Returns the grid column and row indices for a given x, y coordinate
+        or arrays of coordinates, based on the specified bin size.
+
+        Args:
+            x (Union[float, np.ndarray]): The x-coordinate or an array of x-coordinates.
+            y (Union[float, np.ndarray]): The y-coordinate or an array of y-coordinates.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: A tuple containing the column (ii) and row (jj) indices.
+            If inputs are scalars, the outputs will be scalar arrays.
         """
-        ii = int(np.floor((x - self.minxm) / self.binsize))
-        jj = int(np.floor((y - self.minym) / self.binsize))
+        ii = (np.floor((x - self.minxm) / self.binsize)).astype(int)
+        jj = (np.floor((y - self.minym) / self.binsize)).astype(int)
         return ii, jj
 
     def get_cellcentre_x_y_from_col_row(self, col, row):

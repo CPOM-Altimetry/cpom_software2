@@ -11,7 +11,7 @@ mission: cs2 # e1, e2, ev, s3a, s3b, cs2
 # Data Set Parameters
 # ------------------------------------------------------------------------------------
 
-dataset: cryotempo_c001 # cryotempo_c001, fdgr4alt, etc
+dataset: cryotempo_li # cryotempo_li, fdgr4alt, etc
 #l2_directory: ${CPDATA_DIR}/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/ANTARC # str: base directory 
 l2_directory: /raid5/cryo-tempo/product_baselines/C/001/LAND_ICE/ANTARC
                                 # to resursively search for L2 files using search_pattern below
