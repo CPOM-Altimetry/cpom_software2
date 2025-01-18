@@ -3,8 +3,8 @@
 """
 cpom.altimetry.tools.sec_tools.grid_altimetry_data.py
 
-Purpose
--------
+# Purpose
+
 Grid altimetry data for SEC (model fit) processing,
 storing each measurement in a partitioned Parquet dataset, 
 partitioned by (year, x_part, y_part).
@@ -17,8 +17,8 @@ Supported modes:
 
 If neither is provided, the script exits with a usage message.
 
-Example usage:
---------------
+# Example usage:
+
 1) Full regrid (5km grid):
    python grid_altimetry_data.py --regrid --binsize 5e3 --area greenland_is \
        -o /cpnet/altimetry/landice/gridded_altimetry -g greenland \
@@ -48,7 +48,6 @@ Example usage:
 # TODO
 - direction (ascending) calc for other missions
 - Check other params required?
-
 
 """
 
