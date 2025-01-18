@@ -50,6 +50,7 @@ def find_all_xpart_ypart(input_dir: str) -> set[tuple[int, int]]:
     combos = set()
 
     for d in all_dirs:
+        print(d)
         # Typically d ends with something like ".../x_part=12/y_part=7"
         # Parse out the x_part=? and y_part=? values
         base = os.path.basename(d)  # e.g. "y_part=7"
