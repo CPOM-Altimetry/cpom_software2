@@ -6,6 +6,7 @@ surface_fit.py
 Purpose:
   - Takes a "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM.
   - Reads each chunk, groups by (x_bin, y_bin), computes mean(elevation).
+  - Logs progress as it goes, printing a percentage.
   - At the end, plots the resulting mean-elevation grid in a polar stereographic map,
     using cpom.areas.area_plot.Polarplot.
 
@@ -40,12 +41,11 @@ def compute_mean_elevation_per_cell(data_set: dict):
       x_part=NN/y_part=MM/data.parquet
     to compute mean(elevation) in each actual grid cell (x_bin, y_bin).
 
-    - Loops over each partition subdirectory.
-    - Groups by (x_bin, y_bin) in memory.
-    - Aggregates to get mean elevation.
+    - First, gather all chunk paths (parquet files) in a list.
+    - Then iterate over each chunk, grouping by (x_bin, y_bin) to compute mean.
 
-    Returns a final pandas DataFrame with columns:
-      [x_bin, y_bin, mean_elev, x_part, y_part]
+    Returns:
+      (final_df, grid_object, grid_meta_dict)
     """
     start_time = time.time()
 
@@ -58,19 +58,22 @@ def compute_mean_elevation_per_cell(data_set: dict):
     if os.path.exists(meta_json):
         with open(meta_json, "r", encoding="utf-8") as f:
             grid_meta = json.load(f)
+
     else:
         grid_meta = {}
         log.warning("No grid_meta.json found in %s.", grid_dir)
 
-    # We'll use grid info if it exists
+    # Build a GridArea object if info is available
     grid = None
     if "grid_name" in grid_meta and "bin_size" in grid_meta:
         grid = GridArea(grid_meta["grid_name"], grid_meta["bin_size"])
         grid.info()
 
-    results_all = []  # store chunk-level aggregates
-
-    # Discover all x_part, y_part subdirectories
+    # --------------------------------------------------------------------------
+    # 1) Discover all chunk paths in a single pass, so we can track progress
+    #    Typically:  <grid_dir>/x_part=NN/y_part=MM/data.parquet
+    # --------------------------------------------------------------------------
+    all_chunk_paths = []
     x_part_dirs = glob.glob(os.path.join(grid_dir, "x_part=*"))
     if not x_part_dirs:
         log.error("No x_part=* directories found in %s", grid_dir)
@@ -87,13 +90,10 @@ def compute_mean_elevation_per_cell(data_set: dict):
             continue
 
         y_part_dirs = glob.glob(os.path.join(x_part_dir, "y_part=*"))
-        if not y_part_dirs:
-            log.warning("No y_part directories inside %s", x_part_dir)
-            continue
-
         for y_part_dir in sorted(y_part_dirs):
             if not os.path.isdir(y_part_dir):
                 continue
+
             y_part_name = os.path.basename(y_part_dir)  # e.g. "y_part=3"
             try:
                 y_part_val = int(y_part_name.split("=")[1])
@@ -101,35 +101,54 @@ def compute_mean_elevation_per_cell(data_set: dict):
                 log.warning("Skipping invalid y_part directory: %s", y_part_dir)
                 continue
 
-            parquet_path = os.path.join(y_part_dir, "data.parquet")
-            if not os.path.isfile(parquet_path):
-                log.info("No data.parquet in %s, skipping", y_part_dir)
-                continue
+            parquet_file = os.path.join(y_part_dir, "data.parquet")
+            if os.path.isfile(parquet_file):
+                all_chunk_paths.append((x_part_val, y_part_val, parquet_file))
 
-            log.info(
-                "Processing chunk: x_part=%d, y_part=%d => %s", x_part_val, y_part_val, parquet_path
-            )
-            df_chunk = pd.read_parquet(parquet_path)
-            if df_chunk.empty:
-                log.debug("No rows in %s", parquet_path)
-                continue
+    if not all_chunk_paths:
+        log.warning("No parquet data files found in any partition.")
+        return pd.DataFrame(), grid, grid_meta
 
-            # Group by actual grid cell, compute mean of 'elevation'
-            grouped = df_chunk.groupby(["x_bin", "y_bin"], as_index=False)
-            agg_df = grouped["elevation"].mean(numeric_only=True)
-            agg_df.rename(columns={"elevation": "mean_elev"}, inplace=True)
+    log.info("Found %d chunk files to process.", len(all_chunk_paths))
 
-            # Keep track of which chunk these belong to (optional)
-            agg_df["x_part"] = x_part_val
-            agg_df["y_part"] = y_part_val
+    # --------------------------------------------------------------------------
+    # 2) Loop over all chunk paths, computing mean(elevation)
+    # --------------------------------------------------------------------------
+    results_all = []
+    total_chunks = len(all_chunk_paths)
+    for i, (x_part_val, y_part_val, parquet_path) in enumerate(all_chunk_paths, start=1):
+        # Calculate progress
+        progress_pct = 100.0 * i / total_chunks
+        log.info(
+            "Processing chunk %d/%d (%.1f%%): x_part=%d, y_part=%d => %s",
+            i,
+            total_chunks,
+            progress_pct,
+            x_part_val,
+            y_part_val,
+            parquet_path,
+        )
 
-            results_all.append(agg_df)
+        df_chunk = pd.read_parquet(parquet_path)
+        if df_chunk.empty:
+            log.debug("No rows in %s", parquet_path)
+            continue
+
+        # Group by actual grid cell, compute mean of 'elevation'
+        grouped = df_chunk.groupby(["x_bin", "y_bin"], as_index=False)
+        agg_df = grouped["elevation"].mean(numeric_only=True)
+        agg_df.rename(columns={"elevation": "mean_elev"}, inplace=True)
+
+        # Keep track of chunk partition (optional)
+        agg_df["x_part"] = x_part_val
+        agg_df["y_part"] = y_part_val
+
+        results_all.append(agg_df)
 
     if not results_all:
-        log.warning("No data found in any partition.")
-        return pd.DataFrame(columns=["x_bin", "y_bin", "mean_elev", "x_part", "y_part"])
+        log.warning("No data from any chunk.")
+        return pd.DataFrame(), grid, grid_meta
 
-    # Combine the chunk-level results into one final DataFrame
     final_df = pd.concat(results_all, ignore_index=True)
     log.info("Concatenated results: %d total rows.", len(final_df))
 
@@ -144,17 +163,15 @@ def attach_xy_latlon(df: pd.DataFrame, grid: GridArea) -> pd.DataFrame:
     Attach x_center, y_center, lat_center, lon_center columns to a DataFrame
     that has [x_bin, y_bin].
     """
-    if df.empty:
+    if df.empty or grid is None:
         return df
 
-    # Compute the center of each bin.
-    # e.g. x_center = (x_bin * binsize) + (minxm) + (binsize/2)
     x_center = df["x_bin"] * grid.binsize + grid.minxm + (grid.binsize / 2)
     y_center = df["y_bin"] * grid.binsize + grid.minym + (grid.binsize / 2)
+
     df["x_center"] = x_center
     df["y_center"] = y_center
 
-    # Transform to lat/lon
     lat_arr, lon_arr = grid.transform_x_y_to_lat_lon(x_center.values, y_center.values)
     df["lat_center"] = lat_arr
     df["lon_center"] = lon_arr
@@ -162,35 +179,26 @@ def attach_xy_latlon(df: pd.DataFrame, grid: GridArea) -> pd.DataFrame:
     return df
 
 
-def plot_mean_elevation(df: pd.DataFrame, grid_meta: dict, plot_file: str | None = None):
+def plot_mean_elevation(df: pd.DataFrame, grid_meta: dict, plot_file: str = ""):
     """
     Simple example: plot the mean_elev as point data using Polarplot.
     """
-
     if df.empty:
         print("No data to plot.")
         return
 
     area_name = grid_meta.get("area_filter", "antarctica_is")  # fallback if missing
-    # Build the dataset dict expected by Polarplot
     dataset_for_plot = {
         "lats": df["lat_center"].values,
         "lons": df["lon_center"].values,
         "vals": df["mean_elev"].values,
         "name": "Mean Elevation (all cells)",
-        # Optional: control marker size
         "plot_size_scale_factor": 0.1,
     }
 
     print(f"Plotting mean elevation for {len(df)} grid cells.")
-    # If you have a 'Polarplot' for antarctica, greenland, etc.:
     polar = Polarplot(area_name)
-
-    # plot_points can take an optional output filename
-    if plot_file:
-        polar.plot_points(dataset_for_plot, output_file=plot_file)
-    else:
-        polar.plot_points(dataset_for_plot)
+    polar.plot_points(dataset_for_plot, output_file=plot_file)
     if plot_file:
         print(f"Saved plot to: {plot_file}")
 
@@ -199,7 +207,8 @@ def main(args):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compute mean(elevation) per grid cell from a 'compacted' Parquet dataset, and plot."
+            "Compute mean(elevation) per grid cell from a 'compacted' Parquet dataset, "
+            "logging progress as it goes, and optionally plot using Polarplot."
         )
     )
 
@@ -226,8 +235,8 @@ def main(args):
         "-o",
         help="Optional path to write final aggregated results (e.g. mean elevations).",
         type=str,
-        required=False,
         default=None,
+        required=False,
     )
 
     parser.add_argument(
@@ -279,7 +288,6 @@ def main(args):
 
     if grid_obj is not None:
         df = attach_xy_latlon(df, grid_obj)
-        # Now we have lat_center, lon_center
         plot_mean_elevation(df, grid_meta, plot_file=args.plot_to_file)
     else:
         log.warning("No grid info (grid_obj) available, cannot do lat/lon. Skipping plot.")
