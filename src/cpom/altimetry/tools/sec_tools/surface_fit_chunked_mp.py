@@ -6,16 +6,18 @@ surface_fit_multiprocessing.py
 Purpose:
   - Takes a "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM.
   - Reads each chunk in parallel (multiprocessing), groups by (x_bin, y_bin),
-    computes mean(elevation).
-  - Logs progress as it goes, printing a percentage.
-  - At the end, plots the resulting mean-elevation grid in a polar stereographic map,
-    using cpom.areas.area_plot.Polarplot.
+    computes both:
+       - mean(elevation)
+       - coverage_yrs = (max(time) - min(time)) / (secs in 1 year)
+  - Logs progress, merges data, and then plots a chosen variable (either mean elevation
+    or coverage in years) via cpom.areas.area_plot.Polarplot.
 
 Usage:
     python surface_fit_multiprocessing.py \
         --grid_dir /path/to/compacted_grid \
-        --output_file /path/to/mean_elevations.parquet \
-        --plot_to_file /tmp/mean_elev_plot.png \
+        --output_file /path/to/results.parquet \
+        --plot_to_file /tmp/coverage_plot.png \
+        --plot_var coverage_yrs \
         --max_workers 4
 """
 
@@ -36,25 +38,43 @@ from cpom.logging_funcs.logging import set_loggers
 
 log = logging.getLogger(__name__)
 
+SECONDS_PER_YEAR = 3600.0 * 24.0 * 365.25  # approximate
+
 
 def process_chunk(chunk_info):
     """
     Worker function that processes one chunk:
       - reads data.parquet
       - groups by (x_bin, y_bin)
-      - computes mean(elevation)
+      - computes mean(elevation) and time coverage in years:
+         coverage_yrs = (max(time) - min(time)) / SECONDS_PER_YEAR
+
     Returns a DataFrame with columns:
-      [x_bin, y_bin, mean_elev, x_part, y_part]
+      [x_bin, y_bin, mean_elev, coverage_yrs, x_part, y_part]
     """
     (x_part_val, y_part_val, parquet_path) = chunk_info
     df_chunk = pd.read_parquet(parquet_path)
 
     if df_chunk.empty:
-        return pd.DataFrame(columns=["x_bin", "y_bin", "mean_elev", "x_part", "y_part"])
+        return pd.DataFrame(
+            columns=["x_bin", "y_bin", "mean_elev", "coverage_yrs", "x_part", "y_part"]
+        )
 
+    # Group by (x_bin, y_bin)
     grouped = df_chunk.groupby(["x_bin", "y_bin"], as_index=False)
-    agg_df = grouped["elevation"].mean(numeric_only=True)
-    agg_df.rename(columns={"elevation": "mean_elev"}, inplace=True)
+
+    # We can compute multiple aggregations in one go using .agg():
+    #   mean elevation
+    #   min time
+    #   max time
+    agg_df = grouped.agg(
+        mean_elev=("elevation", "mean"),
+        time_min=("time", "min"),
+        time_max=("time", "max"),
+    ).reset_index(drop=True)
+
+    # Convert coverage in seconds to years
+    agg_df["coverage_yrs"] = (agg_df["time_max"] - agg_df["time_min"]) / SECONDS_PER_YEAR
 
     # Keep track of chunk partition (optional)
     agg_df["x_part"] = x_part_val
@@ -63,7 +83,7 @@ def process_chunk(chunk_info):
     return agg_df
 
 
-def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
+def compute_stats_per_cell(data_set: dict, max_workers: int):
     """
     Process a 'compacted' dataset partitioned by:
       x_part=NN/y_part=MM/data.parquet
@@ -71,6 +91,9 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
 
     Returns:
       (final_df, grid_object, grid_meta_dict)
+
+    Where final_df has columns:
+      [x_bin, y_bin, mean_elev, coverage_yrs, x_part, y_part]
     """
     start_time = time.time()
 
@@ -95,7 +118,7 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
         grid.info()
 
     # --------------------------------------------------------------------------
-    # 1) Discover all chunk paths so we can run them in parallel
+    # 1) Discover all chunk paths
     # --------------------------------------------------------------------------
     all_chunk_paths = []
     x_part_dirs = glob.glob(os.path.join(grid_dir, "x_part=*"))
@@ -141,17 +164,17 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
     # 2) Process each chunk in parallel using ProcessPoolExecutor
     # --------------------------------------------------------------------------
     results_all = []
+    start_parallel = time.time()
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all chunk tasks
         future_map = {}
         for i, chunk_info in enumerate(all_chunk_paths, start=1):
             future = executor.submit(process_chunk, chunk_info)
             future_map[future] = (i, chunk_info)
 
-        # As they complete, gather results
         for future in concurrent.futures.as_completed(future_map):
             i, chunk_info = future_map[future]
             (xp, yp, _) = chunk_info
+
             try:
                 chunk_result = future.result()
             except Exception as e:  # pylint: disable=broad-exception-caught
@@ -161,7 +184,7 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
             # Progress logging
             progress_pct = 100.0 * i / total_chunks
             log.info(
-                "Completed chunk %d/%d (%.1f%%): x_part=%d, y_part=%d, result rows=%d",
+                "Completed chunk %d/%d (%.1f%%): x_part=%d, y_part=%d, rows=%d",
                 i,
                 total_chunks,
                 progress_pct,
@@ -172,6 +195,8 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
             if not chunk_result.empty:
                 results_all.append(chunk_result)
 
+    log.info("Parallel chunk processing time: %.1f sec", (time.time() - start_parallel))
+
     if not results_all:
         log.warning("No data from any chunk (all empty).")
         return pd.DataFrame(), grid, grid_meta
@@ -180,7 +205,7 @@ def compute_mean_elevation_per_cell(data_set: dict, max_workers: int):
     log.info("Concatenated results: %d total rows.", len(final_df))
 
     elapsed = time.time() - start_time
-    log.info("Mean elevation aggregation complete in %.1f sec.", elapsed)
+    log.info("Computation complete in %.1f sec.", elapsed)
 
     return final_df, grid, grid_meta
 
@@ -206,24 +231,36 @@ def attach_xy_latlon(df: pd.DataFrame, grid: GridArea) -> pd.DataFrame:
     return df
 
 
-def plot_mean_elevation(df: pd.DataFrame, grid_meta: dict, plot_file: str = ""):
+def plot_variable(
+    df: pd.DataFrame,
+    grid_meta: dict,
+    var_name: str = "mean_elev",
+    plot_file: str = "",
+):
     """
-    Simple example: plot the mean_elev as point data using Polarplot.
+    Plot a chosen variable (column in df), e.g. "mean_elev" or "coverage_yrs",
+    as points using Polarplot.
     """
     if df.empty:
         log.info("No data to plot.")
+        return
+
+    if var_name not in df.columns:
+        log.error(
+            "Requested plot_var '%s' not found in DataFrame columns: %s", var_name, df.columns
+        )
         return
 
     area_name = grid_meta.get("area_filter", "antarctica_is")  # fallback if missing
     dataset_for_plot = {
         "lats": df["lat_center"].values,
         "lons": df["lon_center"].values,
-        "vals": df["mean_elev"].values,
-        "name": "Mean Elevation (all cells)",
+        "vals": df[var_name].values,
+        "name": var_name,
         "plot_size_scale_factor": 0.1,
     }
 
-    log.info("Plotting mean elevation for %d grid cells.", len(df))
+    log.info("Plotting '%s' for %d grid cells.", var_name, len(df))
     polar = Polarplot(area_name)
     polar.plot_points(dataset_for_plot, output_file=plot_file)
 
@@ -235,8 +272,9 @@ def main(args):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compute mean(elevation) per grid cell from a 'compacted' Parquet dataset, "
-            "using multiprocessing to process chunks in parallel, and optionally plot the results."
+            "Compute mean(elevation) and coverage time in each grid cell from a 'compacted' "
+            "Parquet dataset, using multiprocessing to process chunks in parallel. "
+            "Optionally plot the chosen variable."
         )
     )
 
@@ -261,7 +299,7 @@ def main(args):
     parser.add_argument(
         "--output_file",
         "-o",
-        help="Optional path to write final aggregated results (e.g. mean elevations).",
+        help="Optional path to write final aggregated results (e.g. a Parquet of stats).",
         type=str,
         default=None,
         required=False,
@@ -273,6 +311,17 @@ def main(args):
         help="Output plot to this file (e.g. PNG). If omitted, default is no file output.",
         type=str,
         default=None,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--plot_var",
+        help=(
+            "Which variable to plot: 'mean_elev' or 'coverage_yrs' or other "
+            "columns found in final DF."
+        ),
+        type=str,
+        default="mean_elev",
         required=False,
     )
 
@@ -308,17 +357,16 @@ def main(args):
         "grid_dir": args.grid_dir,
         "output_file": args.output_file,
         "plot_to_file": args.plot_to_file,
+        "plot_var": args.plot_var,
     }
 
-    # 1) Compute mean elevation for each cell in parallel
-    df, grid_obj, grid_meta = compute_mean_elevation_per_cell(
-        data_set, max_workers=args.max_workers
-    )
+    # 1) Compute stats (mean_elev, coverage_yrs) for each cell in parallel
+    df, grid_obj, grid_meta = compute_stats_per_cell(data_set, max_workers=args.max_workers)
 
-    # 2) (Optional) Write the final aggregated results
+    # 2) (Optional) Write the final DataFrame
     if args.output_file and not df.empty:
         df.to_parquet(args.output_file, index=False)
-        log.info("Wrote aggregated mean_elev DataFrame to %s", args.output_file)
+        log.info("Wrote aggregated DataFrame to %s", args.output_file)
 
     # 3) (Optional) Plot using Polarplot
     if df.empty:
@@ -327,7 +375,7 @@ def main(args):
 
     if grid_obj is not None:
         df = attach_xy_latlon(df, grid_obj)
-        plot_mean_elevation(df, grid_meta, plot_file=args.plot_to_file)
+        plot_variable(df, grid_meta, var_name=args.plot_var, plot_file=args.plot_to_file)
     else:
         log.warning("No grid info (grid_obj) available, cannot do lat/lon. Skipping plot.")
 
