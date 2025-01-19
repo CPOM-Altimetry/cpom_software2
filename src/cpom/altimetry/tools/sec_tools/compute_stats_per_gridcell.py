@@ -4,17 +4,25 @@
 cpom.altimetry.tools.sec_tools.compute_stats_per_gridcell.py
 
 Purpose:
-  - Takes a "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM.
-  - Reads each chunk in parallel (multiprocessing), groups by (x_bin, y_bin),
-    computes both:
+  - Works on either:
+     (A) A "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM/data.parquet, or
+     (B) A "year-partitioned" dataset (possibly year=YYYY/month=MM/x_part=NN/y_part=MM/*.parquet),
+       i.e. multiple files per spatial chunk if they span multiple years/months.
+
+  - If the dataset includes a 'partition_index.json' (written by grid_altimetry_data.py),
+    we use that to discover the (x_part, y_part) pairs instead of a big glob. This can
+    dramatically speed up scanning.
+
+  - Reads each spatial chunk in parallel (multiprocessing). Each "chunk" is all files that match a
+    given (x_part, y_part), merges them in memory, then groups by (x_bin, y_bin) to compute both:
        - mean(elevation)
        - coverage_yrs = (max(time) - min(time)) / (secs in 1 year)
-  - Logs progress, merges data, and then plots a chosen variable (either mean elevation
-    or coverage in years) via cpom.areas.area_plot.Polarplot.
+  - Logs progress, merges chunk results, and optionally plots a chosen variable (e.g. mean elevation
+    or coverage in years) using cpom.areas.area_plot.Polarplot.
 
 Usage:
     python compute_stats_per_gridcell.py \
-        --grid_dir /path/to/compacted_grid \
+        --grid_dir /path/to/dataset \
         --output_file /path/to/results.parquet \
         --plot_to_file /tmp/coverage_plot.png \
         --plot_var coverage_yrs \
@@ -29,7 +37,7 @@ import logging
 import os
 import sys
 import time
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -42,39 +50,53 @@ log = logging.getLogger(__name__)
 SECONDS_PER_YEAR = 3600.0 * 24.0 * 365.25  # approximate
 
 
-def process_chunk(chunk_info: Tuple[int, int, str]) -> pd.DataFrame:
-    """Processes a single chunk of partitioned Parquet data.
+def process_chunk(chunk_info: Tuple[int, int, List[str]]) -> pd.DataFrame:
+    """Processes all files for a single spatial chunk (x_part, y_part).
 
-    Reads the Parquet file corresponding to a single spatial partition, then groups
-    by (x_bin, y_bin) to compute:
+    For 'compacted' datasets, this list typically has 1 Parquet file.
+    For 'year-partitioned' datasets, it may contain multiple files
+    (e.g., one per year or month) for the same (x_part, y_part).
 
-    1. mean(elevation)
-    2. coverage_yrs = (max(time) - min(time)) / SECONDS_PER_YEAR
+    We read all files, concatenate them, then group by (x_bin, y_bin) to compute:
+      1. mean(elevation)
+      2. coverage_yrs = (max(time) - min(time)) / SECONDS_PER_YEAR
 
     Args:
-        chunk_info (Tuple[int, int, str]): A 3-element tuple of the form
-            ``(x_part_val, y_part_val, parquet_path)``. The first two integers
-            identify the spatial partition indices, and the string is the path
-            to the Parquet file.
+        chunk_info: A 3-element tuple of the form
+            (x_part_val, y_part_val, list_of_paths).
+          - x_part_val, y_part_val are integers identifying the spatial partition.
+          - list_of_paths is one or more Parquet files for this chunk.
 
     Returns:
         pd.DataFrame: A DataFrame with columns:
-
-        - x_bin (int): The x-bin index of the grid cell.
-        - y_bin (int): The y-bin index of the grid cell.
-        - mean_elev (float): The mean elevation within that cell.
-        - coverage_yrs (float): Time coverage in years, computed as
-          ``(max(time) - min(time)) / SECONDS_PER_YEAR``.
-        - x_part (int): The partition index in x-direction.
-        - y_part (int): The partition index in y-direction.
-
-        If the Parquet file is empty, returns an empty DataFrame with the above columns.
+          - x_bin (int): The x-bin index of the grid cell.
+          - y_bin (int): The y-bin index of the grid cell.
+          - mean_elev (float): The mean elevation within that cell.
+          - coverage_yrs (float): Time coverage in years, i.e.
+            (max(time) - min(time)) / SECONDS_PER_YEAR.
+          - x_part (int): The partition index in x-direction.
+          - y_part (int): The partition index in y-direction.
     """
+    (x_part_val, y_part_val, file_paths) = chunk_info
 
-    (x_part_val, y_part_val, parquet_path) = chunk_info
+    if not file_paths:
+        return pd.DataFrame(
+            columns=["x_bin", "y_bin", "mean_elev", "coverage_yrs", "x_part", "y_part"]
+        )
 
-    df_chunk = pd.read_parquet(parquet_path)
+    # Read and concatenate all Parquet files for this chunk
+    df_list = []
+    for fpath in file_paths:
+        df_part = pd.read_parquet(fpath)
+        if not df_part.empty:
+            df_list.append(df_part)
 
+    if not df_list:
+        return pd.DataFrame(
+            columns=["x_bin", "y_bin", "mean_elev", "coverage_yrs", "x_part", "y_part"]
+        )
+
+    df_chunk = pd.concat(df_list, ignore_index=True)
     if df_chunk.empty:
         return pd.DataFrame(
             columns=["x_bin", "y_bin", "mean_elev", "coverage_yrs", "x_part", "y_part"]
@@ -83,10 +105,10 @@ def process_chunk(chunk_info: Tuple[int, int, str]) -> pd.DataFrame:
     # Group by (x_bin, y_bin)
     grouped = df_chunk.groupby(["x_bin", "y_bin"], as_index=False)
 
-    # We can compute multiple aggregations in one go using .agg():
-    #   mean elevation
-    #   min time
-    #   max time
+    # Compute multiple aggregations in one pass:
+    #   mean(elevation)
+    #   min(time)
+    #   max(time)
     agg_df = grouped.agg(
         mean_elev=("elevation", "mean"),
         time_min=("time", "min"),
@@ -103,17 +125,91 @@ def process_chunk(chunk_info: Tuple[int, int, str]) -> pd.DataFrame:
     return agg_df
 
 
+def build_chunk_map_from_partition_index(grid_dir: str) -> Dict[Tuple[int, int], List[str]]:
+    """
+    If partition_index.json is found in grid_dir, read its (x_part, y_part) pairs
+    and build a map of chunk -> list of parquet files by searching only those subpaths.
+
+    Returns dict {(x_part, y_part): [list_of_files]}
+    or an empty dict if something fails.
+    """
+    partition_index_path = os.path.join(grid_dir, "partition_index.json")
+    if not os.path.isfile(partition_index_path):
+        return {}
+
+    log.info("Reading partition_index.json: %s", partition_index_path)
+    with open(partition_index_path, "r", encoding="utf-8") as f_idx:
+        partition_data = json.load(f_idx)
+    xypart_list = partition_data.get("xypart_list", [])
+
+    if not xypart_list:
+        log.warning("partition_index.json is present but empty.")
+        return {}
+
+    chunk_map: Dict[Tuple[int, int], List[str]] = {}
+    # For each (x_part, y_part), gather relevant parquet files
+    # We'll do a small glob for each chunk: "**/x_part=X/y_part=Y/*.parquet"
+    # But this is narrower than a full recursion for everything.
+    for xp, yp in xypart_list:
+        # xp, yp are ints
+        chunk_glob = os.path.join(grid_dir, "**", f"x_part={xp}", f"y_part={yp}", "*.parquet")
+        files_for_chunk = glob.glob(chunk_glob, recursive=True)
+        if files_for_chunk:
+            chunk_map.setdefault((xp, yp), []).extend(files_for_chunk)
+
+    return chunk_map
+
+
+def build_chunk_map_from_glob(grid_dir: str) -> Dict[Tuple[int, int], List[str]]:
+    """
+    Fallback approach: recursively search for "x_part=NN/y_part=MM/*.parquet"
+    under grid_dir, building a dict {(x_part, y_part): list_of_files}.
+    """
+    parquet_files = glob.glob(
+        os.path.join(grid_dir, "**", "x_part=*", "y_part=*", "*.parquet"), recursive=True
+    )
+    if not parquet_files:
+        return {}
+
+    chunk_map: Dict[Tuple[int, int], List[str]] = {}
+    for fpath in parquet_files:
+        path_parts = fpath.split(os.sep)
+        x_part_val, y_part_val = None, None
+        for part in path_parts:
+            if part.startswith("x_part="):
+                try:
+                    x_part_val = int(part.split("=")[1])
+                except ValueError:
+                    pass
+            elif part.startswith("y_part="):
+                try:
+                    y_part_val = int(part.split("=")[1])
+                except ValueError:
+                    pass
+        if x_part_val is None or y_part_val is None:
+            log.warning("Skipping file that lacks x_part,y_part: %s", fpath)
+            continue
+        chunk_map.setdefault((x_part_val, y_part_val), []).append(fpath)
+
+    return chunk_map
+
+
 def compute_stats_per_cell(data_set: dict, max_workers: int):
     """
-    Process a 'compacted' dataset partitioned by:
-      x_part=NN/y_part=MM/data.parquet
-    using multiprocessing to handle multiple chunks in parallel.
+    Gathers all Parquet files under grid_dir, detects (x_part=NN, y_part=MM) from either:
+      - A partition_index.json (if present),
+      - Otherwise does a recursive glob.
+
+    Then groups them so that all files for the same chunk
+    are combined in one worker call. This works for both:
+      - "compacted" layout
+      - "year-partitioned" layout
 
     Returns:
       (final_df, grid_object, grid_meta_dict)
 
     Where final_df has columns:
-      [x_bin, y_bin, mean_elev, coverage_yrs, x_part, y_part]
+      [x_bin, y_bin, mean_elev, coverage_yrs, x_part, y_part].
     """
     start_time = time.time()
 
@@ -122,11 +218,11 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
         log.error("grid directory not found or not a directory: %s", grid_dir)
         sys.exit(1)
 
+    # Attempt to load grid_meta.json if present
     meta_json = os.path.join(grid_dir, "grid_meta.json")
     if os.path.exists(meta_json):
-        with open(meta_json, "r", encoding="utf-8") as f:
-            grid_meta = json.load(f)
-
+        with open(meta_json, "r", encoding="utf-8") as f_obj:
+            grid_meta = json.load(f_obj)
     else:
         grid_meta = {}
         log.warning("No grid_meta.json found in %s.", grid_dir)
@@ -134,82 +230,69 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
     # Build a GridArea object if info is available
     grid = None
     if "grid_name" in grid_meta and "bin_size" in grid_meta:
-        grid = GridArea(grid_meta["grid_name"], grid_meta["bin_size"])
+        grid = GridArea(grid_meta["grid_name"], int(grid_meta["bin_size"]))
         grid.info()
 
     # --------------------------------------------------------------------------
-    # 1) Discover all chunk paths
+    # 1) Attempt to build chunk map from partition_index.json
     # --------------------------------------------------------------------------
-    all_chunk_paths = []
-    x_part_dirs = glob.glob(os.path.join(grid_dir, "x_part=*"))
-    if not x_part_dirs:
-        log.error("No x_part=* directories found in %s", grid_dir)
+    chunk_map = build_chunk_map_from_partition_index(grid_dir)
+
+    if chunk_map:
+        log.info(
+            "Using partition_index.json. Found %d (x_part,y_part) combos from index.",
+            len(chunk_map),
+        )
+    else:
+        # Fallback: do the full glob
+        log.info("No valid partition_index.json or it's empty; falling back to glob scan.")
+        chunk_map = build_chunk_map_from_glob(grid_dir)
+
+    if not chunk_map:
+        log.error("No valid parquet files found (x_part=..., y_part=...). Exiting.")
         sys.exit(1)
 
-    for x_part_dir in sorted(x_part_dirs):
-        if not os.path.isdir(x_part_dir):
-            continue
+    # Build the list for parallel processing
+    all_chunk_info = []
+    for (xp, yp), file_list in chunk_map.items():
+        all_chunk_info.append((xp, yp, file_list))
 
-        x_part_name = os.path.basename(x_part_dir)  # e.g. "x_part=2"
-        try:
-            x_part_val = int(x_part_name.split("=")[1])
-        except ValueError:
-            log.warning("Skipping invalid x_part directory: %s", x_part_dir)
-            continue
-
-        y_part_dirs = glob.glob(os.path.join(x_part_dir, "y_part=*"))
-        for y_part_dir in sorted(y_part_dirs):
-            if not os.path.isdir(y_part_dir):
-                continue
-
-            y_part_name = os.path.basename(y_part_dir)  # e.g. "y_part=3"
-            try:
-                y_part_val = int(y_part_name.split("=")[1])
-            except ValueError:
-                log.warning("Skipping invalid y_part directory: %s", y_part_dir)
-                continue
-
-            parquet_file = os.path.join(y_part_dir, "data.parquet")
-            if os.path.isfile(parquet_file):
-                all_chunk_paths.append((x_part_val, y_part_val, parquet_file))
-
-    total_chunks = len(all_chunk_paths)
+    total_chunks = len(all_chunk_info)
+    log.info("Identified %d unique (x_part,y_part) chunks to process.", total_chunks)
     if total_chunks == 0:
-        log.warning("No parquet data files found in any partition.")
+        log.warning("No chunk data available; returning empty DataFrame.")
         return pd.DataFrame(), grid, grid_meta
 
-    log.info("Found %d chunk files to process in parallel.", total_chunks)
-
     # --------------------------------------------------------------------------
-    # 2) Process each chunk in parallel using ProcessPoolExecutor
+    # 2) Process in parallel
     # --------------------------------------------------------------------------
     results_all = []
     start_parallel = time.time()
+
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_map = {}
-        for i, chunk_info in enumerate(all_chunk_paths, start=1):
+        for i, chunk_info in enumerate(all_chunk_info, start=1):
+            xp, yp, fpaths = chunk_info
             future = executor.submit(process_chunk, chunk_info)
-            future_map[future] = (i, chunk_info)
+            future_map[future] = (i, xp, yp, fpaths)
 
         for future in concurrent.futures.as_completed(future_map):
-            i, chunk_info = future_map[future]
-            (xp, yp, _) = chunk_info
-
+            i, xp, yp, fpaths = future_map[future]
             try:
                 chunk_result = future.result()
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                log.error("Error processing chunk x_part=%d, y_part=%d: %s", xp, yp, e)
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                log.error("Error processing x_part=%d, y_part=%d: %s", xp, yp, err)
                 continue
 
-            # Progress logging
             progress_pct = 100.0 * i / total_chunks
             log.info(
-                "Completed chunk %d/%d (%.1f%%): x_part=%d, y_part=%d, rows=%d",
+                "Completed chunk %d/%d (%.1f%%): x_part=%d, y_part=%d, files=%d, rows=%d",
                 i,
                 total_chunks,
                 progress_pct,
                 xp,
                 yp,
+                len(fpaths),
                 len(chunk_result),
             )
             if not chunk_result.empty:
@@ -218,7 +301,7 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
     log.info("Parallel chunk processing time: %.1f sec", (time.time() - start_parallel))
 
     if not results_all:
-        log.warning("No data from any chunk (all empty).")
+        log.warning("All chunks were empty.")
         return pd.DataFrame(), grid, grid_meta
 
     final_df = pd.concat(results_all, ignore_index=True)
@@ -292,9 +375,10 @@ def main(args):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compute mean(elevation) and coverage time in each grid cell from a 'compacted' "
-            "Parquet dataset, using multiprocessing to process chunks in parallel. "
-            "Optionally plot the chosen variable."
+            "Compute mean(elevation) and coverage time in each grid cell from a partitioned "
+            "Parquet dataset (either 'compacted' or 'year-partitioned'), using multiprocessing. "
+            "Optionally plot the chosen variable. Will use partition_index.json if present "
+            "for fast chunk discovery."
         )
     )
 
@@ -310,7 +394,9 @@ def main(args):
         "--grid_dir",
         "-gd",
         help=(
-            "Path of the 'compacted' grid dir containing parquet files under x_part=NN/y_part=MM."
+            "Path of the dataset directory containing parquet files. "
+            "This can be either 'compacted' (x_part=NN/y_part=MM) or year-partitioned "
+            "(year=YYYY/month=MM/x_part=NN/y_part=MM)."
         ),
         type=str,
         required=True,
