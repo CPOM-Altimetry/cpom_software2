@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-surface_fit_multiprocessing.py
+cpom.altimetry.tools.sec_tools.compute_stats_per_gridcell.py
 
 Purpose:
   - Takes a "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM.
@@ -13,7 +13,7 @@ Purpose:
     or coverage in years) via cpom.areas.area_plot.Polarplot.
 
 Usage:
-    python surface_fit_multiprocessing.py \
+    python compute_stats_per_gridcell.py \
         --grid_dir /path/to/compacted_grid \
         --output_file /path/to/results.parquet \
         --plot_to_file /tmp/coverage_plot.png \
@@ -29,6 +29,7 @@ import logging
 import os
 import sys
 import time
+from typing import Tuple
 
 import pandas as pd
 
@@ -41,18 +42,37 @@ log = logging.getLogger(__name__)
 SECONDS_PER_YEAR = 3600.0 * 24.0 * 365.25  # approximate
 
 
-def process_chunk(chunk_info):
-    """
-    Worker function that processes one chunk:
-      - reads data.parquet
-      - groups by (x_bin, y_bin)
-      - computes mean(elevation) and time coverage in years:
-         coverage_yrs = (max(time) - min(time)) / SECONDS_PER_YEAR
+def process_chunk(chunk_info: Tuple[int, int, str]) -> pd.DataFrame:
+    """Processes a single chunk of partitioned Parquet data.
 
-    Returns a DataFrame with columns:
-      [x_bin, y_bin, mean_elev, coverage_yrs, x_part, y_part]
+    Reads the Parquet file corresponding to a single spatial partition, then groups
+    by (x_bin, y_bin) to compute:
+
+    1. mean(elevation)
+    2. coverage_yrs = (max(time) - min(time)) / SECONDS_PER_YEAR
+
+    Args:
+        chunk_info (Tuple[int, int, str]): A 3-element tuple of the form
+            ``(x_part_val, y_part_val, parquet_path)``. The first two integers
+            identify the spatial partition indices, and the string is the path
+            to the Parquet file.
+
+    Returns:
+        pd.DataFrame: A DataFrame with columns:
+
+        - x_bin (int): The x-bin index of the grid cell.
+        - y_bin (int): The y-bin index of the grid cell.
+        - mean_elev (float): The mean elevation within that cell.
+        - coverage_yrs (float): Time coverage in years, computed as
+          ``(max(time) - min(time)) / SECONDS_PER_YEAR``.
+        - x_part (int): The partition index in x-direction.
+        - y_part (int): The partition index in y-direction.
+
+        If the Parquet file is empty, returns an empty DataFrame with the above columns.
     """
+
     (x_part_val, y_part_val, parquet_path) = chunk_info
+
     df_chunk = pd.read_parquet(parquet_path)
 
     if df_chunk.empty:
@@ -343,7 +363,7 @@ def main(args):
     if args.debug:
         default_log_level = logging.DEBUG
 
-    logfile = "/tmp/surface_fit.log"
+    logfile = "/tmp/compute_stats_per_gridcell.log"
     set_loggers(
         log_file_info=logfile[:-3] + "info.log",
         log_file_warning=logfile[:-3] + "warning.log",
