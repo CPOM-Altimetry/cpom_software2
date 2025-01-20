@@ -10,15 +10,22 @@ Purpose:
        i.e. multiple files per spatial chunk if they span multiple years/months.
 
   - If the dataset includes a 'partition_index.json' (written by grid_altimetry_data.py),
-    we use that to discover the (x_part, y_part) pairs instead of a big glob. This can
-    dramatically speed up scanning.
+    we first check for a list of "entries", where each entry includes
+      { year, month, x_part, y_part, file_path }
+    storing the **exact** Parquet file path for that partition.
+    This lets us skip any directory globbing altogether, which can be slow.
+
+  - Otherwise, if that index is missing or doesn't have "entries",
+    we fallback to a full glob approach: 
+      "**/x_part=*/y_part=*/*.parquet"
 
   - Reads each spatial chunk in parallel (multiprocessing). Each "chunk" is all files that match a
     given (x_part, y_part), merges them in memory, then groups by (x_bin, y_bin) to compute both:
        - mean(elevation)
        - coverage_yrs = (max(time) - min(time)) / (secs in 1 year)
-  - Logs progress, merges chunk results, and optionally plots a chosen variable (e.g. mean elevation
-    or coverage in years) using cpom.areas.area_plot.Polarplot.
+
+  - Logs progress, merges chunk results, and optionally plots a chosen variable
+    (e.g. mean elevation or coverage in years) using cpom.areas.area_plot.Polarplot.
 
 Usage:
     python compute_stats_per_gridcell.py \
@@ -127,35 +134,61 @@ def process_chunk(chunk_info: Tuple[int, int, List[str]]) -> pd.DataFrame:
 
 def build_chunk_map_from_partition_index(grid_dir: str) -> Dict[Tuple[int, int], List[str]]:
     """
-    If partition_index.json is found in grid_dir, read its (x_part, y_part) pairs
-    and build a map of chunk -> list of parquet files by searching only those subpaths.
+    Reads 'partition_index.json' if present, expecting something like:
+       {
+         "entries": [
+            {
+              "year": 2015,
+              "month": 2 or null,
+              "x_part": 12,
+              "y_part": 34,
+              "file_path": "year=2015/month=02/x_part=12/y_part=34/data.parquet"
+            },
+            ...
+         ]
+       }
 
-    Returns dict {(x_part, y_part): [list_of_files]}
-    or an empty dict if something fails.
+    We'll convert each entry into a chunk_map[(x_part,y_part)].append( full_file_path ).
+    That way, we skip any directory globbing entirely.
+
+    Returns:
+      A dict {(x_part, y_part): [absolute or relative parquet paths]}.
+
+    If partition_index.json not found or missing 'entries', returns an empty dict
+    so the caller can fallback to globbing.
     """
     partition_index_path = os.path.join(grid_dir, "partition_index.json")
     if not os.path.isfile(partition_index_path):
         return {}
 
-    log.info("Reading partition_index.json: %s", partition_index_path)
+    log.info("Reading partition_index.json (with full file paths): %s", partition_index_path)
     with open(partition_index_path, "r", encoding="utf-8") as f_idx:
         partition_data = json.load(f_idx)
-    xypart_list = partition_data.get("xypart_list", [])
 
-    if not xypart_list:
-        log.warning("partition_index.json is present but empty.")
+    if "entries" not in partition_data:
+        log.warning("partition_index.json found, but has no 'entries' key.")
+        return {}
+
+    entries = partition_data["entries"]
+    if not entries:
+        log.warning("partition_index.json has empty 'entries'.")
         return {}
 
     chunk_map: Dict[Tuple[int, int], List[str]] = {}
-    # For each (x_part, y_part), gather relevant parquet files
-    # We'll do a small glob for each chunk: "**/x_part=X/y_part=Y/*.parquet"
-    # But this is narrower than a full recursion for everything.
-    for xp, yp in xypart_list:
-        # xp, yp are ints
-        chunk_glob = os.path.join(grid_dir, "**", f"x_part={xp}", f"y_part={yp}", "*.parquet")
-        files_for_chunk = glob.glob(chunk_glob, recursive=True)
-        if files_for_chunk:
-            chunk_map.setdefault((xp, yp), []).extend(files_for_chunk)
+
+    for ent in entries:
+        xp = ent.get("x_part", None)
+        yp = ent.get("y_part", None)
+        file_path_rel = ent.get("file_path", None)
+
+        if xp is None or yp is None or not file_path_rel:
+            # skip invalid entry
+            continue
+
+        # Build the absolute path by joining with grid_dir
+        # (assuming file_path is stored relative to the top-level)
+        full_path = os.path.join(grid_dir, file_path_rel)
+        chunk_map.setdefault((xp, yp), []).append(full_path)
 
     return chunk_map
 
@@ -164,6 +197,9 @@ def build_chunk_map_from_glob(grid_dir: str) -> Dict[Tuple[int, int], List[str]]
     """
     Fallback approach: recursively search for "x_part=NN/y_part=MM/*.parquet"
     under grid_dir, building a dict {(x_part, y_part): list_of_files}.
+
+    This is slower, but handles old archives that lack partition_index.json
+    or have a different structure.
     """
     parquet_files = glob.glob(
         os.path.join(grid_dir, "**", "x_part=*", "y_part=*", "*.parquet"), recursive=True
@@ -186,9 +222,11 @@ def build_chunk_map_from_glob(grid_dir: str) -> Dict[Tuple[int, int], List[str]]
                     y_part_val = int(part.split("=")[1])
                 except ValueError:
                     pass
+
         if x_part_val is None or y_part_val is None:
             log.warning("Skipping file that lacks x_part,y_part: %s", fpath)
             continue
+
         chunk_map.setdefault((x_part_val, y_part_val), []).append(fpath)
 
     return chunk_map
@@ -197,13 +235,14 @@ def build_chunk_map_from_glob(grid_dir: str) -> Dict[Tuple[int, int], List[str]]
 def compute_stats_per_cell(data_set: dict, max_workers: int):
     """
     Gathers all Parquet files under grid_dir, detects (x_part=NN, y_part=MM) from either:
-      - A partition_index.json (if present),
-      - Otherwise does a recursive glob.
+      - A partition_index.json with "entries" (full file_path) [faster if present],
+      - Otherwise does a recursive glob of "**/x_part=*/y_part=*/data.parquet"
 
     Then groups them so that all files for the same chunk
-    are combined in one worker call. This works for both:
-      - "compacted" layout
-      - "year-partitioned" layout
+    are combined in one worker call. This works for:
+      - "compacted" layout (one file per chunk),
+      - "year-partitioned" layout (multiple files per chunk),
+      - or a mix.
 
     Returns:
       (final_df, grid_object, grid_meta_dict)
@@ -234,7 +273,7 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
         grid.info()
 
     # --------------------------------------------------------------------------
-    # 1) Attempt to build chunk map from partition_index.json
+    # 1) Attempt to build chunk map from partition_index.json (with file_path entries)
     # --------------------------------------------------------------------------
     chunk_map = build_chunk_map_from_partition_index(grid_dir)
 
@@ -245,7 +284,7 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
         )
     else:
         # Fallback: do the full glob
-        log.info("No valid partition_index.json or it's empty; falling back to glob scan.")
+        log.info("No valid 'entries' in partition_index.json; falling back to glob scan.")
         chunk_map = build_chunk_map_from_glob(grid_dir)
 
     if not chunk_map:
@@ -395,8 +434,7 @@ def main(args):
         "-gd",
         help=(
             "Path of the dataset directory containing parquet files. "
-            "This can be either 'compacted' (x_part=NN/y_part=MM) or year-partitioned "
-            "(year=YYYY/month=MM/x_part=NN/y_part=MM)."
+            "This can be 'compacted' or 'year-partitioned'."
         ),
         type=str,
         required=True,

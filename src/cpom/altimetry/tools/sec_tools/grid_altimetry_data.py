@@ -17,8 +17,9 @@ Purpose:
 
 Additionally:
   - Maintains a JSON file "partition_index.json" at the top-level Parquet directory,
-    which stores the unique (x_part, y_part) pairs (and optionally year/month if desired).
-    This helps future reading scripts avoid expensive globbing.
+    which stores the unique (year, month, x_part, y_part, file_path) for each partition file.
+    This helps future reading scripts avoid expensive globbing; they can just read
+    partition_index.json to discover which files exist.
 
 Example usage:
   1) Full regrid (5km grid):
@@ -49,12 +50,13 @@ Example usage:
 
 
 Notes / Changes:
-  - We now write "partition_index.json" to the output directory, which tracks the (x_part, y_part)
-    pairs encountered so far. This helps future reads avoid a giant glob scan.
-  - If --partition_by_month is used, you might also store (year, month, x_part, y_part) 
-    in that index for monthly queries. Here, we demonstrate a simpler approach: we only store the 
-    spatial chunks in the index (x_part, y_part). If you also want (year, month), you can adapt 
-    similarly.
+  - Instead of using pq.write_to_dataset(..., partition_cols=...), we manually group each
+    year's DataFrame by (year, [month,], x_part, y_part) and write exactly one .parquet file
+    per partition to a folder like:
+         year=YYYY[/month=MM]/x_part=NNN/y_part=MMM/data.parquet
+  - We record each partition's file path in partition_index.json, including
+    [year, month, x_part, y_part, file_path].
+  - If --partition_by_month is used, we store 'month' in each group; otherwise it's None.
 
 TODO:
   - direction (ascending) calc for other missions
@@ -69,6 +71,7 @@ import os
 import shutil
 import sys
 import time
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -85,11 +88,12 @@ log = logging.getLogger(__name__)
 
 
 def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
-    """Retrieve a variable from NetCDF file, handling groups if necessary.
+    """Retrieve variable from NetCDF file, handling groups if necessary.
 
     Args:
         nc (Dataset): The opened NetCDF dataset
         nc_var_path (str): Path to the variable (e.g. "data/ku/latitude")
+
     Returns:
         Variable: The NetCDF variable object
     """
@@ -100,57 +104,73 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
     return var
 
 
-def update_partition_index(
-    output_dir: str,
-    df: pd.DataFrame,
-    # store_month: bool = False,
-) -> None:
-    """Update or create the partition_index.json file, which records
-    all (x_part, y_part) encountered so far.
+def _ensure_dir(path: str) -> None:
+    """Utility function to ensure a directory exists, create if needed."""
+    if not os.path.isdir(path):
+        os.makedirs(path, exist_ok=True)
 
-    If store_month=True, you'd store (year, month, x_part, y_part) as well.
-    For simplicity, we only store spatial chunk pairs (x_part, y_part).
+
+def update_partition_index_file(
+    index_path: str,
+    new_entries: List[Dict[str, Union[int, str, None]]],
+) -> None:
+    """Update or create the 'partition_index.json' file, storing a list of
+    partition-file entries.
+
+    Each entry is a dict like:
+      {
+        "year": 2015,
+        "month": 3 or None,
+        "x_part": 12,
+        "y_part": 34,
+        "file_path": "year=2015/month=03/x_part=12/y_part=34/data.parquet"
+      }
 
     Args:
-        output_dir (str): The top-level parquet directory (where grid_meta.json is).
-        df (pd.DataFrame): DataFrame with columns: [x_part, y_part, (month)?].
-        store_month (bool): If True, you could store year/month too.
+        index_path (str): Full path to partition_index.json in the output dir.
+        new_entries (List[Dict[str, Union[int, str, None]]]):
+            The new records to add (no duplicates).
+
+    The function merges these entries with any existing ones in the file,
+    deduplicates, and writes out the updated JSON.
     """
-    partition_index_path = os.path.join(output_dir, "partition_index.json")
-
-    # Extract the unique (x_part, y_part) from df
-    unique_xy = df[["x_part", "y_part"]].drop_duplicates()
-    new_pairs = unique_xy.values.tolist()  # list of [x_part, y_part]
-
-    # Load existing partition_index.json (if present)
-    if os.path.isfile(partition_index_path):
-        with open(partition_index_path, "r", encoding="utf-8") as f_idx:
-            partition_data = json.load(f_idx)
+    if os.path.isfile(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            index_data = json.load(f)
     else:
-        # If it doesn't exist yet, create fresh
-        partition_data = {
-            "xypart_list": [],
-        }
+        index_data = {"entries": []}
 
-    existing_pairs = set(tuple(xy) for xy in partition_data["xypart_list"])
+    existing = set()
+    for rec in index_data["entries"]:
+        # We'll define a stable dedup key
+        # e.g. (year, month, x_part, y_part, file_path)
+        y = rec.get("year", None)
+        m = rec.get("month", None)
+        xp = rec.get("x_part", None)
+        yp = rec.get("y_part", None)
+        fp = rec.get("file_path", None)
+        existing.add((y, m, xp, yp, fp))
 
-    # Add the new pairs
-    for xy in new_pairs:
-        existing_pairs.add(tuple(xy))
+    additions = 0
+    for rec in new_entries:
+        key = (
+            rec.get("year"),
+            rec.get("month"),
+            rec.get("x_part"),
+            rec.get("y_part"),
+            rec.get("file_path"),
+        )
+        if key not in existing:
+            index_data["entries"].append(rec)
+            existing.add(key)
+            additions += 1
 
-    # Convert back to a sorted list for stable output
-    updated_list = sorted(list(existing_pairs))
-    partition_data["xypart_list"] = [list(xy) for xy in updated_list]
-
-    # Write updated index back to disk
-    with open(partition_index_path, "w", encoding="utf-8") as f_idx:
-        json.dump(partition_data, f_idx, indent=2)
-
-    log.info(
-        "Updated partition_index.json with %d new (x_part,y_part) chunk pairs (total now %d).",
-        len(new_pairs),
-        len(updated_list),
-    )
+    if additions > 0:
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(index_data, f, indent=2)
+        log.info("Appended %d new entries into partition_index.json", additions)
+    else:
+        log.info("No new entries to add to partition_index.json (all duplicates).")
 
 
 def grid_dataset(
@@ -161,15 +181,14 @@ def grid_dataset(
 ) -> None:
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
-    and store them in a partitioned Parquet dataset by (year, [month,] x_part, y_part).
+    and store them in a partitioned Parquet dataset by (year, [month,], x_part, y_part).
+    Each partition is written as exactly one data.parquet file, and we record
+    that file's path in partition_index.json.
 
     Two modes:
       1) Full regrid => remove entire dataset folder, write all years (or if update_year
          also specified, just that single year).
       2) update_year=YYYY => only overwrite that year partition, keep other years as-is.
-
-    Also maintains a "partition_index.json" listing all (x_part, y_part) chunks
-    so subsequent reads can skip a huge glob.
 
     Args:
         data_set (dict): Dictionary of gridding parameters:
@@ -192,6 +211,7 @@ def grid_dataset(
                 "grid_output_dir": str,
                 "partition_by_month": bool,
                 "partition_xy_chunking": int,
+                "time_secs_to_1950": float,
                 # etc...
             }
         regrid (bool): If True, remove any previous dataset and regrid from scratch.
@@ -263,7 +283,7 @@ def grid_dataset(
 
     log.info("finding matching L2 files from %s/%s", search_dir, pattern)
 
-    matching_files = glob.glob(f"{search_dir}/{pattern}", recursive=True)
+    matching_files = glob.glob(os.path.join(search_dir, pattern), recursive=True)
     if not matching_files:
         log.error("No matching L2 files found in %s/%s", search_dir, pattern)
         sys.exit()
@@ -295,13 +315,11 @@ def grid_dataset(
 
     # Decide which years to process
     if regrid and update_year is not None:
-        # regrid with a single year
         if update_year not in unique_years_list:
             log.error("Requested update_year=%s but no files exist for that year!", update_year)
             sys.exit(1)
         years_to_process = [update_year]
     elif regrid:
-        # regrid => all years
         years_to_process = unique_years_list
     else:
         # update_year => only that year
@@ -320,25 +338,32 @@ def grid_dataset(
     years_ingested = []
     years_files_ingested = []
     years_files_rejected = []
-
     max_files = data_set.get("max_files")
 
-    for year in years_to_process:
+    # We'll gather final row counts for metadata
+    total_rows_for_all_years = 0
+
+    # We'll store new partition index records here
+    partition_index_new_entries = []
+
+    for year_val in years_to_process:
         files_ingested = 0
         files_rejected = 0
-        log.info("Processing year: %d", year)
+        log.info("Processing year: %d", year_val)
 
         # Gather files for this year
-        files_this_year = [fp for fp in matching_files if int(fp[yr_start_idx:yr_end_idx]) == year]
+        files_this_year = [
+            fp for fp in matching_files if int(fp[yr_start_idx:yr_end_idx]) == year_val
+        ]
         if not files_this_year:
-            log.info("No files for year=%d, skipping", year)
+            log.info("No files for year=%d, skipping", year_val)
             continue
 
         n_files_this_year = len(files_this_year)
-        years_ingested.append(year)
+        years_ingested.append(year_val)
         log.info("Number of files found for year: %d", n_files_this_year)
 
-        year_rows = []
+        big_rows_list = []
 
         for n_file, file_path in enumerate(files_this_year):
             if max_files is not None and total_files_ingested >= max_files:
@@ -354,7 +379,7 @@ def grid_dataset(
 
             log.info(
                 "Processing file from %d: %d/%d => %s",
-                year,
+                year_val,
                 n_file + 1,
                 n_files_this_year,
                 file_path,
@@ -423,7 +448,7 @@ def grid_dataset(
                     continue
 
                 # Convert time to reference (e.g. 1950 epoch)
-                time_data += data_set["time_secs_to_1950"]  # user sets in data_set
+                time_data += data_set["time_secs_to_1950"]
 
                 ascending_points = this_dataset.find_measurement_directions(nc)
 
@@ -450,7 +475,7 @@ def grid_dataset(
                 xoffset, yoffset = grid.get_xy_relative_to_cellcentres(x_valid, y_valid)
 
                 data_dict = {
-                    "year": year,
+                    "year": year_val,
                     "x_bin": x_bin,
                     "y_bin": y_bin,
                     "x_cell_offset": xoffset,
@@ -471,56 +496,87 @@ def grid_dataset(
                 df_meas["x_part"] = df_meas["x_bin"] // data_set["partition_xy_chunking"]
                 df_meas["y_part"] = df_meas["y_bin"] // data_set["partition_xy_chunking"]
 
-                year_rows.append(df_meas)
+                big_rows_list.append(df_meas)
 
         years_files_ingested.append(files_ingested)
         years_files_rejected.append(files_rejected)
 
-        if not year_rows:
-            log.info("No data for year=%d", year)
+        if not big_rows_list:
+            log.info("No data for year=%d after filtering", year_val)
             continue
 
-        year_df = pd.concat(year_rows, ignore_index=True)
+        df_year = pd.concat(big_rows_list, ignore_index=True)
         log.info(
-            "Writing year=%d => %d total rows from %d files",
-            year,
-            len(year_df),
+            "Year=%d => total rows = %d from %d files",
+            year_val,
+            len(df_year),
             len(files_this_year),
         )
 
-        # Convert to Arrow
-        arrow_table = pa.Table.from_pandas(year_df)
-
-        # Partition columns
+        # Group the year's data by (year, [month,], x_part, y_part)
+        group_cols = ["year", "x_part", "y_part"]
         if data_set["partition_by_month"]:
-            partition_cols = ["year", "month", "x_part", "y_part"]
-        else:
-            partition_cols = ["year", "x_part", "y_part"]
+            group_cols.insert(1, "month")  # => [year, month, x_part, y_part]
 
-        # Write out to the dataset
-        pq.write_to_dataset(
-            table=arrow_table,
-            root_path=output_dir,
-            partition_cols=partition_cols,
-            use_dictionary=True,
-            compression="snappy",
-            existing_data_behavior="delete_matching",
-        )
+        grouped = df_year.groupby(group_cols, as_index=False)
+        rows_in_this_year = 0
 
-        # ------------------------------------------------------------------
-        # NEW: Update the partition_index.json with (x_part, y_part) from this year
-        # ------------------------------------------------------------------
-        update_partition_index(
-            output_dir=output_dir,
-            df=year_df,
-            # store_month=False,  # or True if you want to also store year/month
-        )
+        for keys, chunk_df in grouped:
+            # keys might be (year, x_part, y_part) or (year, month, x_part, y_part)
+            if data_set["partition_by_month"]:
+                # e.g. (year_val, month_val, xp, yp)
+                if len(keys) == 4:
+                    yv, mv, xp, yp = keys
+                else:
+                    # fallback in case of mismatch
+                    yv, xp, yp = keys
+                    mv = None
+            else:
+                # e.g. (year_val, xp, yp)
+                yv, xp, yp = keys
+                mv = None
 
-        # cleanup
-        del year_df
-        del arrow_table
+            # Build the subdirectory
+            if data_set["partition_by_month"] and mv is not None:
+                # year=YYYY/month=MM/x_part=xxx/y_part=yyy
+                subdir = os.path.join(
+                    output_dir, f"year={yv}", f"month={mv}", f"x_part={xp}", f"y_part={yp}"
+                )
+            else:
+                # year=YYYY/x_part=xxx/y_part=yyy
+                subdir = os.path.join(output_dir, f"year={yv}", f"x_part={xp}", f"y_part={yp}")
 
-    log.info("Partitioned Parquet dataset written to: %s", output_dir)
+            _ensure_dir(subdir)
+            out_file = os.path.join(subdir, "data.parquet")
+
+            # Convert chunk_df to Arrow and write
+            arrow_table = pa.Table.from_pandas(chunk_df)
+            pq.write_table(
+                arrow_table,
+                out_file,
+                compression="snappy",
+            )
+
+            # We'll store an index entry so future reading scripts can skip globbing
+            # Store relative path
+            rel_path = os.path.relpath(out_file, output_dir)
+            index_entry = {
+                "year": int(yv),
+                "month": int(mv) if mv is not None else None,
+                "x_part": int(xp),
+                "y_part": int(yp),
+                "file_path": rel_path,
+            }
+            partition_index_new_entries.append(index_entry)
+            rows_in_this_year += len(chunk_df)
+
+        total_rows_for_all_years += len(df_year)
+
+    # Write or update the partition_index.json
+    index_path = os.path.join(output_dir, "partition_index.json")
+    update_partition_index_file(index_path, partition_index_new_entries)
+
+    log.info("Wrote %d total rows across all processed years.", total_rows_for_all_years)
 
     # ----------------------------------------------------------------------
     # Save data_set dictionary as JSON in the top-level parquet directory
@@ -535,6 +591,7 @@ def grid_dataset(
     data_set["grid_crs"] = grid.coordinate_reference_system
     data_set["grid_x_size"] = grid.grid_x_size
     data_set["grid_y_size"] = grid.grid_y_size
+    data_set["total_rows_ingested"] = total_rows_for_all_years
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -544,8 +601,8 @@ def grid_dataset(
 
     meta_json_path = os.path.join(output_dir, "grid_meta.json")
     try:
-        with open(meta_json_path, "w", encoding="utf-8") as f:
-            json.dump(data_set, f, indent=2)
+        with open(meta_json_path, "w", encoding="utf-8") as f_meta:
+            json.dump(data_set, f_meta, indent=2)
         log.info("Wrote data_set metadata to %s", meta_json_path)
     except OSError as exc:
         log.error("Failed to write grid_meta.json: %s", exc)
@@ -555,9 +612,9 @@ def main(args):
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description=(
-            "Convert altimetry data into partitioned Parquet with ragged layout. "
-            "Supports regridding everything or updating a single year. "
-            "Also maintains a partition_index.json for faster subsequent reads."
+            "Convert altimetry data into partitioned Parquet with ragged layout, storing each "
+            "partition in a single file and recording the path in partition_index.json. "
+            "Supports regridding everything or updating a single year."
         )
     )
 
@@ -565,14 +622,14 @@ def main(args):
     parser.add_argument(
         "--area",
         "-a",
-        help=("Area name for data filtering/masking. Example: greenland_is"),
+        help=("Area name for data filtering/masking of input measurements. Example: greenland_is"),
         required=True,
     )
 
     parser.add_argument(
         "--binsize",
         "-b",
-        help="Grid binsize in m (e.g., 5e3 == 5km).",
+        help="grid binsize in m, default=5e3 == 5km",
         required=True,
         type=float,
     )
@@ -580,63 +637,77 @@ def main(args):
     parser.add_argument(
         "--dataset",
         "-da",
-        help=("String identifying L2 data set: e.g. cryotempo_c001"),
+        help="string identifying L2 data set: valid values are: cryotempo_c001",
         required=True,
     )
 
     parser.add_argument(
         "--debug",
         "-d",
-        help="Output debug log messages to console.",
+        help="Output debug log messages to console",
+        required=False,
         action="store_true",
     )
 
     parser.add_argument(
         "--elevation_param",
         "-elev",
-        help="Name of elevation parameter in L2 netcdf. e.g. data/ku/elevation",
+        help=(
+            "name of elevation parameter to use in L2 netcdf files. If netcdf contains groups, "
+            "use / to separate. example data/ku/elevation"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--gridarea",
         "-g",
-        help="Output grid area specification name (see cpom.gridding.gridareas). e.g. greenland",
+        help=(
+            "output grid area specification name. Valid names in "
+            "cpom.gridding.gridareas.py: GridArea definitions"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--l2_dir",
         "-dir",
-        help="L2 base directory to search for netcdf files, e.g. /cpdata/SATS/RA/CRY/Cryo-TEMPO/",
+        help="L2 base directory to recursively search for L2 files using the search pattern",
         required=True,
     )
 
     parser.add_argument(
         "--lat_param",
         "-lat",
-        help="Name of latitude param in L2 netcdf, e.g. data/ku/latitude",
+        help=(
+            "name of latitude parameter to use in L2 netcdf files. If netcdf contains groups use / "
+            "to separate. example data/ku/latitude"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--lon_param",
         "-lon",
-        help="Name of longitude param in L2 netcdf, e.g. data/ku/longitude",
+        help=(
+            "name of longitude parameter to use in L2 netcdf files. If netcdf contains groups use /"
+            "to separate. example data/ku/longitude"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--max_files",
         "-mf",
-        help="Restrict number of input L2 files (int).",
+        help="Restrict number of input L2 files (int)",
+        required=False,
         type=int,
     )
 
     parser.add_argument(
         "--mission",
         "-mi",
-        help="Mission name: e1, e2, ev, s3a, s3b, cs2, is2 etc.",
+        help=("mission of data set: e1, e2, ev, s3a, s3b, cs2, is2"),
         required=True,
     )
 
@@ -644,8 +715,9 @@ def main(args):
         "--output_dir",
         "-o",
         help=(
-            "Base path to create or update the partitioned Parquet dataset. "
-            "The final directory is <output_dir>/<mission>/<grid_name>_<binsize in km>km_<dataset>"
+            "Base path to create or update the gridded data set Parquet format files. "
+            "The final parquet directory is formed from: <output_dir>/<mission>/"
+            "<grid_name>_<binsize in km>km_<dataset>"
         ),
         required=True,
         type=str,
@@ -655,9 +727,10 @@ def main(args):
         "--partition_by_month",
         "-pm",
         help=(
-            "If set, also partition by month=MM. This creates subdirs "
-            "year=YYYY/month=MM/x_part=NN/y_part=MM."
+            "If set to True, the Parquet dataset will be partitioned by both year and month"
+            " (in addition to coarser spatial partitions)."
         ),
+        required=False,
         action="store_true",
     )
 
@@ -665,16 +738,22 @@ def main(args):
         "--partition_xy_chunking",
         "-px",
         help=(
-            "Chunk factor for x_bin,y_bin grouping. e.g. 20 => x_part=x_bin//20, y_part=y_bin//20."
+            "This parameter sets the chunking factor for spatial partitioning. "
+            "Individual grid cells (identified by x_bin and y_bin) are grouped into larger "
+            "partitions by dividing them by this factor. e.g. 20 => x_part=x_bin//20, "
+            "y_part=y_bin//20."
         ),
+        required=False,
         default=20,
-        type=int,
     )
 
     parser.add_argument(
         "--power_param",
         "-power",
-        help="Name of the backscatter (power) param in L2 netcdf, e.g. data/ku/backscatter",
+        help=(
+            "name of power (backscatter) parameter to use in L2 netcdf files. If netcdf contains "
+            "groups, use / to separate. example data/ku/backscatter"
+        ),
         required=True,
     )
 
@@ -688,20 +767,29 @@ def main(args):
     parser.add_argument(
         "--search_pattern",
         "-pat",
-        help="Glob pattern for L2 file discovery. e.g. **/CS_OFFL_SIR_TDP_LI*C001*.nc",
+        help=(
+            "search pattern for L2 file discovery. Example for CryoTEMPO C001: "
+            "**/CS_OFFL_SIR_TDP_LI*C001*.nc"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--time_param",
         "-time",
-        help="Name of time param in L2 netcdf, e.g. data/ku/time",
+        help=(
+            "name of time parameter to use in L2 netcdf files. If netcdf contains "
+            "groups, use / to separate. example data/ku/time"
+        ),
         required=True,
     )
 
     parser.add_argument(
         "--update_year",
-        help="YYYY: Overwrite data for only this single year (e.g. --update_year 2015).",
+        help=(
+            "YYYY (int): Overwrite data for only this single year (e.g. 2015)."
+            "example --update_year 2015"
+        ),
         type=int,
     )
 
@@ -709,21 +797,20 @@ def main(args):
         "--yyyymm_str_fname_indices",
         "-ys",
         help=(
-            "Two ints: negative indices from end of filename for reading YYYY and MM. "
-            "e.g. -48 -44 for CryoTEMPO files."
+            "int int : negative indices from end of L2 file name or path which point to the "
+            "YYYY start year in the name. For example with CryoTEMPO L2 files, this is: "
+            "-48 -44"
         ),
         nargs=2,
         type=int,
         required=True,
     )
 
-    # We'll assume user sets time_secs_to_1950 or we default
-    # You can also store in your data_set if you want to handle 'since 2000' etc.
     parser.add_argument(
         "--time_secs_to_1950",
         help=(
-            "Offset to add to time param so that time=0 => 1950-01-01"
-            ". Default=1577923200 if netcdf is 'since 2000'? (example)."
+            "Offset (float) to add to the raw L2 'time' param so that time=0 => 1950-01-01. "
+            "Default=0.0, but e.g. ~ -1577923200 if your data are 'since 2000-01-01'."
         ),
         type=float,
         default=0.0,
@@ -768,17 +855,17 @@ def main(args):
         "search_pattern": args.search_pattern,
         "latitude_param": args.lat_param,
         "longitude_param": args.lon_param,
-        "elevation_param": args.elevation_param,
+        "elevation_param": args.elev_param,
         "power_param": args.power_param,
         "time_param": args.time_param,
         "max_files": args.max_files,
         "grid_output_dir": args.output_dir,
         "partition_by_month": args.partition_by_month,
-        "partition_xy_chunking": args.partition_xy_chunking,
-        "time_secs_to_1950": args.time_secs_to_1950,
+        "partition_xy_chunking": int(args.partition_xy_chunking),
+        "time_secs_to_1950": float(args.time_secs_to_1950),
     }
 
-    # Run gridding
+    # Run gridding in the chosen mode
     grid_dataset(data_set, regrid=args.regrid, update_year=args.update_year)
 
 
