@@ -120,6 +120,7 @@ def process_chunk(chunk_info: Tuple[int, int, List[str]]) -> pd.DataFrame:
         mean_elev=("elevation", "mean"),
         time_min=("time", "min"),
         time_max=("time", "max"),
+        n_elev=("elevation", "count"),  # number of elevation measurements
     ).reset_index(drop=True)
 
     # Convert coverage in seconds to years
@@ -128,6 +129,9 @@ def process_chunk(chunk_info: Tuple[int, int, List[str]]) -> pd.DataFrame:
     # Keep track of chunk partition (optional)
     agg_df["x_part"] = x_part_val
     agg_df["y_part"] = y_part_val
+
+    # Reorder columns for clarity
+    agg_df = agg_df[["x_bin", "y_bin", "mean_elev", "coverage_yrs", "n_elev", "x_part", "y_part"]]
 
     return agg_df
 
@@ -232,7 +236,7 @@ def build_chunk_map_from_glob(grid_dir: str) -> Dict[Tuple[int, int], List[str]]
     return chunk_map
 
 
-def compute_stats_per_cell(data_set: dict, max_workers: int):
+def compute_stats_per_cell(grid_dir: str, max_workers: int):
     """
     Gathers all Parquet files under grid_dir, detects (x_part=NN, y_part=MM) from either:
       - A partition_index.json with "entries" (full file_path) [faster if present],
@@ -252,7 +256,6 @@ def compute_stats_per_cell(data_set: dict, max_workers: int):
     """
     start_time = time.time()
 
-    grid_dir = data_set["grid_dir"]
     if not os.path.isdir(grid_dir):
         log.error("grid directory not found or not a directory: %s", grid_dir)
         sys.exit(1)
@@ -461,7 +464,7 @@ def main(args):
     parser.add_argument(
         "--plot_var",
         help=(
-            "Which variable to plot: 'mean_elev' or 'coverage_yrs' or other "
+            "Which variable to plot: 'mean_elev', 'coverage_yrs', 'n_elev', or other "
             "columns found in final DF."
         ),
         type=str,
@@ -497,15 +500,8 @@ def main(args):
         default_log_level=default_log_level,
     )
 
-    data_set = {
-        "grid_dir": args.grid_dir,
-        "output_file": args.output_file,
-        "plot_to_file": args.plot_to_file,
-        "plot_var": args.plot_var,
-    }
-
     # 1) Compute stats (mean_elev, coverage_yrs) for each cell in parallel
-    df, grid_obj, grid_meta = compute_stats_per_cell(data_set, max_workers=args.max_workers)
+    df, grid_obj, grid_meta = compute_stats_per_cell(args.grid_dir, max_workers=args.max_workers)
 
     # 2) (Optional) Write the final DataFrame
     if args.output_file and not df.empty:

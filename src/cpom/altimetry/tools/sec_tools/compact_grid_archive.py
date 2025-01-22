@@ -10,14 +10,35 @@ Purpose:
       x_part=NNN/ y_part=MMM/ data.parquet
     so that each (x_part, y_part) chunk contains all years in a single file.
 
+    Additionally, writes a 'partition_index.json' at the top level of the
+    compacted dataset. This file lists all (x_part, y_part) chunks and their
+    single Parquet file path, enabling direct reads without globbing.
+
 Usage example:
     python compact_year_partitioned_data.py \
         --input_dir /path/to/year_partitioned \
         --output_dir /path/to/compacted_output
+
+Example partition_index.json structure:
+
+    {
+      "entries": [
+        {
+          "x_part": 12,
+          "y_part": 7,
+          "file_path": "x_part=12/y_part=7/data.parquet"
+        },
+        ...
+      ]
+    }
+
+where file_path is relative to the top-level compacted directory.
+
 """
 
 import argparse
 import glob
+import json
 import logging
 import os
 import shutil
@@ -45,12 +66,10 @@ def find_all_xpart_ypart(input_dir: str) -> set[tuple[int, int]]:
     # We use "**" recursion because between 'year=...' and 'x_part=...'
     # there may be subfolders like "month=...", or none at all.
     pattern = os.path.join(input_dir, "**", "x_part=*", "y_part=*")
-
     all_dirs = glob.glob(pattern, recursive=True)
     combos = set()
 
     for d in all_dirs:
-        print(d)
         # Typically d ends with something like ".../x_part=12/y_part=7"
         # Parse out the x_part=? and y_part=? values
         base = os.path.basename(d)  # e.g. "y_part=7"
@@ -69,6 +88,60 @@ def find_all_xpart_ypart(input_dir: str) -> set[tuple[int, int]]:
     return combos
 
 
+def update_partition_index_file(
+    index_path: str,
+    new_entries: list[dict],
+) -> None:
+    """
+    Update or create the 'partition_index.json' file to store the final layout of
+    (x_part, y_part) => file_path.
+
+    new_entries is a list of dicts, e.g.:
+      [
+        {
+          "x_part": 12,
+          "y_part": 7,
+          "file_path": "x_part=12/y_part=7/data.parquet"
+        },
+        ...
+      ]
+
+    We'll append these to an existing "entries" list in index_path, deduplicate,
+    and write back out.
+    """
+    if os.path.isfile(index_path):
+        with open(index_path, "r", encoding="utf-8") as f_idx:
+            index_data = json.load(f_idx)
+    else:
+        index_data = {"entries": []}
+
+    existing = set()
+    for e in index_data["entries"]:
+        # We'll define a key for dedup: (x_part, y_part, file_path)
+        xp = e.get("x_part", None)
+        yp = e.get("y_part", None)
+        fp = e.get("file_path", None)
+        existing.add((xp, yp, fp))
+
+    additions = 0
+    for e in new_entries:
+        xp = e["x_part"]
+        yp = e["y_part"]
+        fp = e["file_path"]
+        key = (xp, yp, fp)
+        if key not in existing:
+            index_data["entries"].append(e)
+            additions += 1
+            existing.add(key)
+
+    if additions > 0:
+        with open(index_path, "w", encoding="utf-8") as f_idx:
+            json.dump(index_data, f_idx, indent=2)
+        log.info("Appended %d new partition-file entries into partition_index.json", additions)
+    else:
+        log.info("No new entries to add to partition_index.json (all duplicates).")
+
+
 def compact_partitions(input_dir: str, output_dir: str):
     """
     Perform compaction from a layout partitioned by year=..., x_part=..., y_part=...
@@ -79,7 +152,8 @@ def compact_partitions(input_dir: str, output_dir: str):
     3) For each partition:
        - Glob ALL matching parquet files under year=*/(month=*/)?/x_part=?/y_part=?
        - Load them in memory with DuckDB
-       - Write a single 'data.parquet' in the new directory for that chunk.
+       - Write a single 'data.parquet' in x_part=N/y_part=M/ in output_dir
+       - Record this in the partition_index.json
     """
     start_time = time.time()
 
@@ -100,22 +174,19 @@ def compact_partitions(input_dir: str, output_dir: str):
         sys.exit(1)
 
     log.info("Found %d unique (x_part, y_part) partitions to process.", len(combos))
-
-    # Ensure output directory structure
     os.makedirs(output_dir, exist_ok=True)
+
+    # We'll gather partition_index entries in a list, then update the JSON at the end
+    index_entries = []
 
     # 3) Iterate over each partition
     for xp, yp in sorted(combos):
         # The new directory for this chunk
         chunk_out_dir = os.path.join(output_dir, f"x_part={xp}", f"y_part={yp}")
-        # If it already exists, you might want to skip or overwrite
         os.makedirs(chunk_out_dir, exist_ok=True)
 
         # Glob all relevant parquet files for this chunk across all years (and months if any).
-        # Something like:
-        #   year=*/(month=*/)?/x_part=XP/y_part=YP/*.parquet
-        # But we can use a double-** approach so we don't care exactly how many partition levels:
-        #   **/x_part=XP/y_part=YP/*.parquet
+        # e.g. **/x_part=XP/y_part=YP/*.parquet
         parquet_glob = os.path.join(input_dir, "**", f"x_part={xp}", f"y_part={yp}", "*.parquet")
         matching_files = glob.glob(parquet_glob, recursive=True)
 
@@ -129,12 +200,10 @@ def compact_partitions(input_dir: str, output_dir: str):
 
         # Use DuckDB to load them all in memory as one DataFrame
         con = duckdb.connect()
-        # We can build a query that scans them all:
         query = f"""
             SELECT *
             FROM parquet_scan({matching_files})
         """
-        # Or pass matching_files as a parameter to avoid building large SQL
         df = con.execute(query).df()
         con.close()
 
@@ -144,16 +213,31 @@ def compact_partitions(input_dir: str, output_dir: str):
         df.to_parquet(out_path, index=False)
         log.debug("Wrote %d rows to %s", len(df), out_path)
 
+        # Add an entry for partition_index.json
+        # file_path is stored relative to output_dir
+        relative_path = os.path.relpath(out_path, output_dir)
+        index_entries.append(
+            {
+                "x_part": xp,
+                "y_part": yp,
+                "file_path": relative_path,  # e.g. "x_part=12/y_part=7/data.parquet"
+            }
+        )
+
+    # Update the partition_index.json with all the new entries
+    index_path = os.path.join(output_dir, "partition_index.json")
+    update_partition_index_file(index_path, index_entries)
+
     elapsed = time.time() - start_time
     log.info("Compaction complete. Elapsed time: %.1f seconds", elapsed)
 
 
 def main():
-    """tool entry point"""
-
+    """Tool entry point"""
     parser = argparse.ArgumentParser(
         description=(
-            "Compact a year-partitioned altimetry dataset into " "x_part/y_part-only partition."
+            "Compact a year-partitioned altimetry dataset into x_part=y_part-only partition, "
+            "writing one data.parquet per chunk and a partition_index.json with all file paths."
         )
     )
     parser.add_argument(
@@ -184,3 +268,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # check whether compacted archive should be deleted first if exists

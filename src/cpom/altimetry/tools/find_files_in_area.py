@@ -392,8 +392,8 @@ def main(args):
     if not args.area and not args.radius_search:
         sys.exit("must use one of --area or --radius_search")
 
-    if not args.area and args.plot:
-        sys.exit("must use --area with --plot")
+    if not args.area and (args.plot or args.plot_file):
+        sys.exit("must use --area with --plot or --plot_file")
 
     if args.latname and not args.lonname:
         sys.exit("both --lonname and --latname must be used together")
@@ -452,7 +452,7 @@ def main(args):
                     else:
                         print(f"{file_number_found}: {file} : has points within radius")
 
-                    if args.plot:
+                    if args.plot or args.plot_file:
                         if file_number_found <= 20:
                             found_file_list.append(file)
                             lat_list.extend(lats)
@@ -480,7 +480,7 @@ def main(args):
                             f"{file_number_found}: {file} : {n_inside} points "
                             f"({percent_inside:.2f}%) inside {thisarea.long_name}"
                         )
-                    if args.plot:
+                    if args.plot or args.plot_file:
                         if file_number_found <= 20:
                             found_file_list.append(file)
                             lat_list.extend(lats_inside)
@@ -499,14 +499,14 @@ def main(args):
                                 f"({percent_inside:.2f}%) inside {thisarea.long_name}"
                             )
 
-                        if args.plot:
+                        if args.plot or args.plot_file:
                             found_file_list.append(file)
                             if file_number_found <= 20:
                                 lat_list.extend(lats_inside[indices_inside])
                                 lon_list.extend(lons_inside[indices_inside])
                                 val_list.extend(np.full(len(indices_inside), file_number_found))
 
-    if args.plot and file_number_found > 0:
+    if (args.plot or args.plot_file) and file_number_found > 0:
         data_set = {
             "name": "track number",
             "lats": np.array(lat_list),

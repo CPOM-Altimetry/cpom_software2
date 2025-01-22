@@ -12,16 +12,18 @@ Uses a run control file (rcf) to configure the following steps
 
 # Examples
 
-Grid CryoTEMPO Baseline C001 over AIS for all 14 years (2010-2024)
+Grid CryoTEMPO Baseline C001 over GIS for all 14 years (2010-2024)
 
 ``` 
-gen_sec_single_mission.py --rcf tests/rcfs/ant_cs2_cryotempo_c.rcf -rp
+gen_sec_single_mission.py --rcf_filename tests/rcfs/grn_cs2_cryotempo_c.rcf --regrid_mission
 ```
-This took: ~5 hrs (MSSLXBD server), using ~ 10GB RAM
+This took: 15mins (MSSLXBD server)
 
-# TODO
+Update a single year in the grid, keeping other years
 
-Add timing
+``` 
+gen_sec_single_mission.py --rcf_filename tests/rcfs/grn_cs2_cryotempo_c.rcf --update_year 2015
+```
 
 """
 
@@ -29,10 +31,14 @@ import argparse
 import logging
 import os
 import sys
-import time
 
 import yaml
 
+from cpom.altimetry.tools.sec_tools.compute_stats_per_gridcell import (
+    attach_xy_latlon,
+    compute_stats_per_cell,
+    plot_variable,
+)
 from cpom.altimetry.tools.sec_tools.grid_altimetry_data import grid_dataset
 from cpom.logging_funcs.logging import set_loggers
 
@@ -141,21 +147,46 @@ def main(args):
 
     if args.regrid_mission or args.update_year:
 
-        start_time = time.time()  # Record the start time
-
-        grid_dataset(
+        grid_dict = grid_dataset(
             config,
             regrid=args.regrid_mission,
             update_year=args.update_year,
             confirm_regrid=not args.no_confirm,
         )
 
-        end_time = time.time()  # Record the end time
-        elapsed_time = end_time - start_time
-        # Convert elapsed time to HH:MM:SS
-        hours, remainder = divmod(int(elapsed_time), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        log.info("Elapsed time for gridding: %02d:%02d:%02d", hours, minutes, seconds)
+        log.info("Elapsed time for gridding: %s", grid_dict["gridding_time"])
+
+        # 1) Compute stats (mean_elev, coverage_yrs) for each cell in parallel
+
+        df, grid_obj, grid_meta = compute_stats_per_cell(grid_dict["grid_path"], max_workers=8)
+
+        if df.empty:
+            log.error("No data returned by compute_stats_per_cell")
+            sys.exit(1)
+
+        if grid_obj is not None:
+            df = attach_xy_latlon(df, grid_obj)
+            plot_variable(
+                df,
+                grid_meta,
+                var_name="mean_elev",
+                plot_file=os.path.join(grid_dict["grid_path"], "mean_elev.png"),
+            )
+            plot_variable(
+                df,
+                grid_meta,
+                var_name="coverage_yrs",
+                plot_file=os.path.join(grid_dict["grid_path"], "coverage_yrs.png"),
+            )
+            plot_variable(
+                df,
+                grid_meta,
+                var_name="n_elev",
+                plot_file=os.path.join(grid_dict["grid_path"], "measurements_per_gridcell.png"),
+            )
+        else:
+            log.warning("No grid info (grid_obj) available, cannot do lat/lon. Skipping plot.")
+
     else:
         log.info("No gridding options chosen")
 

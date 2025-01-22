@@ -178,7 +178,7 @@ def grid_dataset(
     regrid: bool,
     update_year: int | None = None,
     confirm_regrid: bool = True,
-) -> None:
+) -> dict:
     """
     Read NetCDF altimetry data, bin them into (x_bin, y_bin) grid cells,
     and store them in a partitioned Parquet dataset by (year, [month,], x_part, y_part).
@@ -217,6 +217,8 @@ def grid_dataset(
         regrid (bool): If True, remove any previous dataset and regrid from scratch.
         update_year (int|None): If provided, only that year is updated (mode 2).
         confirm_regrid (bool): If True, ask for user confirmation before removing data.
+    Returns:
+        data_set (dict) : updated gridding parameter dictionary
     """
 
     start_time = time.time()
@@ -606,6 +608,10 @@ def grid_dataset(
         log.info("Wrote data_set metadata to %s", meta_json_path)
     except OSError as exc:
         log.error("Failed to write grid_meta.json: %s", exc)
+
+    data_set["grid_path"] = output_dir
+
+    return data_set
 
 
 def main(args):
