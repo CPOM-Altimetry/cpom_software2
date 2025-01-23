@@ -4,6 +4,7 @@
 
 area_definition = {
     "long_name": "Ronne Filchner",
+    "area_summary": "Ronne Filchner ice shelves",
     # --------------------------------------------
     # Area definition
     # --------------------------------------------

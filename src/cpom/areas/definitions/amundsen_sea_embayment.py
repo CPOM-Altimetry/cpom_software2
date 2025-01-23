@@ -37,7 +37,7 @@ area_definition = {
     #   Area min/max lat/lon for initial data filtering
     "minlon": 0,  # minimum longitude to initially filter records for area (0..360E)
     "maxlon": 360,  # maximum longitude to initially filter records for area (0..360E)
-    "minlat": -78,  # minimum latitude to initially filter records for area
+    "minlat": -80,  # minimum latitude to initially filter records for area
     "maxlat": -71,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from clev2er.utils.masks.Mask
@@ -55,14 +55,14 @@ area_definition = {
     "axes": [  # define plot axis position
         -0.02,  # left
         0.11,  # bottom
-        0.71,  # width (axes fraction)
-        0.71,  # height (axes fraction)
+        0.70,  # width (axes fraction)
+        0.70,  # height (axes fraction)
     ],
     "simple_axes": [  # define plot axis position in the map_only plot
         0.09,  # left
         0.12,  # bottom
-        0.79,  # width (axes fraction)
-        0.79,  # height (axes fraction)
+        0.78,  # width (axes fraction)
+        0.78,  # height (axes fraction)
     ],
     "draw_axis_frame": True,
     "background_color": None,  # background color of map
@@ -218,10 +218,10 @@ area_definition = {
     # --------------------------------------------------------
     "show_bad_data_map": True,
     "bad_data_minimap_axes": [  # define minimap axis position
-        0.65,  # left
+        0.64,  # left
         0.69,  # bottom
-        0.26,  # width (axes fraction)
-        0.26,  # height (axes fraction)
+        0.25,  # width (axes fraction)
+        0.25,  # height (axes fraction)
     ],
     "bad_data_minimap_bounding_lat": None,  # None or bounding latitude if used for mini-map
     # uses 40N for northern hemisphere or 50N for southern.
@@ -241,7 +241,7 @@ area_definition = {
         -100,
     ],  # longitude lines to draw in bad data minimap
     "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
-    "bad_data_minimap_legend_pos": (1.5, 1.0),  # position of minimap legend (upper right)
+    "bad_data_minimap_legend_pos": (1.6, 1.0),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
     # ------------------------------------------------------------------

@@ -9,6 +9,7 @@ Based on area: ronne_filchner
 
 area_definition = {
     "use_definitions_from": "ronne_filchner",
+    "area_summary": "Ronne Filchner ice shelves [hillshade]",
     # --------------------------------------------
     #    mask from clev2er.utils.masks.Mask
     # --------------------------------------------
