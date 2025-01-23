@@ -1221,7 +1221,7 @@ class Polarplot:
     def draw_minimap(
         self,
     ):
-        """draw a minimap to show Nan, FV and out of range values
+        """draw a minimap to show area coverage
 
         Args:
 
@@ -1293,6 +1293,19 @@ class Polarplot:
                     transform=dataprj_minimap,
                     zorder=30,
                 )
+            )
+
+        print(f"self.thisarea.masktype {self.thisarea.masktype} ")
+        if self.thisarea.masktype in ("polygon", "xylimits"):
+
+            self.draw_area_polygon_mask(
+                ax_minimap,
+                override_mask_display=True,
+                override_mask_color="r",
+                dataprj=dataprj_minimap,
+                fill=True,
+                linestyle="-",
+                linewidth=1,
             )
 
     def draw_latitude_vs_vals_plot(
@@ -2088,6 +2101,11 @@ class Polarplot:
             linewidth (int, optional): line width to use for polygon edges. Defaults to 2.
         """
 
+        print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
+        xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
+        print(f"{xc - self.thisarea.width_km*1000/2 ,xc+ self.thisarea.width_km*1000/2}")
+        print(f"{yc - self.thisarea.height_km*1000/2 ,yc+ self.thisarea.height_km*1000/2}")
+
         polygon_color = "red"
         if override_mask_color:
             polygon_color = override_mask_color
@@ -2097,6 +2115,8 @@ class Polarplot:
         if override_mask_display is not None:
             display_polygon_mask = override_mask_display
 
+        print(f"display_polygon_mask {display_polygon_mask}")
+
         # form a polygon from xy limits mask. Only show xy limits polygon for global map where
         # fill is specified
         if (
@@ -2105,6 +2125,8 @@ class Polarplot:
             and display_polygon_mask
             and fill
         ):
+            print("drawing filled xylimits mask...")
+
             x = [
                 self.thisarea.mask.xlimits[0],
                 self.thisarea.mask.xlimits[1],
