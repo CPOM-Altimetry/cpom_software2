@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 # list of all supported mask names
 mask_list = [
     "ase_xylimits_mask",  # rectangular mask for Amundsen Sea Embayment (ASE)
+    "ronne_filchner_xylimits_mask",  # rectangular mask for Ronne Filchner (Antarctica)
     "greenland_area_xylimits_mask",  # rectangular mask for Greenland
     "antarctica_bedmachine_v2_grid_mask",  # Antarctic Bedmachine v2 surface type mask
     "greenland_bedmachine_v3_grid_mask",  # Greenland Bedmachine v3 surface type mask
@@ -129,6 +130,20 @@ class Mask:
             self.ylimits = [
                 -768646,
                 31353,
+            ]  # [miny, maxy] in m, in current  coordinate system
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
+
+        elif mask_name == "ronne_filchner_xylimits_mask":
+            # ASE rectangular mask for rapid masking
+            self.mask_type = "xylimits"  # 'xylimits', 'polygon', 'grid','latlimits'
+
+            self.xlimits = [
+                -1685615,
+                -390616,
+            ]  # [minx, maxx] in m, in current  coordinate system
+            self.ylimits = [
+                -48143,
+                1246856,
             ]  # [miny, maxy] in m, in current  coordinate system
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
 

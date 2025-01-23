@@ -16,7 +16,7 @@ area_definition = {
     "background_image_resolution": ["low", "_"],
     "background_image_alpha": [0.5, 0.7, 0.3],
     "background_color": "aliceblue",
-    "gridline_color": "white",
+    "gridline_color": "darkgrey",
     "hillshade_params": {"dem": "awi_ant_1km_grounded", "azimuth": 120.0},
     "draw_coastlines": False,  # Draw coastlines
 }
