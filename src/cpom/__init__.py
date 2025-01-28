@@ -1,5 +1,5 @@
 """
-Documentation for the CPOM Software Package, hosted on GitHub at
+Automated documentation for the CPOM Software Package, hosted on GitHub at
 [github.com/CPOM-Altimetry/cpom_software2](https://github.com/CPOM-Altimetry/cpom_software2).
 
 # Installation
@@ -45,17 +45,79 @@ This will install
 
 ### Load the Virtual Environment
 
-Now you are all setup to go. Whenever you want to run any cpom software you
-must first load the virtual environment using the `poetry shell` commands.
+Now you are all setup to go. Whenever you want to run any cpom software tools you
+must first activate the virtual environment as follows:
 
 ```
 cd $CPOM_SOFTWARE_DIR
-poetry shell
-. setup_env.sh
+source activate.sh
+```
+or the identical
+```
+. activate.sh
 ```
 
+# Tool List
 
-# Test Development
+This section provides a list of current command line tools available in the
+cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
+
+- **plot_map.py**
+  generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.
+  Works with any netcdf file(s) containing latitude, longitude and parameter data,
+  but also has knowledge of most common altimetry formats to self discover lat,lon names. 
+  Contains command line options for many of the cpom Polarplot.plot_points() class function.
+  See `cpom.altimetry.tools.plot_map` for all options.
+
+- **find_files_in_area.py** 
+  identify netcdf files within a directory (or recursive sub-dir) containing lat,lon 
+  locations within a cpom area mask or within a radius of a specified lat,lon point. 
+  For example you could use it to list CS2 L1b files passing over the Greenland ice 
+  sheet for validation purposes. Optionally plots the tracks as well. 
+  For all the many search options see:
+  `cpom.altimetry.tools.find_files_in_area` 
+
+# Development
+
+## Development Process
+
+This section details the main development processes to contribute to the CPOM software.
+
+- Create a new feature branch
+
+  ```
+  git checkout -b yourinitials_featurename
+  ```
+- Create new local commits as you develop your feature
+
+  ```
+  git commit -a -m "commit description"
+  ```
+  
+  During the git commit the automated code checks (lint, mypy, ruff, etc) should run 
+  (using the pre-installed **pre-commit** tool). These must pass in order for the 
+  commit to succeed. 
+  If these checks do not run then your **pre-commit** setup (during installation) is not correct.
+  
+- push your branch to GitHub
+  ```
+  git push
+  ```
+
+- Create a **Pull Request (PR)** on GitHub for your new branch.
+  
+  This just starts a dialog on your new feature. You can continue to develop the feature with 
+  additional commits and pushes.
+
+  This will also automatically run the **GitHub Actions** tests on your full branch. 
+  This runs the static code checks (as per pre-commit and also all the pytests in the full branch). 
+  The success or failure (including reasons) will be reported in the PR page.
+
+- Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.
+
+- Once the review is passed, the feature will be merged in to the main branch.
+
+## Test Development
 
 Each module should have an associated pytest unit or integration test. Place these in
 a **tests/** directory inside your module directory. ie:
@@ -75,7 +137,7 @@ or
 
 `pytestmark = pytest.mark.non_core`
 
-# Documentation
+# Automatic Documentation
 
 Documentation is automatically generated to this page 
 https://cpom-altimetry.github.io/cpom_software2 

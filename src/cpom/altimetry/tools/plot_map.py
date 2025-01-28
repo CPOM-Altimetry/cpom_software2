@@ -139,6 +139,18 @@ def get_default_param(
 
     print(f"finding default params for {filename}")
 
+    # E2,E1 ENVISAT FDGR4ALT Land Ice
+    if "F4A_ALT_TDP_LI" in basename:
+        return "expert/ice_sheet_elevation_ice1_roemer", "m"
+
+    # S3 Thematic
+    if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
+        if "SR_2_LAN_LI" in filename:
+            return "elevation_ocog_20_ku", "m"
+        if "SR_2_LAN_SI" in filename:
+            return "freeboard_20_ku", "m"
+        return "lat_20_ku", "degs"
+
     # CS2 L1b SIN
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
         return "lat_20_ku", "degs"
@@ -181,6 +193,9 @@ def get_default_param(
     if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
         # CRISTAL L1b LMC
         return "data_20/ku/tracker_range_calibrated", "m"
+    if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
+        # CRISTAL L1b LR
+        return "data_20/ku/tracker_range_calibrated", "m"
 
     print(
         f"{ORANGE}Format of {basename} not recognized - "
@@ -197,12 +212,20 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
         filename (str): path of NetCDF file
 
     Returns:
-        str: parameter name or '' if not found
+        (str,str) : latname, lonname or ("","") if not found
     """
 
     print(f"finding default lat/lon parameters for {filename}")
 
     basename = os.path.basename(filename)
+
+    # E2,E1 ENVISAT FDGR4ALT Land Ice
+    if "F4A_ALT_TDP_LI" in basename:
+        return "expert/ice_sheet_lat_poca", "expert/ice_sheet_lon_poca"
+
+    # S3 Thematic
+    if basename in ("enhanced_measurement.nc", "standard_measurement.nc"):
+        return "lat_20_ku", "lon_20_ku"
 
     # CS2 L1b
     if "CS_OFFL_SIR_SIN_1B" in basename[: len("CS_OFFL_SIR_SIN_1B")]:
@@ -249,7 +272,9 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     if "CRA_IR_1B_LMC_" in basename[: len("CRA_IR_1B_LMC_")]:
         # CRISTAL L1b LMC
         return "data_20/ku/latitude", "data_20/ku/longitude"
-
+    if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
+        # CRISTAL L1b LR
+        return "data_20/ku/latitude", "data_20/ku/longitude"
     print(
         f"{ORANGE}Format of {basename} not recognized - "
         f"so not using defaults for lat/lon parameters{NC}"
@@ -652,6 +677,10 @@ def main(args):
     # read arguments from the command line
     args = parser.parse_args(args)
 
+    if args.step:
+        if args.step > 20:
+            sys.exit(f"command line error: --step {args.step} : value in degs must be less than 20")
+
     # Print a list of available area definitions
     if args.list_areas:
         area_list = list_all_area_definition_names()
@@ -733,6 +762,11 @@ def main(args):
                 params = [def_param]
                 units = [def_units]
                 num_data_sets = len(params)
+            else:
+                sys.exit(
+                    "No default parameter available for this file type. "
+                    "Please specify using --params"
+                )
         if num_data_sets > 0:
             if len(latnames) == 0 | len(lonnames) == 0:
                 def_latname, def_lonname = get_default_latlon_names(files[0])
@@ -740,7 +774,10 @@ def main(args):
                     latnames = [def_latname] * num_data_sets
                     lonnames = [def_lonname] * num_data_sets
                 else:
-                    sys.exit("{RED}requires --latname , --lonname command line args{NC}")
+                    sys.exit(
+                        "{RED}no default lat/lon parameters available, so please specify with"
+                        " --latname , --lonname command line args{NC}"
+                    )
                 if len(latnames) != num_data_sets:
                     latnames = [latnames[0]] * num_data_sets
                     lonnames = [lonnames[0]] * num_data_sets
@@ -863,6 +900,13 @@ def main(args):
                 with Dataset(filename) as nc:
                     for i in range(num_data_sets):
                         vals = get_variable(nc, params[i])[:].data
+                        try:
+                            fill_value = get_variable(  # pylint: disable=protected-access
+                                nc, params[i]
+                            )._FillValue
+                            vals[vals == fill_value] = np.nan
+                        except AttributeError:
+                            pass
                         lats = get_variable(nc, latnames[i])[:].data
                         lons = get_variable(nc, lonnames[i])[:].data % 360.0
                         if len(bool_mask_params) == len(params):
