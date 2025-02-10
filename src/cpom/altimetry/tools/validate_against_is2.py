@@ -1,67 +1,57 @@
 """
-Module docstring 
+Tool to compare a selected month of ESA mission altimetry L2 elevations to
+ICESat-2 ATL-06 elevations.
 """
 
-import argparse  # for command line arguments
-import logging  # logging functions
-import os  # for mkdir
+import argparse
+import logging
+import os
 import sys
-import glob
-import time  # to time the code
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import h5py  # HDF support for IS2 files
-import numpy as np  # numerical operations
-from netCDF4 import Dataset
+import h5py
+import numpy as np
+from netCDF4 import Dataset  # pylint: disable=E0611
 from scipy.spatial import cKDTree
 
-from cpom.areas.areas import (  # cryosphere area definitions
+from cpom.areas.areas import (
     Area,
     list_all_area_definition_names_only,
 )
 
-RED = "\033[0;31m"  # pylint: disable=invalid-name
-BLUE = "\033[0;34m"  # pylint: disable=invalid-name
-BLACK_BOLD = "\033[1;30m"  # pylint: disable=invalid-name
-ORANGE = "\033[38;5;208m"  # pylint: disable=invalid-name
-
-VALID_MODES = {"all", "lrm", "sin", "sar"}
-VALID_BEAMS = {"gt1l", "gt1r", "gt2l", "gt2r", "gt3l", "gt3r"}
 
 def setup_logging(
-    log_format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     log_name="",
     log_file_info="file.log",
     log_file_error="file.err",
 ):
+    """Setup logger"""
     log = logging.getLogger(log_name)
-    log_formatter = logging.Formatter(log_format, datefmt="%d/%m/%Y %H:%M:%S")
+    log.setLevel(logging.INFO)
+
+    log_format = logging.Formatter(
+        "%(levelname)s : %(asctime)s : %(message)s", datefmt="%d/%m/%Y %H:%M:%S"
+    )
 
     # comment this to suppress console output
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(log_formatter)
+    stream_handler.setFormatter(log_format)
     log.addHandler(stream_handler)
 
-    file_handler_info = logging.FileHandler(log_file_info, mode="w")
-    file_handler_info.setFormatter(log_formatter)
-    file_handler_info.setLevel(logging.INFO)
-    log.addHandler(file_handler_info)
-
-    file_handler_error = logging.FileHandler(log_file_error, mode="w")
-    file_handler_error.setFormatter(log_formatter)
-    file_handler_error.setLevel(logging.ERROR)
-    log.addHandler(file_handler_error)
-
-    log.setLevel(logging.INFO)
+    for log_file, level in [(log_file_info, logging.INFO), (log_file_error, logging.ERROR)]:
+        file_handler = logging.FileHandler(log_file, mode="w")
+        file_handler.setFormatter(log_format)
+        file_handler.setLevel(level)
+        log.addHandler(file_handler)
 
     return log
 
-def parse_args() -> argparse.ArgumentParser:
-    """_summary_
 
+def parse_args() -> argparse.ArgumentParser:
+    """Declare command line arguments and defaut values
     Returns:
-        argparse.ArgumentParser: _description_
+        argparse.ArgumentParser: Parsed input arguments
     """
 
     # Initiate the command line parser
@@ -94,6 +84,8 @@ def parse_args() -> argparse.ArgumentParser:
         "--modes",
         "-mo",
         default="all",
+        choices={"all", "lrm", "sin", "sar"},
+        nargs="+",
         help="[optional, default=all], limit to specific instrument mode(s). \
                                 Comma separated list of: lrm,sin,sar or all",
     )
@@ -101,6 +93,8 @@ def parse_args() -> argparse.ArgumentParser:
         "--beams",
         "-b",
         default="gt2r",
+        choices={"gt1l", "gt1r", "gt2l", "gt2r", "gt3l", "gt3r"},
+        nargs="+",
         help="[optional, default=gt2r ] IS2 beams to use. \
                         Comma separated list of: gt1l,gt1r,gt2l,gt2r,gt3l,gt3r",
     )
@@ -131,18 +125,6 @@ def parse_args() -> argparse.ArgumentParser:
     parser.add_argument("--max_workers", "-me", type=int, default=1, help="")
 
     args = parser.parse_args()
-    args.modes = args.modes.split(",")
-    args.beams = args.beams.split(",")
-
-    for arg, valid_set, name in [
-        (args.modes, VALID_MODES, "mode"),
-        (args.beams, VALID_BEAMS, "beam"),
-    ]:
-        invalid = set(arg) - valid_set
-        if invalid:
-            sys.exit(
-                f"Invalid {name}(s): {', '.join(invalid)}. Must be one of {', '.join(valid_set)}."
-            )
 
     if args.area not in list_all_area_definition_names_only():
         sys.exit(f"{args.area} not a valid cpom area name")
@@ -153,8 +135,21 @@ def parse_args() -> argparse.ArgumentParser:
 
     return args
 
-def get_variable(nc: Dataset, nc_var_path: str):
-    """Retrieve variable from NetCDF file, handling groups if necessary."""
+
+def get_variable(nc: Dataset, nc_var_path: str) -> np.array:
+    """Retrieve variable from NetCDF file, handling groups if necessary.
+
+    Args:
+        nc (Dataset): The dataset object
+        nc_var_path (str): The path to the variable within the file,
+                        with groups separated by '/'.
+
+    Raises:
+        KeyError: If the variable or group is not found in the file.
+
+    Returns:
+        np.array: The retrieved variable as an array.
+    """
     try:
         parts = nc_var_path.split("/")
         var = nc
@@ -163,11 +158,20 @@ def get_variable(nc: Dataset, nc_var_path: str):
             if var is None:
                 raise KeyError(f"NetCDF parameter '{nc_var_path}' not found.")
         return var[:]
-    except KeyError as e:
-        raise KeyError(f"Get variable failed with error {e}")
+    except KeyError as err:
+        raise KeyError(f"Get variable failed with error {err}") from err
 
-def get_default_variables(file):
-    """Return default variable names based on file naming patterns."""
+
+def get_default_variables(file: str) -> dict:
+    """
+    Return default variable names based on file naming patterns.
+
+    Args:
+        file (str): path to input file.
+
+    Returns:
+        dict: Dictionary of default variable names
+    """
     basename = os.path.basename(file)
 
     # Dictionary mapping filename patterns to default variables
@@ -208,56 +212,39 @@ def get_default_variables(file):
     }
 
     # Check basename for a matching pattern
-    for key in variable_map:
+    for key, value in variable_map.items():
         if key in basename:
-            return variable_map[key]
-
+            return value
     return None
+
 
 def find_nc_and_h5_files(
     directory: str,
     recursive: bool,
-    max_files: int | None,
     include_string: str | None,
     filetype: str = "nc",
-):
+) -> list[str]:
     """
-    Find .nc or .NC files in the specified directory.
+    Find .nc or.h5 files in the specified directory.
 
     Args:
-        directory (str): The directory to search for .nc files.
+        directory (str): The directory to search for files.
         recursive (bool): If True, search recursively in subdirectories.
         max_files (int|None): if not None, limit number of files read to this number
 
     Returns:
         List[str]: A list of found .nc or .NC files with their full paths.
     """
-    files = []
-    if filetype == "nc":
-        ft, ft2 = "*.nc", "*.NC"
-    elif filetype == "h5":
-        ft = "*.h5"
-    else:
-        ft = ""
+    extension = "*.h5" if filetype == "h5" else "*.nc"
 
-    if recursive:
-        for root, _, _ in os.walk(directory):
-            files.extend(glob.glob(os.path.join(root, ft)))
-            if filetype == "nc":
-                files.extend(glob.glob(os.path.join(root, ft2)))
-    else:
-        files = glob.glob(os.path.join(directory, ft))
-        if filetype == "nc" and len(files) < 1:
-            files = glob.glob(os.path.join(directory, ft2))
-
-    if max_files is not None:
-        if len(files) > max_files:
-            files = files[:max_files]
-
+    files = list(Path(directory).rglob(extension) if recursive else Path(directory).glob(extension))
     if include_string:
-        files = [file for file in files if include_string in os.path.basename(file)]
+        files = [str(file) for file in files if include_string in file.name]
+    else:
+        files = [str(file) for file in files]
 
     return files
+
 
 # def get_cryotempo_filters(nc, args, mask):
 #     """Check Cryotempo data is in a valid mode."""
@@ -272,16 +259,38 @@ def find_nc_and_h5_files(
 
 #     return mask[valid_mask] if valid_mask.any() else mask
 
+
 class ProcessData:
-    """Class to...."""
+    """Class to process is2 and altimetry data files by extracting and filtering
+    elevation data. To be run by a multiproccessor.
+
+    Methods:
+        process_file_altimetry: Extracts and processes altimetry data from NetCDF files.
+
+        process_file_is2 : Extracts and processes is2 elevation data from HDF5 files.
+
+        _fill_empty_latlon_with_nadir: Fills missing lat/lon values using nadir coordinates.
+    """
 
     def __init__(self, args, area, log):
         self.args = args
         self.area = area
         self.log = log
 
-    def _fill_empty_latlon_with_nadir(self, nc, lat, lon, config):
-        """Fill Latlon with nadir values"""
+    def _fill_empty_latlon_with_nadir(
+        self, nc: str, lat: np.array, lon: np.array, config: dict
+    ) -> np.array:
+        """
+        Populate empty poca lat/lon with nadir lat/lon
+        Args:
+            nc (str): NetCDF filename
+            lat (np.array): array of latitudes
+            lon (np.array): array of longitudes
+            config (dict): dictionary of variable names
+
+        Returns:
+            (np.array, np.arrray): Filled lat/lon arrays
+        """
         # Find empty longitude values
         bad_indices = np.flatnonzero(lon.mask)  # Is this needed , check.
         if bad_indices.size > 0:
@@ -291,8 +300,19 @@ class ProcessData:
             lon[bad_indices] = np.mod(lon_nadir[bad_indices], 360)
         return lat, lon
 
-    def process_file_altimetry(self, filename):
-        """_summary_"""
+    def process_file_altimetry(self, filename: str) -> np.ndarray:
+        """Extract and filter data from an altimetry data file.
+
+        Args:
+            filename (str): altimetry data filename (*.nc)
+
+        Raises:
+            ValueError: If variable lengths do not match.
+
+        Returns:
+            np.ndarray: structured nd.array containing x,y,h fields
+                and additonal data fields passed by args.add_vars.
+        """
         try:
             with Dataset(filename) as nc:
                 config = get_default_variables(filename)
@@ -306,21 +326,19 @@ class ProcessData:
                 x, y = self.area.latlon_to_xy(lats, lons)
 
                 if not x.size:
-                    # self.log.info("Skipping file: %s as not in areas bounding box", filename)
                     return None
 
                 idx, _ = self.area.inside_mask(x, y)
                 if not idx.size:
-                    # self.log.info("Skipping file: %s as not in areas mask", filename)
                     return None
 
                 elev = get_variable(nc, config["elevation"])[idx]
-                x, y ,lats, lons = x[idx], y[idx], lats[idx], lons[idx]
+                x, y, lats, lons = x[idx], y[idx], lats[idx], lons[idx]
 
                 if len(x) != len(y) != len(elev):
                     raise ValueError("Mismatch in variable lengths for x,y,h")
 
-                if self.args.add_vars :
+                if self.args.add_vars:
                     # Add additonal variables
                     additional_data = {
                         var.rsplit("/", 1)[-1]: get_variable(nc, var)[idx]
@@ -331,43 +349,52 @@ class ProcessData:
                     if not all(len(data) == len(x) for data in additional_data.values()):
                         self.log.error("Mismatch in variable lengths")
                         raise ValueError("Mismatch in variable lengths.")
-                    
+
                     altimeter_points = np.array(
-                            list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
-                            dtype=[("x", "float64"), ("y", "float64") , ("h", "float64")]
-                            + [(var, str(data.dtype)) for var, data in additional_data.items()]
-                        )
+                        list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
+                        dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
+                        + [(var, str(data.dtype)) for var, data in additional_data.items()],
+                    )
                 else:
                     altimeter_points = np.array(
-                            list(zip(x, y, elev)),
-                            dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
-                        ) 
-
+                        list(zip(x, y, elev)),
+                        dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
+                    )
             return altimeter_points
         except OSError as err:
             self.log.error(f"Error loading altimetry data file {filename}, fialed with : {err}")
             return None
 
-    def process_file_is2(self, filename):
-        """_summary_"""
+    def process_file_is2(self, filename: str) -> np.ndarray:
+        """Extract and filter data from an is2 data file.
+        Args:
+            filename (str): IS2 data filename (.h5)
+
+        Raises:
+            ValueError: If variable lengths do not match
+
+        Returns:
+            np.ndarray: structured nd.array containing x,y,h fields
+        """
         try:
             with h5py.File(filename, "r") as nc:
                 points = []
+                # self.log.info("filename %s", filename)
                 for beam in self.args.beams:
+                    # self.log.info("CHECK THE RIGHT BEAM %s", beam)
                     config = {
-                        key: path.format(beam=beam) for key, path in get_default_variables(filename).items()
+                        key: path.format(beam=beam)
+                        for key, path in get_default_variables(filename).items()
                     }
-                    # log.info("config : %s" , config)
+                    # self.log.info("CHECK THE config  %s", config)
                     # Filter out files in wrong hemisphere. No files cross hemispheres
                     try:
                         hemisphere = get_variable(nc, config["lat"])[0]
-                        if (
-                            (hemisphere < 0.0 and self.area.hemisphere == "north")
-                            or (hemisphere > 0.0 and self.area.hemisphere == "south")
+                        if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
+                            hemisphere > 0.0 and self.area.hemisphere == "south"
                         ):
                             break
-                        # log.info("hemisphere : %s", hemisphere)
-                        # Get IS2 height for beam
+
                         elevation = get_variable(nc, config["elevation"])
                         ok = np.flatnonzero(
                             (
@@ -378,22 +405,15 @@ class ProcessData:
                         )
                         if len(ok) == 0:
                             continue
-                        # log.info("elev : %d " , len(elevation))
-                        # log.info("ok : %d " , len(ok))
 
                         elevation = elevation[ok]
                         lats = get_variable(nc, config["lat"])[ok]
                         lons = get_variable(nc, config["lon"])[ok] % 360.0
-                        # log.info("after ok : %d , %d , %d " , len(elevation), len(lats), len(lons))
 
                         # Filter on area's bounding box (not mask, for speed)
                         lats, lons, bounded_indices, _ = self.area.inside_latlon_bounds(lats, lons)
-                        # log.info("after bounding , %d , %d ", lats, lons)
-                        
+
                         if len(lats) < 1:
-                            # self.log.info(
-                            #     "Skipping file: %s as not in areas bounding box", filename
-                            # )
                             continue
 
                         # Transform lat, lon to x,y in appropriate polar stereo projections
@@ -401,53 +421,59 @@ class ProcessData:
                         elevation = elevation[bounded_indices]
                         if len(x) != len(y) != len(elevation):
                             raise ValueError("Mismatch in variable lengths for x,y,h")
-                        
+
                         points.append(
                             np.array(
                                 list(zip(x, y, elevation)),
                                 dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
                             )
                         )
-                        # log.info("Len points %d ", len(points))
                     except KeyError:
                         self.log.error("Missing data in %s for beam %s", filename, beam)
                         continue
         except OSError as err:
             self.log.error("Cannot open file %s: %s", filename, err)
-            return []
-        return points
+            return np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
+        return (
+            np.concatenate(points)
+            if points
+            else np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
+        )
 
-def get_elev_differences(args, is2_points, altimeter_points):
+
+def get_elev_differences(
+    args: argparse.Namespace, is2_points: np.ndarray, altimeter_points: np.ndarray
+) -> dict:
     """
     Calculate the elevation differences between IS2 points and altimeter points
-    within a specified search radius.Uses KD-tree to find is2 points within a
+    within a specified search radius. Uses KD-tree to find is2 points within a
     fixed distance from each altimeter point. Filters to elevation points
     less than the maximum elevation difference.
 
     Args:
-        args : Configuration parameters
-        is2_points (numpy.ndarray): Structed array (x,y,h) for is2 points.
-        altimeter_points (numpy.ndarray): Structed array (x,y,h) of altimetry.
+        args (argparse.Namespace): Configuration parameters
+        is2_points (np.ndarray): is2 array containing x,y,h
+        altimeter_points (np.ndarray): altimetry array containing x,y,h
 
     Returns:
-    Tuple[List[float], List[float], List[float]]:
-        - elev_differences (List[float]): Elevation difference between altimetry
-        point and is2 point.
-        - x (List[float]): x-coords of altimetry point
-        - y (List[float]): y-coords of altimetry point.
+        dict: Ouputted dh between altimetry and is2, plus associated variable data.
     """
+
     is2_tree = cKDTree(np.c_[is2_points["x"], is2_points["y"]])
-    add_vars = {var: [] for var in [val for val in list(altimeter_points.dtype.names) if val not in {'x','y','lats','lons','h'}]}
+    add_vars = {
+        var: []
+        for var in [val for val in list(altimeter_points.dtype.names) if val not in {"x", "y", "h"}]
+    }
     results = {
         "dh": [],
-        "x": [], 
-        "y": [], 
-        "h": [], 
-        "is2_x" : [], 
-        "is2_y" : [], 
-        "is2_h" : [], 
-        **{var: [] for var in add_vars}
-    },
+        "x": [],
+        "y": [],
+        "h": [],
+        "is2_x": [],
+        "is2_y": [],
+        "is2_h": [],
+        **{var: [] for var in add_vars},
+    }
 
     for altimeter_point in altimeter_points:
         query_point = (altimeter_point["x"], altimeter_point["y"])
@@ -460,131 +486,127 @@ def get_elev_differences(args, is2_points, altimeter_points):
                 # Check elevation difference
                 dh = altimeter_point["h"] - is2_point["h"]
                 if np.abs(dh) < args.maxdiff:
-                    results['dh'].append(dh)
-                    results['x'].append(altimeter_point["x"])
-                    results['y'].append(altimeter_point["y"])
-                    results['h'].append(altimeter_point["h"])
-                    results['is2_x'].append(altimeter_point["x"])
-                    results['is2_y'].append(altimeter_point["y"])
-                    results['is2_h'].append(altimeter_point["h"])
-                    for var in add_vars: 
+                    results["dh"].append(dh)
+                    results["x"].append(altimeter_point["x"])
+                    results["y"].append(altimeter_point["y"])
+                    results["h"].append(altimeter_point["h"])
+                    results["is2_x"].append(altimeter_point["x"])
+                    results["is2_y"].append(altimeter_point["y"])
+                    results["is2_h"].append(altimeter_point["h"])
+                    for var in add_vars:
                         results[var].append(altimeter_point[var])
     return results
 
 if __name__ == "__main__":
     params = parse_args()
-    print(time.time())
 
-    # Start the timer to time total processing time
-    logfile = params.logdir + f"/{params.month:02d}{params.year:4d}.log"
+    logfile = params.logdir + f"/{params.month:02d}{params.year:4d}"
 
-    log = setup_logging(
-        log_file_info=logfile,
-        log_file_error=logfile[:-3] + "errors.log",
-        log_format="%(levelname)s : %(asctime)s %(name)s : %(message)s",
+    logger = setup_logging(
+        log_file_info=logfile + ".info.log",
+        log_file_error=logfile + ".errors.log",
     )
-    log.info("Start processing with arguments %s", params)
+    logger.info("Start processing with arguments %s", params)
+
     area_obj = Area(params.area)
     year = params.year
     month = str(params.month).zfill(2)
-    
-    # Create or clear output directory 
-    month_outdir = params.outdir + f"/{year}/{month}"
 
+    # Create or clear output directory
+    month_outdir = params.outdir + f"/{year}/{month}"
     if not os.path.isdir(month_outdir):
         print("Creating output directory for results ", month_outdir)
     try:
         os.makedirs(month_outdir)
     except OSError as e:
-        log.error("%s %s", e.filename, e.strerror)
+        logger.error("%s %s", e.filename, e.strerror)
         sys.exit()
 
     if not Path(month_outdir).is_dir():
-        log.error(
-            "month_outdir %s directory. Please create the directory first", month_outdir
-        )
+        logger.error("month_outdir %s directory. Please create the directory first", month_outdir)
         sys.exit()
-        
+
     altimetry_files = []
-    for basepath in params.altim_dir.split(','):
+    BASE_PATH = params.altim_dir.split(",")
+    for basepath in BASE_PATH:
         if Path(f"{basepath}/{year}/{month}").is_dir():
-            basepath = f"{basepath}/{year}/{month}"
-        else : 
-            basepath = basepath
+            BASE_PATH = f"{basepath}/{year}/{month}"
 
         altim_files = find_nc_and_h5_files(
-            directory=basepath,
+            directory=BASE_PATH,
             recursive=True,
-            max_files=None,
             include_string=f"_{year}{month}",
             filetype="nc",
         )
-        log.info("altim_files len : %d for basepath : %s", len(altim_files) , basepath)
         altimetry_files.extend(altim_files)
 
-    log.info("Loaded %d altimetry data files", len(altimetry_files))
-    
+    logger.info("Loaded %d altimetry data files", len(altimetry_files))
+
     if Path(f"{params.is2_dir}/{year}/{month}").is_dir():
         params.is2_dir = f"{params.is2_dir}/{year}/{month}"
 
     is2_files = find_nc_and_h5_files(
         directory=params.is2_dir,
         recursive=True,
-        max_files=None,
         include_string=f"_{year}{month}",
         filetype="h5",
     )
 
-    log.info("Loaded %d is2-atl06 data files", len(is2_files))
+    logger.info("Loaded %d is2-atl06 data files", len(is2_files))
 
-    processor = ProcessData(params, area_obj, log)
-
+    processor = ProcessData(params, area_obj, logger)
     with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-        altim_results = list(executor.map(processor.process_file_altimetry, altimetry_files, chunksize=params.chunksize))
-
+        altim_results = list(
+            executor.map(
+                processor.process_file_altimetry, altimetry_files, chunksize=params.chunksize
+            )
+        )
     valid_altim_results = [result for result in altim_results if result is not None]
     altimetry_points = np.concatenate(valid_altim_results)
-    log.info("Loaded altimetry data points, len : %d", len(altimetry_points))
+
+    logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
 
     with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-        is2_results = list(executor.map(processor.process_file_is2, is2_files, chunksize=params.chunksize))
-
+        is2_results = list(
+            executor.map(processor.process_file_is2, is2_files, chunksize=params.chunksize)
+        )
     valid_is2_results = [result for result in is2_results if result is not None]
-    # print([len(arr) for arr in valid_is2_results])
-    np.savez("structured_data.npz", *valid_is2_results)
+    laser_is2_points = np.concatenate(valid_is2_results)
 
+    logger.info("Loaded is2 data points, len : %d", len(laser_is2_points))
 
-    is2_points = np.concatenate(valid_is2_results)
-    log.info("Loaded is2 data points, len : %d", len(is2_points))
-    log.info("Get elevation differences differences")
+    elev_differences = get_elev_differences(params, laser_is2_points, altimetry_points)
 
-    elev_differences = get_elev_differences(params, is2_points, altimetry_points)
-    log.info("Got elevation differences len : %d", elev_differences)
+    logger.info("Got elevation differences len : %d", elev_differences)
 
-    lats, lons = area_obj.xy_to_latlon(elev_differences['x'], elev_differences['y'])
-    is2_lats, is2_lons = area_obj.xy_to_latlon(elev_differences['is2_x'], elev_differences['is2_y'])
+    alt_lats, alt_lons = area_obj.xy_to_latlon(elev_differences["x"], elev_differences["y"])
+    is2_lats, is2_lons = area_obj.xy_to_latlon(elev_differences["is2_x"], elev_differences["is2_y"])
 
     BEAMS_STR = "".join(params.beams)
-
-    outfile = (
-        params.outdir
-        + f"/{ params.mission}_minus_is2_{BEAMS_STR}_p2p_diffs_{params.area}.npz"
+    MISSION = str(
+        [
+            i
+            for i in Path(altimetry_points[0]).parts
+            if i in {"CRY", "S3A", "S3B", "ERS2", "ERS1", "ENV"}
+        ][0]
     )
 
-    log.info("Saving month data to %s", outfile)
+    outfile = params.outdir + f"/{MISSION}_minus_is2_{BEAMS_STR}_p2p_diffs_{params.area}.npz"
+
+    logger.info("Saving month data to %s", outfile)
     np.savez(
         outfile,
-        dh=elev_differences['dh'],
-        lons=lons,
-        lats=lats,
-        x=elev_differences['x'],
-        y=elev_differences['y'],
-        h=elev_differences['h'],
+        dh=elev_differences["dh"],
+        lons=alt_lons,
+        lats=alt_lats,
+        x=elev_differences["x"],
+        y=elev_differences["y"],
+        h=elev_differences["h"],
         is2_lons=is2_lons,
         is2_lats=is2_lats,
-        is2_x=elev_differences['is2_x'],
-        is2_y=elev_differences['is2_y'],
-        is2_h=elev_differences['is2_h'],
+        is2_x=elev_differences["is2_x"],
+        is2_y=elev_differences["is2_y"],
+        is2_h=elev_differences["is2_h"],
     )
 
-    print(time.time())
+    # print(time.time())
