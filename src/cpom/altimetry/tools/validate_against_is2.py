@@ -58,8 +58,10 @@ def parse_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Retrieve command line arguments")
 
     # Add long and short command line arguments
-    parser.add_argument("--altim_dir", "-ad", help="Directory path", required=True)
-    parser.add_argument("--is2_dir", "-id", help="", required=True)
+    parser.add_argument("--is2_dir", "-id", help="IS2 data file path", required=True)
+    parser.add_argument(
+        "--altim_dir", "-ad", help="Altimetry data path (required unless --compare_is2_self is set)"
+    )
 
     # parser.add_argument("--mission", "-m", help="altimetry mission: cs2, s3a, s3b", required=True)
     parser.add_argument(
@@ -119,12 +121,22 @@ def parse_args() -> argparse.ArgumentParser:
         help="[optional] override default path of log directory",
     )
     parser.add_argument(
-        "--add_vars", "-add", help="[optional] Add variables for output. e.g. uncertainty,retracker"
+        "--add_vars",
+        "-add",
+        help="[optional] Add variables for output. e.g. uncertainty,retracker",
     )
-    parser.add_argument("--chunksize", "-cs", type=int, default=5, help="")
+    parser.add_argument(
+        "--compare_is2_self",
+        action="store_true",  # Default is False, becomes True if provided
+        help="[optional] When set to true, compare is2 point to nearby is2 rather than altimetry",
+    )
+    parser.add_argument("--chunksize", "-cs", type=int, default=1, help="")
     parser.add_argument("--max_workers", "-me", type=int, default=1, help="")
 
     args = parser.parse_args()
+
+    if not args.compare_is2_self and args.altim_dir is None:
+        sys.exit("--altim_dir is required unless --compare_is2_self is set")
 
     if args.area not in list_all_area_definition_names_only():
         sys.exit(f"{args.area} not a valid cpom area name")
@@ -180,14 +192,14 @@ def get_default_variables(file: str) -> dict:
             "lat_nadir": "lat_20_ku",
             "lon_nadir": "lon_20_ku",
             "lat": "lat_poca_20_ku",
-            "lon": "lat_poca_20_ku",
+            "lon": "lon_poca_20_ku",
             "elevation": "height_3_20_ku",
         },
         "CS_OFFL_SIR_SIN": {
             "lat_nadir": "lat_20_ku",
             "lon_nadir": "lon_20_ku",
             "lat": "lat_poca_20_ku",
-            "lon": "lat_poca_20_ku",
+            "lon": "lon_poca_20_ku",
             "elevation": "height_1_20_ku",
         },
         # Sentinel data
@@ -295,7 +307,7 @@ class ProcessData:
         bad_indices = np.flatnonzero(lon.mask)  # Is this needed , check.
         if bad_indices.size > 0:
             lat_nadir = get_variable(nc, config["lat_nadir"])
-            lon_nadir = get_variable(nc, config["lon_nadir_name"])
+            lon_nadir = get_variable(nc, config["lon_nadir"])
             lat[bad_indices] = lat_nadir[bad_indices]
             lon[bad_indices] = np.mod(lon_nadir[bad_indices], 360)
         return lat, lon
@@ -335,7 +347,7 @@ class ProcessData:
                 elev = get_variable(nc, config["elevation"])[idx]
                 x, y, lats, lons = x[idx], y[idx], lats[idx], lons[idx]
 
-                if len(x) != len(y) != len(elev):
+                if not len(x) == len(y) == len(elev):
                     raise ValueError("Mismatch in variable lengths for x,y,h")
 
                 if self.args.add_vars:
@@ -381,12 +393,10 @@ class ProcessData:
                 points = []
                 # self.log.info("filename %s", filename)
                 for beam in self.args.beams:
-                    # self.log.info("CHECK THE RIGHT BEAM %s", beam)
                     config = {
                         key: path.format(beam=beam)
                         for key, path in get_default_variables(filename).items()
                     }
-                    # self.log.info("CHECK THE config  %s", config)
                     # Filter out files in wrong hemisphere. No files cross hemispheres
                     try:
                         hemisphere = get_variable(nc, config["lat"])[0]
@@ -419,7 +429,7 @@ class ProcessData:
                         # Transform lat, lon to x,y in appropriate polar stereo projections
                         x, y = self.area.latlon_to_xy(lats, lons)
                         elevation = elevation[bounded_indices]
-                        if len(x) != len(y) != len(elevation):
+                        if not len(x) == len(y) == len(elevation):
                             raise ValueError("Mismatch in variable lengths for x,y,h")
 
                         points.append(
@@ -442,7 +452,10 @@ class ProcessData:
 
 
 def get_elev_differences(
-    args: argparse.Namespace, is2_points: np.ndarray, altimeter_points: np.ndarray
+    args: argparse.Namespace,
+    is2_points: np.ndarray,
+    altimeter_points: np.ndarray,
+    prefix: str = "",
 ) -> dict:
     """
     Calculate the elevation differences between IS2 points and altimeter points
@@ -460,47 +473,79 @@ def get_elev_differences(
     """
 
     is2_tree = cKDTree(np.c_[is2_points["x"], is2_points["y"]])
-    add_vars = {
-        var: []
-        for var in [val for val in list(altimeter_points.dtype.names) if val not in {"x", "y", "h"}]
-    }
+
+    add_vars = (
+        {
+            var: []
+            for var in [
+                val for val in list(altimeter_points.dtype.names) if val not in {"x", "y", "h"}
+            ]
+        }
+        if not args.compare_is2_self
+        else {}
+    )
+
     results = {
         "dh": [],
-        "x": [],
-        "y": [],
-        "h": [],
         "is2_x": [],
         "is2_y": [],
         "is2_h": [],
+        f"{prefix}x": [],
+        f"{prefix}y": [],
+        f"{prefix}h": [],
         **{var: [] for var in add_vars},
     }
 
     for altimeter_point in altimeter_points:
         query_point = (altimeter_point["x"], altimeter_point["y"])
+        indices = is2_tree.query_ball_point(
+            query_point, args.radius
+        )  # Find IS2 points within search_radius
 
-        # Find IS2 points within search_radius
-        indices = is2_tree.query_ball_point(query_point, args.radius)
+        if args.compare_is2_self:  # Remove comparision to self
+            indices = [
+                i
+                for i in indices
+                if is2_points[i]["x"] != altimeter_point["x"]
+                and is2_points[i]["y"] != altimeter_point["y"]
+            ]
+
         if len(indices) > 0:
             for idx in indices:
                 is2_point = is2_points[idx]
-                # Check elevation difference
+
                 dh = altimeter_point["h"] - is2_point["h"]
                 if np.abs(dh) < args.maxdiff:
                     results["dh"].append(dh)
-                    results["x"].append(altimeter_point["x"])
-                    results["y"].append(altimeter_point["y"])
-                    results["h"].append(altimeter_point["h"])
-                    results["is2_x"].append(altimeter_point["x"])
-                    results["is2_y"].append(altimeter_point["y"])
-                    results["is2_h"].append(altimeter_point["h"])
+                    results[f"{prefix}x"].append(altimeter_point["x"])
+                    results[f"{prefix}y"].append(altimeter_point["y"])
+                    results[f"{prefix}h"].append(altimeter_point["h"])
+                    results["is2_x"].append(is2_point["x"])
+                    results["is2_y"].append(is2_point["y"])
+                    results["is2_h"].append(is2_point["h"])
+
                     for var in add_vars:
                         results[var].append(altimeter_point[var])
     return results
 
+
 if __name__ == "__main__":
     params = parse_args()
 
-    logfile = params.logdir + f"/{params.month:02d}{params.year:4d}"
+    area_obj = Area(params.area)
+    year = params.year
+    month = str(params.month).zfill(2)
+    # ----------------------------------#
+    # Create or clear output directory #
+    # ----------------------------------#
+    month_outdir = Path(params.outdir) / f"{year}/{month}"
+    try:
+        month_outdir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        # logger.error("Failed  create directory %s: %s", month_outdir, e)
+        sys.exit("Failed  create directory %s: %s", month_outdir, e)
+
+    logfile = f"{params.logdir}/{params.month:02d}{params.year:4d}"
 
     logger = setup_logging(
         log_file_info=logfile + ".info.log",
@@ -508,45 +553,14 @@ if __name__ == "__main__":
     )
     logger.info("Start processing with arguments %s", params)
 
-    area_obj = Area(params.area)
-    year = params.year
-    month = str(params.month).zfill(2)
-
-    # Create or clear output directory
-    month_outdir = params.outdir + f"/{year}/{month}"
-    if not os.path.isdir(month_outdir):
-        print("Creating output directory for results ", month_outdir)
-    try:
-        os.makedirs(month_outdir)
-    except OSError as e:
-        logger.error("%s %s", e.filename, e.strerror)
-        sys.exit()
-
-    if not Path(month_outdir).is_dir():
-        logger.error("month_outdir %s directory. Please create the directory first", month_outdir)
-        sys.exit()
-
-    altimetry_files = []
-    BASE_PATH = params.altim_dir.split(",")
-    for basepath in BASE_PATH:
-        if Path(f"{basepath}/{year}/{month}").is_dir():
-            BASE_PATH = f"{basepath}/{year}/{month}"
-
-        altim_files = find_nc_and_h5_files(
-            directory=BASE_PATH,
-            recursive=True,
-            include_string=f"_{year}{month}",
-            filetype="nc",
-        )
-        altimetry_files.extend(altim_files)
-
-    logger.info("Loaded %d altimetry data files", len(altimetry_files))
-
-    if Path(f"{params.is2_dir}/{year}/{month}").is_dir():
-        params.is2_dir = f"{params.is2_dir}/{year}/{month}"
+    # ---------------#
+    # Load is2 data #
+    # ---------------#
+    is2_path = Path(params.is2_dir) / f"{year}/{month}"
+    is2_dir = is2_path if is2_path.is_dir() else Path(params.is2_dir)
 
     is2_files = find_nc_and_h5_files(
-        directory=params.is2_dir,
+        directory=is2_dir,
         recursive=True,
         include_string=f"_{year}{month}",
         filetype="h5",
@@ -555,16 +569,6 @@ if __name__ == "__main__":
     logger.info("Loaded %d is2-atl06 data files", len(is2_files))
 
     processor = ProcessData(params, area_obj, logger)
-    with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-        altim_results = list(
-            executor.map(
-                processor.process_file_altimetry, altimetry_files, chunksize=params.chunksize
-            )
-        )
-    valid_altim_results = [result for result in altim_results if result is not None]
-    altimetry_points = np.concatenate(valid_altim_results)
-
-    logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
 
     with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
         is2_results = list(
@@ -575,38 +579,81 @@ if __name__ == "__main__":
 
     logger.info("Loaded is2 data points, len : %d", len(laser_is2_points))
 
-    elev_differences = get_elev_differences(params, laser_is2_points, altimetry_points)
+    # ---------------------------#
+    # Get elevation differences #
+    # ---------------------------#
+    if params.compare_is2_self:
+        logger.info("Performing IS2 self-comparison")
+        PREFIX = "neighbour_"
+        altimetry_points = laser_is2_points  # Compare is2 to itself
+        outfile = month_outdir / f"is2_vs_is2_p2p_diffs_{params.area}.npz"
+    else:
+        # ---------------------#
+        # Load altimetry data #
+        # ---------------------#
+        logger.info("Comparing IS2 to altimetry")
+        PREFIX = ""
 
-    logger.info("Got elevation differences len : %d", elev_differences)
+        altimetry_files = []
+        for basepath in params.altim_dir.split(","):
+            alt_path = Path(basepath) / f"{year}/{month}"
+            altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
 
-    alt_lats, alt_lons = area_obj.xy_to_latlon(elev_differences["x"], elev_differences["y"])
-    is2_lats, is2_lons = area_obj.xy_to_latlon(elev_differences["is2_x"], elev_differences["is2_y"])
+            altim_files = find_nc_and_h5_files(
+                directory=altimetry_dir,
+                recursive=True,
+                include_string=f"_{year}{month}",
+                filetype="nc",
+            )
+            altimetry_files.extend(altim_files)
 
-    BEAMS_STR = "".join(params.beams)
-    MISSION = str(
-        [
-            i
-            for i in Path(altimetry_points[0]).parts
-            if i in {"CRY", "S3A", "S3B", "ERS2", "ERS1", "ENV"}
-        ][0]
+        logger.info("Loaded %d altimetry data files", len(altimetry_files))
+
+        with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
+            altim_results = list(
+                executor.map(
+                    processor.process_file_altimetry, altimetry_files, chunksize=params.chunksize
+                )
+            )
+        valid_altim_results = [result for result in altim_results if result is not None]
+        altimetry_points = np.concatenate(valid_altim_results)
+        logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
+        MISSION = str(
+            [
+                i
+                for i in Path(altimetry_files[0]).parts
+                if i in {"CRY", "S3A", "S3B", "ERS2", "ERS1", "ENV"}
+            ][0]
+        )
+        outfile = (
+            month_outdir
+            / f"{MISSION}_minus_is2_{''.join(params.beams)}_p2p_diffs_{params.area}.npz"
+        )
+
+    elev_differences = get_elev_differences(params, laser_is2_points, altimetry_points, PREFIX)
+    logger.info("Got elevation differences len : %d", len(elev_differences))
+
+    # ---------------------- #
+    # Convert to lat/lon     #
+    # ---------------------- #
+    alt_lons, alt_lats = area_obj.xy_to_latlon(
+        elev_differences[f"{PREFIX}x"], elev_differences[f"{PREFIX}y"]
     )
-
-    outfile = params.outdir + f"/{MISSION}_minus_is2_{BEAMS_STR}_p2p_diffs_{params.area}.npz"
+    is2_lons, is2_lats = area_obj.xy_to_latlon(elev_differences["is2_x"], elev_differences["is2_y"])
 
     logger.info("Saving month data to %s", outfile)
-    np.savez(
-        outfile,
-        dh=elev_differences["dh"],
-        lons=alt_lons,
-        lats=alt_lats,
-        x=elev_differences["x"],
-        y=elev_differences["y"],
-        h=elev_differences["h"],
-        is2_lons=is2_lons,
-        is2_lats=is2_lats,
-        is2_x=elev_differences["is2_x"],
-        is2_y=elev_differences["is2_y"],
-        is2_h=elev_differences["is2_h"],
-    )
+    save_data = {
+        "dh": elev_differences["dh"],
+        f"{PREFIX}lons": alt_lons,
+        f"{PREFIX}lats": alt_lats,
+        f"{PREFIX}x": elev_differences[f"{PREFIX}x"],
+        f"{PREFIX}y": elev_differences[f"{PREFIX}y"],
+        f"{PREFIX}h": elev_differences[f"{PREFIX}h"],
+        "is2_lons": is2_lons,
+        "is2_lats": is2_lats,
+        "is2_x": elev_differences["is2_x"],
+        "is2_y": elev_differences["is2_y"],
+        "is2_h": elev_differences["is2_h"],
+    }
 
-    # print(time.time())
+    np.savez(outfile, **save_data)
