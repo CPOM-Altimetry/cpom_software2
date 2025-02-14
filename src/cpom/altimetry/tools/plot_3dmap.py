@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tool to plot variables (including flags) from NetCDF file(s) on a selectable cryosphere map
+"""cpom.altimetry.tools.plot_3dmap.py
+
+# Purpose
+
+Tool to display (lat,lon,values) from one or more generic NetCDF files (containing latitude,
+longitude and value data of any sort and naming) on an interactive  3d DEM map 
+in a browser window. Will optionally recursively search a directory for netcdf files (optionally
+matching a pattern). It is assumed that netcdf files matched are of the same type.
+
+**Note** : this tool requires a graphics card or GPU on the system it is run on
+and displays within the current default browser. So, will not work on headless
+servers with no graphics cards or GPUs installed. Tested on a MacbookPro.
+
 
 For full list of command line args:
 
-`plot_map.py --help`
+`plot_3dmap.py --help`
 
 Most settings are configurable from the tool using the command line arguments, although the tool
 will try and automatically identify default parameters and select an area to plot 
@@ -13,46 +25,36 @@ command line.
 
 ## Examples
 
-List all available area definitions (ie the areas you can select to plot your data on):
+List all available 3D area definitions (ie the areas you can select to plot your data on):
 
-`plot_map.py --list_areas`
+`plot_3dmap.py --list_areas`
 
 Plot a parameter **elevation** from a CryTEMPO netcdf file, and display in area 
-definition **antarctica_hs_is** which is an Antarctic map with hillshading and a 
-grounded icesheet mask:
+definition **vostok**. 
+Use colormap RdYlBu to display elevation values between 3400m and 3500m range. 
 
-`plot_map.py -f  /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/\
-ANTARC/2010/07/CS_OFFL_SIR_TDP_LI_ANTARC_20100717T141004_20100717T141229_01_02644_B001.nc \
--p elevation -a antarctica_hs_is`
+`plot_3dmap.py -f CS_OFFL_SIR_TDP_LI_ANTARC_20200911T023800_20200911T024631_18_12333_D001.nc \
+    -a vostok -p elevation -c cmap:RdYlBu -pr 3400:3500`
 
-![my image](/cpom_software2/images/plot_map_example1.png "my image")
+Plot parameters **elevation** and **backscatter** from a CryTEMPO netcdf file, and display in area 
+definition **vostok**. 
+Use colormap RdYlBu to display **elevation** values between 3400m and 3500m range. 
+Use colormap Viridis to display **backscatter** values between default ranges. 
+Raise both parameters above the surface by 1m and 50m respectively
+Set the point size to be 6 and 10 respectively
 
-Plot all the netcdf files in the given directory. Automatically select the default
-parameter and area to plot.
+`plot_3dmap.py -f CS_OFFL_SIR_TDP_LI_ANTARC_20200911T023800_20200911T024631_18_12333_D001.nc \
+    -a vostok -p elevation -c cmap:RdYlBu,cmap:viridis -pr 3400:3500, -re 1,50 -ps 6,10`
 
-`plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07`
 
-![my image](/cpom_software2/images/plot_map_example2.png "my image")
+## Issues
 
-Plot a simulated grid of values at 0.01 deg separation over Lake Vostok, with
-point size 1.0 and colormap set to viridis
-
-`plot_map.py -a vostok -s 0.01 -ps 1 --cmap viridis`
-
-![my image](/cpom_software2/images/plot_map_example3.png "my image")
-
-Plot the instrument_mode parameter files in a named directory, and use the flag parameter settings
-shown to specify flag values, names and colours:
-
-`plot_map.py -d /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-B/001/LAND_ICE/ANTARC/2010/07 \
-    -p instrument_mode \
-    --flag_params 1:LRM:blue/2:SAR:pink/3:SIN:red`
-
-![my image](/cpom_software2/images/plot_map_example4.png "my image")
+Odd display issues with some DEM Zarr resolutions. For example using
+'rema_gapless_100m_zarr' with area vostok_600km. Seems to display ok when
+no parameters loaded, but incorrectly with them. 'rema_ant_1km_zarr' works
+fine. Needs further investigation.
 
 """
-
-__all__ = ["main"]
 
 import argparse
 import glob
@@ -65,8 +67,8 @@ from typing import List
 import numpy as np
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
-from cpom.areas.area_plot import Polarplot
-from cpom.areas.areas import Area, list_all_area_definition_names
+from cpom.areas.area_plot3d import plot_3d_area
+from cpom.areas.areas3d import Area3d, list_all_3d_area_definition_names
 
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-return-statements
@@ -294,12 +296,12 @@ def get_default_area(lat: float, filename: str) -> str:
         str: cpom area definition name
     """
     if lat < -50.0:
-        return "antarctica_hs"
+        return "antarctica"
     if lat > 50.0:
         basename = os.path.basename(filename)
         if "GREENL" in basename:  # for CryoTEMPO Greenland files
-            return "greenland_hs"
-        return "arctic_cpy"
+            return "greenland"
+        return "greenland"
     return "global"
 
 
@@ -338,7 +340,7 @@ def find_nc_files(
 
 
 def main(args):
-    """main function of tool
+    """main function of 3d plotting tool
 
     Returns:
         None
@@ -354,8 +356,7 @@ def main(args):
     parser = argparse.ArgumentParser(
         description=(
             "Tool to plot netcdf parameter(s) from one or more netcdf files"
-            " on cryosphere maps using the CPOM area"
-            " definitions and basemaps to define the maps"
+            " on 3d DEM views in an interactive browser."
         )
     )
 
@@ -380,9 +381,9 @@ def main(args):
         "--areadef_file",
         "-df",
         help=(
-            "[optional] path of CPOM area definition file. "
-            "Not necessary if using standard area definitions in cpom.areas.definitions."
-            " Can be used instead of standard area definitions"
+            "[optional] path of CPOM 3d area definition file. "
+            "Not necessary if using standard area definitions in cpom.areas.definitions_3d."
+            " Can be used instead of standard 3d area definitions"
         ),
         required=False,
     )
@@ -400,27 +401,34 @@ def main(args):
     )
 
     parser.add_argument(
-        "--cmap",
-        "-cm",
-        help=("colourmap name to to use. Default is RdYlBu_r"),
+        "--colours",
+        "-c",
+        help=(
+            "[optional] comma separated list of colours (either single (ie red) or colormaps"
+            " (ie RdYlBu) to use for plotting each parameter variable. Must be one entry "
+            "per variable."
+            "If using a colourmap then use the syntax cmap:colourmap, where colourmap is the"
+            "name of the colourmap (ie RdYlBu). So to use a single colour for variable 1, and"
+            "a colourmap for variable 2, use the following:  red,cmap:RdYlBu"
+            " (default = single colour red for all variables)."
+        ),
         required=False,
-        default="RdYlBu_r",
     )
 
     parser.add_argument(
         "--cmap_over",
         "-cmo",
-        help=("colourmap over color name to to use. Default is #A85754"),
+        help=("colourmap over color name to to use."),
         required=False,
-        default="#A85754",
+        default="",
     )
 
     parser.add_argument(
         "--cmap_under",
         "-cmu",
-        help=("colourmap under color name to to use. Default is #3E4371"),
+        help=("colourmap under color name to to use"),
         required=False,
-        default="#3E4371",
+        default="",
     )
 
     parser.add_argument(
@@ -437,23 +445,16 @@ def main(args):
         "-d",
         help=(
             "[Optional] path of a directory containing netcdf files to plot."
-            "All files are plotted within this directory."
+            "All files are plotted within this directory. "
+            "Use with --recursive for recursive search."
         ),
-        required=False,
-    )
-
-    parser.add_argument(
-        "--dpi",
-        "-dpi",
-        help=("[Optional, int] set the dpi to use when writing to an image file (def=85)."),
-        type=int,
         required=False,
     )
 
     parser.add_argument(
         "--file",
         "-f",
-        help=("[Optional] path of a single input netcdf file"),
+        help=("[Optional] path of a single input netcdf file to plot parameters from"),
         required=False,
     )
 
@@ -492,17 +493,9 @@ def main(args):
     )
 
     parser.add_argument(
-        "--hillshade",
-        "-hs",
-        help=("[optional] apply hillshade to values"),
-        required=False,
-        action="store_true",
-    )
-
-    parser.add_argument(
         "--include",
         "-i",
-        help=("[optional] include only files with this string in their filename"),
+        help=("[optional] include only netcdf files with this string in their filename"),
         required=False,
     )
 
@@ -539,43 +532,11 @@ def main(args):
     )
 
     parser.add_argument(
-        "--map_only",
-        "-m",
-        help=("plot map only, not histograms"),
-        required=False,
-        action="store_true",
-    )
-
-    parser.add_argument(
         "--max_files",
         "-mf",
         help=("only read the first N input netcdf files (if multiple files input)"),
         required=False,
         type=int,
-    )
-
-    parser.add_argument(
-        "--max_plot_range",
-        "-pr2",
-        help=(
-            "maximum plot range value."
-            " Default is the maximum value of the parameter plotted."
-            " For multiple parameters use comma separated list."
-        ),
-        required=False,
-        default="",
-    )
-
-    parser.add_argument(
-        "--min_plot_range",
-        "-pr1",
-        help=(
-            "minimum plot range value."
-            " Default is the minimum value of the parameter plotted."
-            " For multiple parameters use comma separated list."
-        ),
-        required=False,
-        default="",
     )
 
     parser.add_argument(
@@ -590,24 +551,6 @@ def main(args):
     )
 
     parser.add_argument(
-        "--out_dir",
-        "-od",
-        help=(
-            "/some/path :save plot to this directory path, using a standard file name"
-            "of plot_<param>_<area>.png, where param is the first "
-            "--params arg (with any / replaced by _)"
-        ),
-        required=False,
-    )
-
-    parser.add_argument(
-        "--out_file",
-        "-o",
-        help=("/some/path/filename.png :save plot as this .png output file name"),
-        required=False,
-    )
-
-    parser.add_argument(
         "--params",
         "-p",
         help=(
@@ -619,16 +562,80 @@ def main(args):
     )
 
     parser.add_argument(
-        "--point_size_factor",
-        "-ps",
+        "--no_place_annotations",
+        "-npa",
+        help=("disable default area place annotations on the 3D plot"),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--no_latlon_annotations",
+        "-nla",
+        help=("disable default latitude and longitude annotations on the 3D plot"),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--opacity",
+        "-op",
         help=(
-            "point size scale factor (default is 1.0). Use this to scale the "
-            "plotted point size up or down. Needs some experimentation as to the correct value "
-            "which may be 0.01 or 100. It is more of a log scale. For plotting multiple "
-            "parameters different sizes you can use a comma separated list of scale factors."
+            "opacity of plotted parameter in range 0 to 1 (opaque)"
+            "Comma separated list if more than 1 data set."
+            "default is opacity of 1"
         ),
         required=False,
-        default="0.1",
+    )
+
+    parser.add_argument(
+        "--plot_ranges",
+        "-pr",
+        help=(
+            "[optional,str] comma separated list of plot ranges to use with colourmaps "
+            "per plot variable."
+            "Format for n variables is min1:max1,min2:max2,..minn,maxn. "
+            "If a variable is not using a "
+            "colourmap then just use a comma but no spaces to skip it, "
+            "ie min1:max1,,min3:max3. Note that if the value of min1 is negative"
+            " it should be escaped with a \\ "
+        ),
+        required=False,
+        type=str,  # must be str as is a comma separated list
+    )
+
+    parser.add_argument(
+        "--plot_nan_fv",
+        "-pn",
+        help=(
+            "[optional] when selected plot just the locations of the Nan or FillValue values in"
+            "the parameter(s) being plotted and not the values themselves."
+        ),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--pointsizes",
+        "-ps",
+        help=(
+            "[optional,str] comma separated list of integer point sizes to use plotting vars"
+            " default is 2 for all variables"
+        ),
+        required=False,
+        type=str,  # must be str as is a comma separated list
+    )
+
+    parser.add_argument(
+        "--raise_elevation",
+        "-re",
+        help=(
+            "[optional] raise the elevation of the plot variable on the DEM by n meters."
+            "Default is 1m to raise it above the background DEM surface. "
+            "Comma separated if multiple parameters. example: --raise 1,100"
+        ),
+        required=False,
+        type=str,
     )
 
     parser.add_argument(
@@ -682,6 +689,28 @@ def main(args):
         required=False,
     )
 
+    parser.add_argument(
+        "--var_stride",
+        "-vs",
+        help=(
+            "plot every Nth parameter value. Comma separated list if more"
+            " than one parameter. Default is 1. Can speed up plotting and make"
+            "3D browser window more responsive if the stride is increased."
+        ),
+        required=False,
+    )
+
+    parser.add_argument(
+        "--zscale",
+        "-zs",
+        help=(
+            "(float) : scale the DEM in the Z-axis. Default is in the area definitions"
+            " as zaxis_multiplier: <value>. Raising this will increase the visual scale"
+            " in z-direction (ie make terrain and mountains look less flat)"
+        ),
+        required=False,
+    )
+
     # read arguments from the command line
     args = parser.parse_args(args)
 
@@ -691,7 +720,7 @@ def main(args):
 
     # Print a list of available area definitions
     if args.list_areas:
-        area_list = list_all_area_definition_names()
+        area_list = list_all_3d_area_definition_names()
         mystr = f"{BLACK_BOLD}List of Available Area Names from CPOM Area Definitions{NC}"
         print("-" * (len(mystr) - 8))
         print(mystr)
@@ -699,9 +728,6 @@ def main(args):
         for area_name in area_list:
             print(f"{area_name}")
         sys.exit(0)
-
-    if args.out_file and args.out_dir:
-        sys.exit("{RED}Only one of --out_file and --out_dir allowed{NC}")
 
     if args.areadef_file:
         if not os.path.exists(args.areadef_file):
@@ -743,7 +769,7 @@ def main(args):
         lonnames = []
 
     # ------------------------------------------------------------------------------------------
-    #  Find list of files to plot (or could be an empty list if just plotting map)
+    #  Find list of files to plot (or could be an empty list if just plotting 3d scene from DEM)
     # ------------------------------------------------------------------------------------------
 
     # Find list of input netcdf files .nc, or .NC
@@ -802,25 +828,57 @@ def main(args):
     # Build dataset dicts to plot
     # ---------------------------------------------------------------------------
 
-    datasets = []
-
     error_str = ""
-    plot_size_scale_factor = args.point_size_factor.split(",")
-    if len(plot_size_scale_factor) != num_data_sets:
-        plot_size_scale_factor = [plot_size_scale_factor[0]] * num_data_sets
-        error_str += "point_size_factor "
-    min_plot_range = args.min_plot_range.split(",")
-    if len(min_plot_range) != num_data_sets:
-        min_plot_range = [min_plot_range[0]] * num_data_sets
-        error_str += "min_plot_range "
-    max_plot_range = args.max_plot_range.split(",")
-    if len(max_plot_range) != num_data_sets:
-        max_plot_range = [max_plot_range[0]] * num_data_sets
-        error_str += "max_plot_range "
-    cmap_names = args.cmap.split(",")
-    if len(cmap_names) != num_data_sets:
-        cmap_names = [cmap_names[0]] * num_data_sets
-        error_str += "cmap "
+
+    if args.pointsizes:
+        pointsizes = args.pointsizes.split(",")
+        pointsizes = [int(pointsize) for pointsize in pointsizes]
+        while len(pointsizes) < num_data_sets:
+            pointsizes.append(pointsizes[-1])
+    else:
+        pointsizes = [2] * num_data_sets
+
+    # Decide on which colours to use for each variable. This can either be a single colour
+    # or a colourmap (with colours mapped to a specific variable data range)
+    colours = ["red"] * num_data_sets  # default is single colour red for each variable
+    cmaps = [None] * num_data_sets
+    usecmaps = [False] * num_data_sets
+    if args.colours:
+        colours = args.colours.split(",")
+        if len(colours) != num_data_sets:
+            sys.exit("--colours error : must include an entry for each variable. ")
+        for varnum, colour in enumerate(colours):
+            colour_split = colour.split(":")
+            if len(colour_split) == 2:
+                if colour_split[0] != "cmap":
+                    sys.exit("--colours syntax error, colourmap entries must be cmap:colourmapstr")
+                usecmaps[varnum] = True
+                cmaps[varnum] = colour_split[1]
+
+    if args.raise_elevation:
+        raise_elevation = args.raise_elevation.split(",")
+        while len(raise_elevation) < num_data_sets:
+            raise_elevation.append(raise_elevation[-1])
+    else:
+        raise_elevation = [1.0] * num_data_sets
+
+    plot_ranges = [None] * num_data_sets
+
+    if args.plot_ranges:
+        plot_ranges = args.plot_ranges.split(",")
+        # min1:max1,min2:max2,..minn,maxn or min1:max1,, if plot range not requirwd
+        # for variable
+        for varnum, plot_range in enumerate(plot_ranges):
+            minmax = plot_range.split(":")
+            if len(minmax) == 2:
+                tmp_pr = np.array([float(minmax[0]), float(minmax[1])])
+                plot_ranges[varnum] = [tmp_pr.min(), tmp_pr.max()]
+            elif len(minmax) == 1 and minmax[0] != "":
+                sys.exit(
+                    f"--plot_ranges syntax error : args used: {args.plot_ranges}. "
+                    f"Error in {minmax} part. Must be pairs of min:max or empty as ,,"
+                )
+
     cmap_over = args.cmap_over.split(",")
     if len(cmap_over) != num_data_sets:
         cmap_over = [cmap_over[0]] * num_data_sets
@@ -850,11 +908,27 @@ def main(args):
             fill_value = [fill_value[0]] * num_data_sets
             error_str += "fill_value "
 
+    if args.opacity:
+        opacity = args.opacity.split(",")
+        if len(opacity) != num_data_sets:
+            opacity = [opacity[0]] * num_data_sets
+            error_str += "opacity "
+    else:
+        opacity = [1.0] * num_data_sets
+
     if args.units:
         units = args.units.split(",")
         if len(units) != num_data_sets:
             units = [units[0]] * num_data_sets
             error_str += "units "
+
+    if args.var_stride:
+        var_stride = args.var_stride.split(",")
+        if len(var_stride) != num_data_sets:
+            var_stride = [var_stride[0]] * num_data_sets
+            error_str += "var_stride "
+    else:
+        var_stride = [1] * num_data_sets
 
     if len(error_str) > 0:
         print(
@@ -865,24 +939,28 @@ def main(args):
 
     flag_values_from_data = []
     flag_names_from_data = []
+    datasets = []
 
     for i in range(num_data_sets):
         ds = {
             "name": params[i],
-            "lats": [],
-            "lons": [],
-            "vals": [],
-            "plot_size_scale_factor": float(plot_size_scale_factor[i]),
-            "cmap_name": cmap_names[i],
-            "cmap_over_color": cmap_over[i],
+            "lats": [],  # added in later
+            "lons": [],  # added in later
+            "vals": [],  # added in later
+            "point_size": float(pointsizes[i]),
+            "color": colours[i],
+            "raise_elevation": float(raise_elevation[i]),
+            "use_colourmap": usecmaps[i],
+            "colourmap": cmaps[i],
             "cmap_under_color": cmap_under[i],
-            "cmap_extend": cmap_extend[i],
+            "cmap_over_color": cmap_over[i],
+            "plot_range": plot_ranges[i],
             "apply_area_mask_to_data": not args.not_apply_mask,
+            "var_stride": int(var_stride[i]),
+            "plot_alpha": opacity[i],
+            "plot_nan_and_fv": args.plot_nan_fv,
         }
-        if min_plot_range[i] != "":
-            ds["min_plot_range"] = float(min_plot_range[i])
-        if max_plot_range[i] != "":
-            ds["max_plot_range"] = float(max_plot_range[i])
+
         if args.valid_min and args.valid_max is None:
             ds["valid_range"] = [float(valid_min[i]), None]
         if args.valid_max and args.valid_min is None:
@@ -962,19 +1040,19 @@ def main(args):
 
     try:
         if args.areadef_file:
-            thisarea = Area("none", area_filename=args.areadef_file)
+            thisarea = Area3d("none", area_filename=args.areadef_file)
         elif args.area:
-            thisarea = Area(args.area)
+            thisarea = Area3d(args.area)
             def_area = args.area
         elif def_area:
-            thisarea = Area(def_area)
+            thisarea = Area3d(def_area)
         else:
             sys.exit("no area defined")
 
     except ImportError:
         sys.exit(
             f"{RED}Area name {BLUE}{def_area}{RED} not found in list of area definitions "
-            f"src/cpom/areas/definitions{NC}."
+            f"src/cpom/areas/definitions_3d{NC}."
             " Use --listareas to show available areas"
         )
 
@@ -1065,16 +1143,17 @@ def main(args):
                     datasets[i]["flag_names"] = [str(n) for n in unique_vals]
 
     area_overrides = {}
-    if args.hillshade:
-        area_overrides["apply_hillshade_to_vals"] = True
 
-    Polarplot(def_area, area_overrides=area_overrides, area_file=args.areadef_file).plot_points(
-        *datasets,
-        output_file=args.out_file,
-        output_dir=args.out_dir,
-        map_only=args.map_only,
-        dpi=85 if not args.dpi else args.dpi,
-    )
+    if args.no_place_annotations:
+        area_overrides["place_annotations"] = {}
+    if args.no_latlon_annotations:
+        area_overrides["lat_annotations"] = {}
+        area_overrides["lon_annotations"] = {}
+    if args.zscale:
+        area_overrides["zaxis_multiplier"] = float(args.zscale)
+
+    # Create the 3D plot in a browser page
+    plot_3d_area(args.area, *datasets, area_overrides=area_overrides)
 
     log.info("plot completed ok")
 
