@@ -613,7 +613,6 @@ def main(args):
         ),
         required=False,
         action="store_true",
-        type=bool,
     )
 
     parser.add_argument(
