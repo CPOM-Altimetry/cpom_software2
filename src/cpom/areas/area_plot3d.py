@@ -199,7 +199,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     "bgcolor": annotation[5],
                     "xanchor": "left",
                     "xshift": 2,
-                    "opacity": 0.6,
+                    "opacity": annotation[7],
                 }
             )
 
@@ -775,6 +775,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
     # --------------------------------------------------------------------------------------------
 
     if thisarea.lat_lines:
+        log.info("Adding latitude lines...")
         latx = []
         laty = []
         for latpoint in thisarea.lat_lines:
@@ -787,6 +788,8 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
         laty -= ydem.min()
         latx = np.array(latx) * 0.001
         laty = np.array(laty) * 0.001
+        # latx  *= 0.001
+        # laty  *= 0.001
         latz = np.ones(len(laty)) * thisarea.latlon_lines_elevation
 
         fig.add_scatter3d(
@@ -807,6 +810,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
     # --------------------------------------------------------------------------------------------
 
     if thisarea.lon_lines:
+        log.info("Adding longitude lines...")
         lonx = []
         lony = []
         for lonpoint in thisarea.lon_lines:

@@ -124,12 +124,12 @@ class Mask:
             self.mask_type = "xylimits"  # 'xylimits', 'polygon', 'grid','latlimits'
 
             self.xlimits = [
-                -1996781,
-                -1196781,
+                -1996781 - 50000,
+                -1196781 + 50000,
             ]  # [minx, maxx] in m, in current  coordinate system
             self.ylimits = [
-                -768646,
-                31353,
+                -768646 - 50000,
+                31353 + 50000,
             ]  # [miny, maxy] in m, in current  coordinate system
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
 

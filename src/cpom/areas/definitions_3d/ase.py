@@ -1,11 +1,11 @@
 """3D Area Definition
 
-# Amundsen Sea Embayment, West Antarctica DEM: 1km REMA Gapless v1::3
+# Amundsen Sea Embayment, West Antarctica DEM: 1km REMA Gapless v1::1
 
 """
 
 area_definition = {
-    "long_name": "Amundsen Sea Embayment DEM: 1km REMA Gapless v1::3",
+    "long_name": "Amundsen Sea Embayment DEM: 1km REMA Gapless v1::1",
     # --------------------------------------------
     # Area definition
     # --------------------------------------------
@@ -69,38 +69,41 @@ area_definition = {
     "mss_gridarea": "antarctic_ocean",  # grid area to specify the MSS ocean layer
     "mss_binsize_km": 10,
     "view_angle_elevation": 45,
-    "view_angle_azimuth": 15,
+    "view_angle_azimuth": 215,
     "plot_zoom": 0.8,  # default=10, smaller zooms in, larger zooms out"
     "zaxis_limits": [-100.0, 2500],  # in m
     "light_xdirection": 1e4,
     "light_ydirection": 0,  # 0
     "light_zdirection": 1.0,  # 1.0
     "place_annotations": (
-        [-74.1, 253, 100.0, "Pine Island Bay", "white", None, 11],
-        [-73.5, 250, 100.0, "AMUNDSEN SEA", "white", None, 13],
-        [-75.5, 253.25, 100.0, "Thwaites Glacier", "Black", "White", 11],
-        [-74.4, -112.667, 150.0, "Dotson Ice Shelf", "Black", "White", 11],
-        [-75.166667, -100, 150.0, "Pine Island Glacier", "Black", "White", 11],
-    ),  # place annotations, [[latitude, longitude,elevation,string,color, bg_color,size],..]
+        [-74.1, 253, 100.0, "Pine Island Bay", "white", None, 11, 0.9],
+        [-73.2, 253, 100.0, "AMUNDSEN SEA", "white", None, 13, 0.9],
+        [-75.9, 253.25, 100.0, "Thwaites Glacier", "Black", "White", 10, 0.9],
+        [-74.4, -112.667, 150.0, "Dotson Ice Shelf", "Black", "White", 11, 0.9],
+        [-75.5, 265, 150.0, "Pine Island Glacier", "Black", "White", 10, 0.9],
+        [-78.6, 255, 600.0, "WEST ANTARCTIC ICE SHEET", "Black", "White", 9, 0.9],
+        [-73.08333, -105.1, 150, "Burke Island", "White", None, 10, 0.9],
+    ),  # place annotations, [[latitude, longitude,elevation,string,color,
+    # bg_color,size,opacity],..]
     # latitude, longitude annotations, placed at each lat, lon,pair.
     # [lat,lon,elevation, text_size,xshift,yshift]
-    "lat_annotations": ((-70, 220, 150, 10, 2, 0), (-60, 220, 150, 10, 2, 0)),
+    "lat_annotations": (
+        [-72, 254, 150, 8, 2, 0],
+        [-74, 254, 150, 8, 2, 0],
+    ),  # [lat,lon,elevation, text_size,xshift,yshift]
     "lon_annotations": (
-        [-66, 120, 150, 10, 2, 0],
-        [-66, 160, 150, 10, 2, 0],
-        [-66, 200, 150, 10, 2, 0],
-        [-66, 240, 150, 10, 2, 0],
-        [-66, 280, 150, 10, 2, 0],
-        [-66, 320, 150, 10, 2, 0],
-        [-66, 0, 150, 10, 2, 0],
-        [-66, 40, 150, 10, 2, 0],
-        [-66, 80, 150, 10, 2, 0],
-    ),
-    "lat_lines": range(-60, -80, -10),  # min_lat, max_lat, step
-    "lon_lines": range(0, 360, 20),  # min_lonE, max_lonE, step
+        [-73, 250, 150, 8, 2, 0],
+        [-73, 245, 150, 8, 2, 0],
+        [-71.8, 265, 150, 8, 2, 0],
+        [-71.8, 255, 150, 8, 2, 0],
+        [-71.5, 260, 150, 8, 2, 0],
+        [-71.8, 270, 150, 8, 2, 0],
+    ),  # [lat,lon,elevation, text_size,xshift,yshift]
+    "lat_lines": (-72, -74),  # min_lat, max_lat, step
+    "lon_lines": (245, 250, 255, 260, 265, 270),  # min_lonE, max_lonE, step
     "latlon_line_colour": "white",  # color or lat/lon lines
     "latlon_lines_increment": 0.01,  # spacing between latlon lines points
-    "latlon_lines_size": 0.3,  # point size of lat/lon lines
+    "latlon_lines_size": 0.8,  # point size of lat/lon lines
     "latlon_lines_opacity": 0.5,  # opacity (0..1) of lat/lon lines
     "latlon_lines_elevation": 200,  # m, elevation to plot lat/lon lines at
 }

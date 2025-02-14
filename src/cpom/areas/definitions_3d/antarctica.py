@@ -66,8 +66,8 @@ area_definition = {
     "light_ydirection": 0,
     "light_zdirection": 1.0,
     "place_annotations": (
-        (-80, 190, 3234.0, "Ross IS", "Black", "White", 12),
-        (-75, 298, 200.0, "Ronne IS", "Black", "White", 12),
+        (-80, 190, 3234.0, "Ross IS", "Black", "White", 12, 0.9),
+        (-75, 298, 200.0, "Ronne IS", "Black", "White", 12, 0.9),
     ),  # place annotations, [[latitude, longitude,elevation,string,color, bg_color,size],..]"
     # latitude, longitude annotations, placed at each lat, lon,pair.
     # [lat,lon,elevation, text_size,xshift,yshift]
