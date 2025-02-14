@@ -66,8 +66,17 @@ area_definition = {
     "light_ydirection": 0,
     "light_zdirection": 1.0,
     "place_annotations": (
-        (-80, 190, 3234.0, "Ross IS", "Black", "White", 12, 0.9),
-        (-75, 298, 200.0, "Ronne IS", "Black", "White", 12, 0.9),
+        (-80, 190, 3234.0, "Ross IS", "Black", "White", 10, 0.9),
+        (-76, 302, 200.0, "Ronne IS", "Black", "White", 10, 0.9),
+        (-70.5, 256, 100.0, "Amundsen Sea", "white", None, 9, 0.9),
+        (-71.5, 315, 100.0, "Weddell Sea", "white", None, 10, 0.9),
+        (-73.5, 190, 100.0, "Ross Sea", "white", None, 10, 0.9),
+        (-67, 278, 100.0, "Bellingshausen Sea", "white", None, 10, 0.9),
+        (-69, 71, 100.0, "Amery Ice Shelf", "Black", "White", 10, 0.9),
+        (-69, 116, 100.0, "Totten Glacier", "Black", "White", 10, 0.9),
+        (-75.9, 253.25, 100.0, "Thwaites Glacier", "Black", "White", 10, 0.9),
+        (-77.3, 106.0, 3500, "Vostok", "Black", "White", 10, 0.9),
+        (-90.0, 0.0, 2840, "Pole", "Black", "White", 10, 0.9),
     ),  # place annotations, [[latitude, longitude,elevation,string,color, bg_color,size],..]"
     # latitude, longitude annotations, placed at each lat, lon,pair.
     # [lat,lon,elevation, text_size,xshift,yshift]
