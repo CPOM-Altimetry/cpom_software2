@@ -260,6 +260,10 @@ class Dem:
 
         ncols = zdem.attrs["ncols"]
         nrows = zdem.attrs["nrows"]
+
+        for key in zdem.attrs:
+            print(key, zdem.attrs[key])
+
         top_l = zdem.attrs["top_l"]
         top_r = zdem.attrs["top_r"]
         bottom_l = zdem.attrs["bottom_l"]
