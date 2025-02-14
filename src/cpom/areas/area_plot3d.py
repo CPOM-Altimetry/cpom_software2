@@ -776,21 +776,22 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
 
     if thisarea.lat_lines:
         log.info("Adding latitude lines...")
-        latx = []
-        laty = []
+        latx_tmp = []
+        laty_tmp = []
         for latpoint in thisarea.lat_lines:
             for lonpoint in np.arange(0.0, 360.0, thisarea.latlon_lines_increment):
                 xtmp, ytmp = thisarea.lonlat_to_xy_transformer.transform(lonpoint, latpoint)
-                latx.append(xtmp)
-                laty.append(ytmp)
+                latx_tmp.append(xtmp)
+                laty_tmp.append(ytmp)
+        latx = np.array(latx_tmp)
+        laty = np.array(laty_tmp)
 
         latx -= xdem.min()
         laty -= ydem.min()
-        latx = np.array(latx) * 0.001
-        laty = np.array(laty) * 0.001
-        # latx  *= 0.001
-        # laty  *= 0.001
-        latz = np.ones(len(laty)) * thisarea.latlon_lines_elevation
+        latx *= 0.001
+        laty *= 0.001
+
+        latz = np.ones(laty.size) * thisarea.latlon_lines_elevation
 
         fig.add_scatter3d(
             x=latx,
@@ -811,24 +812,26 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
 
     if thisarea.lon_lines:
         log.info("Adding longitude lines...")
-        lonx = []
-        lony = []
+        lonx_tmp = []
+        lony_tmp = []
         for lonpoint in thisarea.lon_lines:
             if thisarea.hemisphere == "south":
                 for latpoint in np.arange(-90, -50.0, thisarea.latlon_lines_increment):
                     xtmp, ytmp = thisarea.lonlat_to_xy_transformer.transform(lonpoint, latpoint)
-                    lonx.append(xtmp)
-                    lony.append(ytmp)
+                    lonx_tmp.append(xtmp)
+                    lony_tmp.append(ytmp)
             else:
                 for latpoint in np.arange(50, 90.0, thisarea.latlon_lines_increment):
                     xtmp, ytmp = thisarea.lonlat_to_xy_transformer.transform(lonpoint, latpoint)
-                    lonx.append(xtmp)
-                    lony.append(ytmp)
+                    lonx_tmp.append(xtmp)
+                    lony_tmp.append(ytmp)
+        lonx = np.array(lonx_tmp)
+        lony = np.array(lony_tmp)
         lonx -= xdem.min()
         lony -= ydem.min()
-        lonx = np.array(lonx) * 0.001
-        lony = np.array(lony) * 0.001
-        lonz = np.ones(len(lony)) * thisarea.latlon_lines_elevation
+        lonx *= 0.001
+        lony *= 0.001
+        lonz = np.ones(lony.size) * thisarea.latlon_lines_elevation
 
         print("Adding lon lines..")
         fig.add_scatter3d(

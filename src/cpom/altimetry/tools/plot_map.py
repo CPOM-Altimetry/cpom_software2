@@ -492,6 +492,14 @@ def main(args):
     )
 
     parser.add_argument(
+        "--hillshade",
+        "-hs",
+        help=("[optional] apply hillshade to values"),
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--include",
         "-i",
         help=("[optional] include only files with this string in their filename"),
@@ -900,6 +908,8 @@ def main(args):
                 with Dataset(filename) as nc:
                     for i in range(num_data_sets):
                         vals = get_variable(nc, params[i])[:].data
+                        if vals.ndim == 3:
+                            vals = vals[0].flatten()
                         try:
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
@@ -908,7 +918,12 @@ def main(args):
                         except AttributeError:
                             pass
                         lats = get_variable(nc, latnames[i])[:].data
+                        if lats.ndim == 2:
+                            lats = lats.flatten()
+
                         lons = get_variable(nc, lonnames[i])[:].data % 360.0
+                        if lons.ndim == 2:
+                            lons = lons.flatten()
                         if len(bool_mask_params) == len(params):
                             bool_mask = get_variable(nc, bool_mask_params[i])[:].data.astype(bool)
                             vals = vals[bool_mask]
@@ -1049,7 +1064,11 @@ def main(args):
                     datasets[i]["flag_values"] = unique_vals
                     datasets[i]["flag_names"] = [str(n) for n in unique_vals]
 
-    Polarplot(def_area, area_file=args.areadef_file).plot_points(
+    area_overrides = {}
+    if args.hillshade:
+        area_overrides["apply_hillshade_to_vals"] = True
+
+    Polarplot(def_area, area_overrides=area_overrides, area_file=args.areadef_file).plot_points(
         *datasets,
         output_file=args.out_file,
         output_dir=args.out_dir,
