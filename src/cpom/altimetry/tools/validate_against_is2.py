@@ -1,6 +1,49 @@
-"""
-Tool to compare a selected month of ESA mission altimetry L2 elevations to
-ICESat-2 ATL-06 elevations.
+""" cpom.altimetry.tools.validate_against_is2.py
+# Purpose 
+
+Tool to compare a selected month of altimetry mission data elevations to
+ICESat-2 ATL-06 elevations. Optionally add additional variables , or compare is2 
+to itself.
+
+Examples:
+
+For full list of command line options: 
+
+```
+find_files_in_area.py -h
+```
+
+Example of a 12-month run for the Antarctica Ice Sheet. 
+Run for cs2 data sin mode, with 2 beams. Parallelised across 20 workers. 
+for m in {1..12}
+do
+    ./validate_against_is2.py --altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN \
+    --is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022 \
+    --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r --max_workers 20 &
+done
+```
+Run for cs2 Greenland comparison using LRM and SIN, 1 IS2 beam, and additional variables:
+./validate_against_is2.py 
+--altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN /media/luna/archive/SATS/RA/CRY/L2I/LRM \
+--is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --outdir /tmp --year 2020\
+--month 1 --area greenland --beams gt2r --add_vars uncertainty_variable_name &
+
+```
+Run for CS2 CryoTEMPO comparison over Antarctica using 1 beam.
+Cryotempo data requires an additional parameter --cryotempo_modes to filter to mode. 
+./validate_against_is2.py 
+--altim_dir /media/luna/archive/SATS/RA/CRY/Cryo-TEMPO/BASELINE-D101/LAND_ICE/ANTARC \
+--is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --outdir /tmp --year 2020 \
+--month 1 --area antarctica_is --beams gt2r --cryotempo_modes lrm sin &
+
+```
+Run to compare IS2 comparison over Greenland to nearby IS2 points:
+for m in {1..12}
+do
+    ./compare_to_is2_atl06.py 
+    --is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --outdir /tmp \
+    --year 2022 --month $m --area greenland --beams gt2r --max_workers 20 --compare_is2_self & \
+done
 """
 
 import argparse
@@ -48,7 +91,7 @@ def setup_logging(
     return log
 
 
-def parse_args() -> argparse.ArgumentParser:
+def parse_args() -> argparse.Namespace:
     """Declare command line arguments and defaut values
     Returns:
         argparse.ArgumentParser: Parsed input arguments
@@ -58,12 +101,17 @@ def parse_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Retrieve command line arguments")
 
     # Add long and short command line arguments
-    parser.add_argument("--is2_dir", "-id", help="IS2 data file path", required=True)
-    parser.add_argument(
-        "--altim_dir", "-ad", help="Altimetry data path (required unless --compare_is2_self is set)"
-    )
 
-    # parser.add_argument("--mission", "-m", help="altimetry mission: cs2, s3a, s3b", required=True)
+    parser.add_argument("--is2_dir", "-id", help="IS2 data directory", required=True)
+    parser.add_argument(
+        "--altim_dir",
+        "-ad ",
+        nargs="+",
+        help="Altimetry data directory('s) \
+        Supports multiple directories by providing a space seperated list of path1 path2\
+        If a subdirectory matching 'YEAR/MONTH' exists it will be picked up automatically. \
+        (required unless --compare_is2_self is set)",
+    )
     parser.add_argument(
         "--year", "-y", type=int, help="year number (YYYY): comparison year", required=True
     )
@@ -81,24 +129,30 @@ def parse_args() -> argparse.ArgumentParser:
         help="comparison area, cpom area name",
         required=True,
     )
-    parser.add_argument("--outdir", "-o", help="output directory path for results", required=True)
     parser.add_argument(
-        "--modes",
-        "-mo",
-        default="all",
-        choices={"all", "lrm", "sin", "sar"},
-        nargs="+",
-        help="[optional, default=all], limit to specific instrument mode(s). \
-                                Comma separated list of: lrm,sin,sar or all",
+        "--max_workers",
+        "-mw",
+        type=int,
+        default=1,
+        help="[optional, default=1] number of worker processes to use",
     )
+    parser.add_argument(
+        "--chunksize",
+        "-cs",
+        type=int,
+        default=1,
+        help="[optional, default=1] number of files each worker processes at a time",
+    )
+
+    parser.add_argument("--outdir", "-o", help="output directory path for results", required=True)
     parser.add_argument(
         "--beams",
         "-b",
-        default="gt2r",
+        default=["gt2r"],
         choices={"gt1l", "gt1r", "gt2l", "gt2r", "gt3l", "gt3r"},
         nargs="+",
         help="[optional, default=gt2r ] IS2 beams to use. \
-                        Comma separated list of: gt1l,gt1r,gt2l,gt2r,gt3l,gt3r",
+                        Space separated list of: gt1l gt1r gt2l gt2r gt3l gt3r",
     )
     parser.add_argument(
         "--radius",
@@ -121,25 +175,34 @@ def parse_args() -> argparse.ArgumentParser:
         help="[optional] override default path of log directory",
     )
     parser.add_argument(
-        "--add_vars",
-        "-add",
-        help="[optional] Add variables for output. e.g. uncertainty,retracker",
+        "---altim_dir d_vars",
+        "--altim_dir d",
+        nargs="+",
+        help="[optional] additional variables in the altimetry file to include in the output."
+        "Space-seperated list of : var1 var2 .",
     )
+    parser.add_argument(
+        "--cryotempo_modes",
+        "-mo",
+        default=["all"],
+        choices={"lrm", "sin", "sar", "all"},
+        nargs="+",
+        help="[optional, default= all] CryoTempo modes to use. Space-separated list of: lrm sin"
+        "For non-CryoTempo L2 CS2 data, specify multiple --altim_dir paths instead.",
+    )
+
     parser.add_argument(
         "--compare_is2_self",
         action="store_true",  # Default is False, becomes True if provided
-        help="[optional] When set to true, compare is2 point to nearby is2 rather than altimetry",
+        help="[optional] when set, compare is2 point to nearby is2 rather than altimetry",
     )
-    parser.add_argument("--chunksize", "-cs", type=int, default=1, help="")
-    parser.add_argument("--max_workers", "-me", type=int, default=1, help="")
-
     args = parser.parse_args()
 
     if not args.compare_is2_self and args.altim_dir is None:
-        sys.exit("--altim_dir is required unless --compare_is2_self is set")
+        parser.error("--altim_dir is required unless --compare_is2_self is set")
 
     if args.area not in list_all_area_definition_names_only():
-        sys.exit(f"{args.area} not a valid cpom area name")
+        parser.error(f"{args.area} not a valid cpom area name")
 
     args.logdir = args.logdir or args.outdir
     # if args.altdir and not Path(args.altdir).is_dir():
@@ -247,29 +310,14 @@ def find_nc_and_h5_files(
     Returns:
         List[str]: A list of found .nc or .NC files with their full paths.
     """
-    extension = "*.h5" if filetype == "h5" else "*.nc"
+    extensions = {"nc": "*.nc", "h5": "*.h5"}
 
-    files = list(Path(directory).rglob(extension) if recursive else Path(directory).glob(extension))
-    if include_string:
-        files = [str(file) for file in files if include_string in file.name]
-    else:
-        files = [str(file) for file in files]
+    if filetype not in extensions:
+        raise ValueError(f"Invalid filetype: {filetype}. Must be 'nc' or 'h5'.")
 
-    return files
-
-
-# def get_cryotempo_filters(nc, args, mask):
-#     """Check Cryotempo data is in a valid mode."""
-#     if args.modes == "all":
-#         return mask
-
-#     mode_map = {"lrm": 1, "sar": 2, "sin": 3}
-#     valid_modes = {mode_map[mode] for mode in args.modes if mode in mode_map}
-
-#     instrument_mode = get_variable(nc, "instrument_mode")[mask]
-#     valid_mask = np.isin(instrument_mode, list(valid_modes))
-
-#     return mask[valid_mask] if valid_mask.any() else mask
+    pattern = extensions[filetype]
+    files = Path(directory).rglob(pattern) if recursive else Path(directory).glob(pattern)
+    return [str(file) for file in files if not include_string or include_string in file.name]
 
 
 class ProcessData:
@@ -288,6 +336,19 @@ class ProcessData:
         self.args = args
         self.area = area
         self.log = log
+
+    def _get_cryotempo_filters(self, nc, args):
+        """Check Cryotempo data is in a valid mode."""
+        if args.cryotempo_modes == "all":
+            return None
+
+        mode_map = {"lrm": 1, "sar": 2, "sin": 3}
+        valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
+
+        instrument_mode = get_variable(nc, "instrument_mode")
+        valid_mask = np.isin(instrument_mode, list(valid_modes))
+
+        return valid_mask if valid_mask.any() else None
 
     def _fill_empty_latlon_with_nadir(
         self, nc: str, lat: np.array, lon: np.array, config: dict
@@ -337,6 +398,11 @@ class ProcessData:
                 lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
                 x, y = self.area.latlon_to_xy(lats, lons)
 
+                if self.args.cryotempo_modes:  # Filter modes for cryotempo
+                    surface_type_mask = self._get_cryotempo_filters(nc, self.args)
+                    if surface_type_mask:
+                        x, y = x[surface_type_mask], x[surface_type_mask]
+
                 if not x.size:
                     return None
 
@@ -345,7 +411,7 @@ class ProcessData:
                     return None
 
                 elev = get_variable(nc, config["elevation"])[idx]
-                x, y, lats, lons = x[idx], y[idx], lats[idx], lons[idx]
+                x, y = x[idx], y[idx]
 
                 if not len(x) == len(y) == len(elev):
                     raise ValueError("Mismatch in variable lengths for x,y,h")
