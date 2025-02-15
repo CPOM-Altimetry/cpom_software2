@@ -441,6 +441,20 @@ def main(args):
     )
 
     parser.add_argument(
+        "--dem_stride",
+        "-ds",
+        help=(
+            "[Optional, int from 1] DEM stride to use (ie sampling of DEM)."
+            "Default is to use that stored in the 3d area definition: dem_stride."
+            "Reason for changing this is to experiment with the best DEM resolution to use"
+            " for best visuals, but maintaining browser display performance. The higher"
+            " this number the faster the scene will display and respond."
+        ),
+        required=False,
+        type=int,
+    )
+
+    parser.add_argument(
         "--dir",
         "-d",
         help=(
@@ -656,6 +670,19 @@ def main(args):
         ),
         required=False,
         type=float,
+    )
+
+    parser.add_argument(
+        "--time_index",
+        "-ti",
+        help=(
+            "[optional] for netcdf parameters that are indexed by time period, select the"
+            "index to plot. ie for a parameter like sec(time_period, ny, nx), the default"
+            "is to plot sec(0,nx,ny), but you can select a different period."
+        ),
+        required=False,
+        type=int,
+        default=0,
     )
 
     parser.add_argument(
@@ -987,7 +1014,13 @@ def main(args):
                     for i in range(num_data_sets):
                         vals = get_variable(nc, params[i])[:].data
                         if vals.ndim == 3:
-                            vals = vals[0].flatten()
+                            if args.time_index > (vals.shape[0] - 1):
+                                sys.exit(
+                                    f"shape of parameter {params[i]} is {vals.shape}, "
+                                    f"but index {args.time_index} selected with --time_index."
+                                    f"Max allowed {(vals.shape[0] -1)} "
+                                )
+                            vals = vals[args.time_index].flatten()
                         try:
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
@@ -1151,6 +1184,10 @@ def main(args):
         area_overrides["lon_annotations"] = {}
     if args.zscale:
         area_overrides["zaxis_multiplier"] = float(args.zscale)
+    if args.dem_stride:
+        if args.dem_stride < 1:
+            sys.exit("--dem_stride n must be > 0")
+        area_overrides["dem_stride"] = args.dem_stride
 
     # Create the 3D plot in a browser page
     plot_3d_area(args.area, *datasets, area_overrides=area_overrides)

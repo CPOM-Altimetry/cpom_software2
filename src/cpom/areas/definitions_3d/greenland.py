@@ -63,7 +63,7 @@ area_definition = {
     "dem_name": "arcticdem_1km_greenland_v4.1_zarr",  # DEM used for 3d plots in this area
     "smooth_dem": True,
     "page_width": 1400,  # browser page width (doesn't affect aspect ratio)
-    "dem_stride": 1,
+    "dem_stride": 2,
     "zaxis_multiplier": 0.04,  # aspect ratio for Z-axis
     "add_mss_layer": True,  # True if MSS sea decoration required"
     "mss_gridarea": "greenland",  # grid area to specify the MSS ocean layer
@@ -75,4 +75,29 @@ area_definition = {
     "light_xdirection": 1e4,
     "light_ydirection": 0,
     "light_zdirection": 1.0,
+    "lat_lines": range(60, 85, 5),  # min_lat, max_lat, step
+    "lon_lines": (350, 340, 330, 320, 310, 300),  # min_lonE, max_lonE, step
+    "latlon_line_colour": "white",  # color or lat/lon lines
+    "latlon_lines_increment": 0.01,  # spacing between latlon lines points
+    "latlon_lines_size": 0.8,  # point size of lat/lon lines
+    "latlon_lines_opacity": 0.5,  # opacity (0..1) of lat/lon lines
+    "latlon_lines_elevation": 350,  # m, elevation to plot lat/lon lines at
+    # latitude, longitude annotations, placed at each lat, lon,pair.
+    # [lat,lon,elevation, text_size,xshift,yshift]
+    "lat_annotations": (
+        (65, 325, 350, 10, 20, 0),
+        (60, 325, 350, 10, 20, 0),
+        (80, 355, 350, 10, 4, 0),
+        (70, 301, 350, 10, 10, -15),
+        (75, 342, 350, 10, 10, 0),
+    ),
+    "lon_annotations": (
+        (62.5, 330, 350, 10, -30, 0),
+        (62.5, 320, 350, 10, 2, 0),
+        (72.5, 300, 350, 10, -30, 0),
+    ),
+    "place_annotations": (
+        (64, 302, 350, "Davis Strait", "White", None, 10, 0.9),
+        (61, 325, 350, "N Atlantic", "White", None, 10, 0.9),
+    ),  # place annotations, [[latitude, longitude,elevation,string,color, bg_color,size],..]"
 }
