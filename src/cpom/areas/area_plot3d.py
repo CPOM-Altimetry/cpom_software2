@@ -212,6 +212,12 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
             else:
                 latstr = f"{annotation[0]}N"
             xpos, ypos = thisarea.latlon_to_xy(annotation[0], annotation[1])
+
+            if thisarea.raise_latlon_lines_above_dem:
+                zpos = thisdem.interp_dem(xpos, ypos) + thisarea.raise_latlon_lines_above_dem
+            else:
+                zpos = annotation[2]
+
             xpos = (xpos - xdem.min()) * 0.001
             ypos = (ypos - ydem.min()) * 0.001
             annotations.append(
@@ -220,7 +226,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     "x": xpos,
                     "font": {"color": "white", "size": annotation[3]},
                     "y": ypos,
-                    "z": annotation[2],
+                    "z": zpos,
                     "text": latstr,
                     "xanchor": "left",
                     "xshift": annotation[4],
@@ -234,6 +240,11 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
         for annotation in thisarea.lon_annotations:
             print("Adding longitude annotation at ", annotation[0], annotation[1])
             xpos, ypos = thisarea.latlon_to_xy(annotation[0], annotation[1])
+            if thisarea.raise_latlon_lines_above_dem:
+                zpos = thisdem.interp_dem(xpos, ypos) + thisarea.raise_latlon_lines_above_dem
+            else:
+                zpos = annotation[2]
+
             xpos = (xpos - xdem.min()) * 0.001
             ypos = (ypos - ydem.min()) * 0.001
             if annotation[1] < 0:
@@ -246,7 +257,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     "x": xpos,
                     "font": {"color": "white", "size": annotation[3]},
                     "y": ypos,
-                    "z": 100,
+                    "z": zpos,
                     "text": textstr,
                     "xanchor": "left",
                     "xshift": annotation[4],
@@ -710,8 +721,8 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
             dem_vals = thisdem.interp_dem(xlocs, ylocs)
             xlocs -= xdem.min()
             ylocs -= ydem.min()
-            xlocs /= thisdem.binsize
-            ylocs /= thisdem.binsize
+            xlocs *= 0.001  # convert to km
+            ylocs *= 0.001  # convert to km
 
             if data_set["use_colourmap"]:
                 # Define min/max range
@@ -786,12 +797,17 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
         latx = np.array(latx_tmp)
         laty = np.array(laty_tmp)
 
+        # lat/lon lines will be optionally plotted at an elevation raised above the DEM
+        if thisarea.raise_latlon_lines_above_dem:
+            latz = thisdem.interp_dem(latx, laty) + thisarea.raise_latlon_lines_above_dem
+        else:
+            # lat/lon lines will be optionally plotted at a fixed elevation
+            latz = np.ones(laty.size) * thisarea.latlon_lines_elevation
+
         latx -= xdem.min()
         laty -= ydem.min()
-        latx *= 0.001
-        laty *= 0.001
-
-        latz = np.ones(laty.size) * thisarea.latlon_lines_elevation
+        latx *= 0.001  # convert to km
+        laty *= 0.001  # convert to km
 
         fig.add_scatter3d(
             x=latx,
@@ -827,13 +843,18 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     lony_tmp.append(ytmp)
         lonx = np.array(lonx_tmp)
         lony = np.array(lony_tmp)
+
+        # lat/lon lines will be optionally plotted at an elevation raised above the DEM
+        if thisarea.raise_latlon_lines_above_dem:
+            lonz = thisdem.interp_dem(lonx, lony) + thisarea.raise_latlon_lines_above_dem
+        else:
+            lonz = np.ones(lony.size) * thisarea.latlon_lines_elevation
+
         lonx -= xdem.min()
         lony -= ydem.min()
         lonx *= 0.001
         lony *= 0.001
-        lonz = np.ones(lony.size) * thisarea.latlon_lines_elevation
 
-        print("Adding lon lines..")
         fig.add_scatter3d(
             x=lonx,
             y=lony,

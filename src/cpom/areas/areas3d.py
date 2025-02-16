@@ -235,6 +235,9 @@ class Area3d:
         self.latlon_lines_size = area_definition.get("latlon_lines_size", 0.3)
         self.latlon_lines_opacity = area_definition.get("latlon_lines_opacity", 0.5)
         self.latlon_lines_elevation = area_definition.get("latlon_lines_elevation", 200)
+        self.raise_latlon_lines_above_dem = area_definition.get(
+            "raise_latlon_lines_above_dem", None
+        )
 
         self.crs_wgs = CRS("epsg:4326")  # assuming you're using WGS84 geographic
         self.crs_bng = CRS(f"epsg:{self.epsg_number}")
