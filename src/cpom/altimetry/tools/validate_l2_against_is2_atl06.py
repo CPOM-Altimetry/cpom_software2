@@ -10,23 +10,19 @@ Examples:
 For full list of command line options: 
 
 ```
-find_files_in_area.py -h
+validate_l2_is2_atl06.py -h
 ```
 
 Example of a 12-month run for the Antarctica Ice Sheet. 
-Run for cs2 data sin mode, with 2 beams. Parallelised across 20 workers. 
+Run for cs2 data sin and lrm mode, with 2 beams. Parallelised across 20 workers. 
 for m in {1..12}
 do
-    ./validate_against_is2.py --altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN \
-    --is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022 \
-    --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r --max_workers 20 &
-done
-```
-Run for cs2 Greenland comparison using LRM and SIN, 1 IS2 beam, and additional variables:
 ./validate_against_is2.py 
 --altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN /media/luna/archive/SATS/RA/CRY/L2I/LRM \
---is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --outdir /tmp --year 2020\
---month 1 --area greenland --beams gt2r --add_vars uncertainty_variable_name &
+--is2_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022 \
+--month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r
+--add_vars uncertainty_variable_name --max_workers 20 --chunksize 50 &
+done
 
 ```
 Run for CS2 CryoTEMPO comparison over Antarctica using 1 beam.
@@ -55,13 +51,13 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pandas as pd
+from astropy.stats import median_absolute_deviation, sigma_clipped_stats
 from netCDF4 import Dataset  # pylint: disable=E0611
+from scipy import stats
 from scipy.spatial import cKDTree
-
-from cpom.areas.areas import (
-    Area,
-    list_all_area_definition_names_only,
-)
+from cpom.areas.area_plot import Polarplot
+from cpom.areas.areas import Area, list_all_area_definition_names_only
 
 
 def setup_logging(
@@ -133,15 +129,15 @@ def parse_args() -> argparse.Namespace:
         "--max_workers",
         "-mw",
         type=int,
-        default=1,
-        help="[optional, default=1] number of worker processes to use",
+        default=10,
+        help="[optional, default=10] number of worker processes to use",
     )
     parser.add_argument(
         "--chunksize",
         "-cs",
         type=int,
-        default=1,
-        help="[optional, default=1] number of files each worker processes at a time",
+        default=10,
+        help="[optional, default=10] number of files each worker processes at a time",
     )
 
     parser.add_argument("--outdir", "-o", help="output directory path for results", required=True)
@@ -175,8 +171,8 @@ def parse_args() -> argparse.Namespace:
         help="[optional] override default path of log directory",
     )
     parser.add_argument(
-        "---altim_dir d_vars",
-        "--altim_dir d",
+        "---add_vars",
+        "-av",
         nargs="+",
         help="[optional] additional variables in the altimetry file to include in the output."
         "Space-seperated list of : var1 var2 .",
@@ -184,7 +180,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cryotempo_modes",
         "-mo",
-        default=["all"],
+        default=None,
         choices={"lrm", "sin", "sar", "all"},
         nargs="+",
         help="[optional, default= all] CryoTempo modes to use. Space-separated list of: lrm sin"
@@ -205,8 +201,6 @@ def parse_args() -> argparse.Namespace:
         parser.error(f"{args.area} not a valid cpom area name")
 
     args.logdir = args.logdir or args.outdir
-    # if args.altdir and not Path(args.altdir).is_dir():
-    #     args.altdir = None
 
     return args
 
@@ -284,6 +278,13 @@ def get_default_variables(file: str) -> dict:
             "lon": "{beam}/land_ice_segments/longitude",
             "elevation": "{beam}/land_ice_segments/h_li",
         },
+        # Icebridge
+        "ILMATM2.002_": {
+            "lat": "Latitude(deg)",
+            "lon": "Longitude(deg)",
+            "elevation": "WGS84_Ellipsoid_Height(m)",
+        },
+        "ILUTP2.002_": {"lat": "LON", "lon": "LAT", "elevation": "SRF_ELEVATION"},
     }
 
     # Check basename for a matching pattern
@@ -398,7 +399,7 @@ class ProcessData:
                 lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
                 x, y = self.area.latlon_to_xy(lats, lons)
 
-                if self.args.cryotempo_modes:  # Filter modes for cryotempo
+                if self.args.cryotempo_modes is not None:  # Filter modes for cryotempo
                     surface_type_mask = self._get_cryotempo_filters(nc, self.args)
                     if surface_type_mask:
                         x, y = x[surface_type_mask], x[surface_type_mask]
@@ -553,6 +554,7 @@ def get_elev_differences(
 
     results = {
         "dh": [],
+        "sep_dist": [],
         "is2_x": [],
         "is2_y": [],
         "is2_h": [],
@@ -580,9 +582,15 @@ def get_elev_differences(
             for idx in indices:
                 is2_point = is2_points[idx]
 
+                separation_distance = np.sqrt(
+                    (altimeter_point["x"] - is2_point["x"]) ** 2
+                    + (altimeter_point["y"] - is2_point["y"]) ** 2
+                )
+
                 dh = altimeter_point["h"] - is2_point["h"]
                 if np.abs(dh) < args.maxdiff:
                     results["dh"].append(dh)
+                    results["sep_dist"].append(separation_distance)
                     results[f"{prefix}x"].append(altimeter_point["x"])
                     results[f"{prefix}y"].append(altimeter_point["y"])
                     results[f"{prefix}h"].append(altimeter_point["h"])
@@ -593,6 +601,78 @@ def get_elev_differences(
                     for var in add_vars:
                         results[var].append(altimeter_point[var])
     return results
+
+
+def compute_elevation_stats(output, prefix, output_file="elevation_stats.txt"):
+    """
+    Compute statistics for elevation differences.
+    Args:
+        output (dict): Dictionary containing elevation differences ('dh'), heights ('h'),
+                        and separation distances ('sep_dist').
+    Returns:
+        txt file containing summary statistics
+    """
+    this_h_diff, this_h_diff_abs = output["dh"], np.abs(output["dh"])
+
+    # Compute R² value for height correlation
+    _, _, r_value, _, _ = stats.linregress(output[f"{prefix}h"], output[f"{prefix}h"])
+    p2p_r2_hgt = r_value**2
+
+    # Compute separation distance metrics if available
+    p2p_mean_sep_dist = np.mean(output["seperation_distance"])
+    p2p_std_dev_sep_dist = np.std(output["seperation_distance"])
+
+    def compute_stats(data):
+        mean, median, std = np.mean(data), np.median(data), np.std(data)
+        mad, rms = median_absolute_deviation(data), np.sqrt(np.mean(np.square(data)))
+
+        two_sigma_mean, _, two_sigma_std = sigma_clipped_stats(data, sigma=2)
+        three_sigma_mean, _, three_sigma_std = sigma_clipped_stats(data, sigma=3)
+        return [
+            mean,
+            median,
+            std,
+            mad,
+            rms,
+            two_sigma_mean,
+            two_sigma_std,
+            three_sigma_mean,
+            three_sigma_std,
+        ]
+
+    # Compute stats for both signed and absolute differences
+    stats_signed = compute_stats(this_h_diff) + [
+        p2p_r2_hgt,
+        p2p_mean_sep_dist,
+        p2p_std_dev_sep_dist,
+    ]
+    stats_abs = compute_stats(this_h_diff_abs) + [
+        p2p_r2_hgt,
+        p2p_mean_sep_dist,
+        p2p_std_dev_sep_dist,
+    ]
+
+    # Column names
+    columns = [
+        "mean_hgt",
+        "median_hgt",
+        "std_hgt",
+        "MAD_hgt",
+        "RMS_hgt",
+        "2_sigma_mean_hgt",
+        "2_sigma_std_hgt",
+        "3_sigma_mean_hgt",
+        "3_sigma_std_hgt",
+        "r2",
+        "mean_dist_(m)",
+        "std_dist_(m)",
+    ]
+
+    pd.DataFrame(
+        [stats_signed, stats_abs],
+        index=["Signed Differences", "Absolute Differences"],
+        columns=columns,
+    ).to_csv(output_file)
 
 
 if __name__ == "__main__":
@@ -622,6 +702,7 @@ if __name__ == "__main__":
     # ---------------#
     # Load is2 data #
     # ---------------#
+
     is2_path = Path(params.is2_dir) / f"{year}/{month}"
     is2_dir = is2_path if is2_path.is_dir() else Path(params.is2_dir)
 
@@ -661,7 +742,7 @@ if __name__ == "__main__":
         PREFIX = ""
 
         altimetry_files = []
-        for basepath in params.altim_dir.split(","):
+        for basepath in params.altim_dir:
             alt_path = Path(basepath) / f"{year}/{month}"
             altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
 
@@ -692,8 +773,7 @@ if __name__ == "__main__":
             ][0]
         )
         outfile = (
-            month_outdir
-            / f"{MISSION}_minus_is2_{''.join(params.beams)}_p2p_diffs_{params.area}.npz"
+            month_outdir / f"{MISSION}_minus_is2_{''.join(params.beams)}_p2p_diffs_{params.area}"
         )
 
     elev_differences = get_elev_differences(params, laser_is2_points, altimetry_points, PREFIX)
@@ -706,10 +786,13 @@ if __name__ == "__main__":
         elev_differences[f"{PREFIX}x"], elev_differences[f"{PREFIX}y"]
     )
     is2_lons, is2_lats = area_obj.xy_to_latlon(elev_differences["is2_x"], elev_differences["is2_y"])
-
+    # ------------------------#
+    # Output                 #
+    # ------------------------#
     logger.info("Saving month data to %s", outfile)
     save_data = {
         "dh": elev_differences["dh"],
+        "seperation_distance": elev_differences["sep_dist"],
         f"{PREFIX}lons": alt_lons,
         f"{PREFIX}lats": alt_lats,
         f"{PREFIX}x": elev_differences[f"{PREFIX}x"],
@@ -722,4 +805,16 @@ if __name__ == "__main__":
         "is2_h": elev_differences["is2_h"],
     }
 
-    np.savez(outfile, **save_data)
+    np.savez(f"{outfile}.npz", **save_data)
+
+    compute_elevation_stats(save_data, prefix=PREFIX, output_file=f"{outfile}_elevation_stats.csv")
+
+    Polarplot(params.area).plot_points(
+        {
+            "name": "difference_in_height_(dh)",
+            "lats": save_data[f"{PREFIX}lats"],
+            "lons": save_data[f"{PREFIX}lons"],
+            "vals": save_data["dh"],
+        },
+        output_dir=month_outdir,
+    )
