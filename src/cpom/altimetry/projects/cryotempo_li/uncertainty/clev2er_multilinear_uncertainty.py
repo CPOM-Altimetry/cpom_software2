@@ -639,10 +639,19 @@ def main():
     )
 
     parser.add_argument(
-        "-dh_dir",
-        "-dh",
+        "-dh_dir_create",
+        "-dh_create",
         help=(
-            "path to directory of elevation difference npz files"
+            "path to directory of elevation difference npz files used to create uncertainty lookup table"
+        ),
+        type=str,
+    )
+
+    parser.add_argument(
+        "-dh_dir_assign",
+        "-dh_assign",
+        help=(
+            "path to directory of elevation difference npz files used to assign new uncertainties to"
         ),
         type=str,
     )
@@ -696,7 +705,7 @@ def main():
     poca_distance_all = []
 
     # Read npz file to get dh,lat,lon values
-    for path in glob.glob(f'{args.dh_dir}/**/*.npz', recursive=True):
+    for path in glob.glob(f'{args.dh_dir_create}/**/*.npz', recursive=True):
         
         # extract data from each monthly file    
         print("Path: ", path)
@@ -848,6 +857,70 @@ def main():
         f"{power_values} and coherence {coherence_values} and poca distance {poca_distance_values}: {values} m")
 
     #### EXTRACT UNCERTAINTIES ###
+
+    # if dh_dir_assign variable included, read in new dh data to assign uncertainties to
+    # otherwise the data used to create the uncertainty table is used
+    if args.dh_dir_assign:
+
+        # set variables to None
+        slope = None
+        roughness = None
+        power = None
+        coherence = None
+        poca_distance = None
+
+        dh_all = []
+        lats_all = []
+        lons_all = []
+        power_all = []
+        coherence_all = []
+        poca_distance_all = []
+
+        # Read npz file to get dh,lat,lon values
+        for path in glob.glob(f'{args.dh_dir_assign}/**/*.npz', recursive=True):
+            
+            # extract data from each monthly file    
+            print("Path: ", path)
+            dh_data = np.load(path, allow_pickle=True)
+            dh = dh_data['dh']
+            lats = dh_data['lats']
+            lons = dh_data['lons']
+
+            # append monthly data to all data
+            dh_all.extend(dh)
+            lats_all.extend(lats)
+            lons_all.extend(lons)
+
+            if 'power' in args.variables:
+                power = dh_data.get("pow")
+                power_all.extend(power)
+            if 'coherence' in args.variables:
+                coherence = dh_data.get("coh")
+                coherence_all.extend(coherence)
+            if 'poca_distance' in args.variables:
+                poca_distance = dh_data.get("dis_poca")
+                poca_distance_all.extend(poca_distance)
+        
+        dh_all = np.asarray(dh_all)
+        lats_all = np.asarray(lats_all)
+        lons_all = np.asarray(lons_all)
+
+        # Extract variables
+        if 'slope' in args.variables:
+            print('Fetching slope data')
+            slope = this_slope.interp_slopes(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        if 'roughness' in args.variables:
+            print('Fetching roughness data')
+            roughness = this_roughness.interp_roughness(lats_all, lons_all, method="linear", xy_is_latlon=True)
+        if 'power' in args.variables:
+            print('Fetching power data')
+            power = np.asarray(power_all)
+        if 'coherence' in args.variables:
+            print('Fetching coherence data')
+            coherence = np.asarray(coherence_all)
+        if 'poca_distance' in args.variables:
+            print('Fetching poca distance data')
+            poca_distance = np.asarray(poca_distance_all)
 
     # Extract the corresponding value from the binned_table
     values = get_binned_values(
