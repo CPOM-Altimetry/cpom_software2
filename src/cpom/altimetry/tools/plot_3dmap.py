@@ -373,7 +373,10 @@ def main(args):
     parser.add_argument(
         "--area",
         "-a",
-        help=("CPOM area definition name. See --list_areas for a full list"),
+        help=(
+            "CPOM 3D area definition name. Use plot_3dmap.py --list_areas for a full list of "
+            "supported 3D area names"
+        ),
         required=False,
     )
 
@@ -741,10 +744,6 @@ def main(args):
     # read arguments from the command line
     args = parser.parse_args(args)
 
-    if args.step:
-        if args.step > 20:
-            sys.exit(f"command line error: --step {args.step} : value in degs must be less than 20")
-
     # Print a list of available area definitions
     if args.list_areas:
         area_list = list_all_3d_area_definition_names()
@@ -755,6 +754,17 @@ def main(args):
         for area_name in area_list:
             print(f"{area_name}")
         sys.exit(0)
+
+    if not args.area:
+        sys.exit(
+            "missing command line argument --area <3d_area_name>."
+            "Use plot_3dmap.py --list_areas for a full list of "
+            "supported 3D area names"
+        )
+
+    if args.step:
+        if args.step > 20:
+            sys.exit(f"command line error: --step {args.step} : value in degs must be less than 20")
 
     if args.areadef_file:
         if not os.path.exists(args.areadef_file):
