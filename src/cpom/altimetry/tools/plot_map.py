@@ -914,7 +914,10 @@ def main(args):
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
                             )._FillValue
-                            vals[vals == fill_value] = np.nan
+                            if np.isinstance(vals[0], np.float):
+                                vals[vals == fill_value] = np.nan
+                            elif np.isinstance(vals[0], int):
+                                vals[vals == fill_value] = None
                         except AttributeError:
                             pass
                         lats = get_variable(nc, latnames[i])[:].data
@@ -1037,15 +1040,17 @@ def main(args):
                     unique_vals = [
                         int(re.findall(r"\d+", s)[0]) for s in flag_values_from_data[i].split(",")
                     ]
-                    unique_names = flag_names_from_data[i].split(" ")
+                    unique_names = flag_names_from_data[i].split(",")
                     if len(unique_names) != len(unique_vals):
                         log.error(
                             (
                                 f"{ORANGE}length of flag names (%d) and values derived from "
-                                f"attributes  (%d) is different{NC}"
+                                f"attributes  (%d) is different %s %s {NC}"
                             ),
                             len(unique_names),
                             len(unique_vals),
+                            str(unique_names),
+                            str(unique_vals),
                         )
                         datasets[i]["flag_names"] = [str(n) for n in unique_vals]
                     else:

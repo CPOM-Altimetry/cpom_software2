@@ -1025,7 +1025,10 @@ def main(args):
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
                             )._FillValue
-                            vals[vals == fill_value] = np.nan
+                            if np.isinstance(vals[0], np.float):
+                                vals[vals == fill_value] = np.nan
+                            elif np.isinstance(vals[0], int):
+                                vals[vals == fill_value] = None
                         except AttributeError:
                             pass
                         lats = get_variable(nc, latnames[i])[:].data

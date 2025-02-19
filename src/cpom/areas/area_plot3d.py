@@ -15,6 +15,7 @@ from matplotlib import cm
 from numpy import ma  # masked arrays
 from scipy.ndimage import gaussian_filter
 
+from cpom.areas.area_plot import get_unique_colors
 from cpom.areas.areas3d import Area3d
 from cpom.dems.dems import Dem
 from cpom.gridding.gridareas import GridArea
@@ -754,6 +755,22 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     )  # Under color at the beginning of the scale
 
                 thiscolor = vals
+            elif data_set["flag_values"]:
+                print(f"flag_values = {data_set['flag_values']}")
+
+                if "flag_colors" not in data_set:
+                    flag_colors = get_unique_colors(len(data_set["flag_values"]), as_hex=True)
+                else:
+                    flag_colors = data_set["flag_colors"]
+
+                # get_unique_colors(n: int, cmap_name_override: str | None = None):
+
+                thiscolor = np.array([flag_colors[0] for r in vals])
+                for index, flag_value in enumerate(data_set["flag_values"]):
+                    ok = np.where(vals == flag_value)[0]
+                    if ok.size > 0:
+                        thiscolor[ok] = flag_colors[index]
+
             else:
                 thiscolor = data_set["color"]
 
