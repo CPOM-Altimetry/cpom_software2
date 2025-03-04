@@ -602,12 +602,12 @@ def plot_2d_slices(pivot_table, outpath: str, plot_var: str, ingested_vars: list
             _, ax = plt.subplots(figsize=(15, 6))
             sns.heatmap(data, ax=ax)
             # locs, _ = plt.yticks()
-            locs = np.arange(len(labels))
             labels = [np.round(i, 2) for i in bins_1]
+            locs = np.arange(len(labels))
             ax.set_yticks(locs, labels)
             # locs, _ = plt.xticks()
-            locs = np.arange(len(labels))
             labels = [np.round(i, 2) for i in bins_2]
+            locs = np.arange(len(labels))
             ax.set_xticks(locs, labels)
             filename = outpath + f'2dslice_{plot_var}_{ingested_vars[indices[0]]}{ingested_vars[indices[1]]}.png'
             plt.savefig(filename, bbox_inches='tight')
