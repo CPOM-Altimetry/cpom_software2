@@ -178,19 +178,19 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-54"><a href="#L-54"><span class="linenos">  54</span></a>
 </span><span id="L-55"><a href="#L-55"><span class="linenos">  55</span></a><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;main&quot;</span><span class="p">]</span>
 </span><span id="L-56"><a href="#L-56"><span class="linenos">  56</span></a>
-</span><span id="L-57"><a href="#L-57"><span class="linenos">  57</span></a><span class="kn">import</span> <span class="nn">argparse</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos">  58</span></a><span class="kn">import</span> <span class="nn">glob</span>
-</span><span id="L-59"><a href="#L-59"><span class="linenos">  59</span></a><span class="kn">import</span> <span class="nn">logging</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos">  60</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos">  61</span></a><span class="kn">import</span> <span class="nn">re</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos">  62</span></a><span class="kn">import</span> <span class="nn">sys</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos">  63</span></a><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos">  57</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos">  58</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">glob</span>
+</span><span id="L-59"><a href="#L-59"><span class="linenos">  59</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos">  60</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos">  61</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos">  62</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos">  63</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
 </span><span id="L-64"><a href="#L-64"><span class="linenos">  64</span></a>
-</span><span id="L-65"><a href="#L-65"><span class="linenos">  65</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-66"><a href="#L-66"><span class="linenos">  66</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos">  65</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos">  66</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
 </span><span id="L-67"><a href="#L-67"><span class="linenos">  67</span></a>
-</span><span id="L-68"><a href="#L-68"><span class="linenos">  68</span></a><span class="kn">from</span> <span class="nn">cpom.areas.area_plot</span> <span class="kn">import</span> <span class="n">Polarplot</span>
-</span><span id="L-69"><a href="#L-69"><span class="linenos">  69</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos">  68</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.area_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">Polarplot</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos">  69</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.areas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names</span>
 </span><span id="L-70"><a href="#L-70"><span class="linenos">  70</span></a>
 </span><span id="L-71"><a href="#L-71"><span class="linenos">  71</span></a><span class="c1"># pylint: disable=too-many-branches</span>
 </span><span id="L-72"><a href="#L-72"><span class="linenos">  72</span></a><span class="c1"># pylint: disable=too-many-return-statements</span>
@@ -205,7 +205,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-81"><a href="#L-81"><span class="linenos">  81</span></a><span class="n">NC</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[0m&quot;</span>  <span class="c1"># No Color, pylint: disable=invalid-name</span>
 </span><span id="L-82"><a href="#L-82"><span class="linenos">  82</span></a>
 </span><span id="L-83"><a href="#L-83"><span class="linenos">  83</span></a>
-</span><span id="L-84"><a href="#L-84"><span class="linenos">  84</span></a><span class="k">def</span> <span class="nf">setup_logging</span><span class="p">():</span>
+</span><span id="L-84"><a href="#L-84"><span class="linenos">  84</span></a><span class="k">def</span><span class="w"> </span><span class="nf">setup_logging</span><span class="p">():</span>
 </span><span id="L-85"><a href="#L-85"><span class="linenos">  85</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Setup logging handlers&quot;&quot;&quot;</span>
 </span><span id="L-86"><a href="#L-86"><span class="linenos">  86</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span>
 </span><span id="L-87"><a href="#L-87"><span class="linenos">  87</span></a>    <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
@@ -216,7 +216,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-92"><a href="#L-92"><span class="linenos">  92</span></a>    <span class="k">return</span> <span class="n">logger</span>
 </span><span id="L-93"><a href="#L-93"><span class="linenos">  93</span></a>
 </span><span id="L-94"><a href="#L-94"><span class="linenos">  94</span></a>
-</span><span id="L-95"><a href="#L-95"><span class="linenos">  95</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos">  95</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="L-96"><a href="#L-96"><span class="linenos">  96</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve variable from NetCDF file, handling groups if necessary.</span>
 </span><span id="L-97"><a href="#L-97"><span class="linenos">  97</span></a>
 </span><span id="L-98"><a href="#L-98"><span class="linenos">  98</span></a><span class="sd">    This function navigates through groups in a NetCDF file to retrieve the specified variable.</span>
@@ -242,7 +242,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-118"><a href="#L-118"><span class="linenos"> 118</span></a>    <span class="k">return</span> <span class="n">var</span>
 </span><span id="L-119"><a href="#L-119"><span class="linenos"> 119</span></a>
 </span><span id="L-120"><a href="#L-120"><span class="linenos"> 120</span></a>
-</span><span id="L-121"><a href="#L-121"><span class="linenos"> 121</span></a><span class="k">def</span> <span class="nf">get_default_param</span><span class="p">(</span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos"> 121</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_param</span><span class="p">(</span>
 </span><span id="L-122"><a href="#L-122"><span class="linenos"> 122</span></a>    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="L-123"><a href="#L-123"><span class="linenos"> 123</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-124"><a href="#L-124"><span class="linenos"> 124</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default parameter to plot from known file types</span>
@@ -329,7 +329,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-205"><a href="#L-205"><span class="linenos"> 205</span></a>    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
 </span><span id="L-206"><a href="#L-206"><span class="linenos"> 206</span></a>
 </span><span id="L-207"><a href="#L-207"><span class="linenos"> 207</span></a>
-</span><span id="L-208"><a href="#L-208"><span class="linenos"> 208</span></a><span class="k">def</span> <span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+</span><span id="L-208"><a href="#L-208"><span class="linenos"> 208</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-209"><a href="#L-209"><span class="linenos"> 209</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default latitude and longitude names to plot from filename</span>
 </span><span id="L-210"><a href="#L-210"><span class="linenos"> 210</span></a>
 </span><span id="L-211"><a href="#L-211"><span class="linenos"> 211</span></a><span class="sd">    Args:</span>
@@ -407,7 +407,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-283"><a href="#L-283"><span class="linenos"> 283</span></a>    <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
 </span><span id="L-284"><a href="#L-284"><span class="linenos"> 284</span></a>
 </span><span id="L-285"><a href="#L-285"><span class="linenos"> 285</span></a>
-</span><span id="L-286"><a href="#L-286"><span class="linenos"> 286</span></a><span class="k">def</span> <span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="L-286"><a href="#L-286"><span class="linenos"> 286</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 </span><span id="L-287"><a href="#L-287"><span class="linenos"> 287</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;select a default area definition based on latitude</span>
 </span><span id="L-288"><a href="#L-288"><span class="linenos"> 288</span></a>
 </span><span id="L-289"><a href="#L-289"><span class="linenos"> 289</span></a><span class="sd">    Args:</span>
@@ -427,7 +427,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-303"><a href="#L-303"><span class="linenos"> 303</span></a>    <span class="k">return</span> <span class="s2">&quot;global&quot;</span>
 </span><span id="L-304"><a href="#L-304"><span class="linenos"> 304</span></a>
 </span><span id="L-305"><a href="#L-305"><span class="linenos"> 305</span></a>
-</span><span id="L-306"><a href="#L-306"><span class="linenos"> 306</span></a><span class="k">def</span> <span class="nf">find_nc_files</span><span class="p">(</span>
+</span><span id="L-306"><a href="#L-306"><span class="linenos"> 306</span></a><span class="k">def</span><span class="w"> </span><span class="nf">find_nc_files</span><span class="p">(</span>
 </span><span id="L-307"><a href="#L-307"><span class="linenos"> 307</span></a>    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">max_files</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 </span><span id="L-308"><a href="#L-308"><span class="linenos"> 308</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-309"><a href="#L-309"><span class="linenos"> 309</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -461,7 +461,7 @@ shown to specify flag values, names and colours:</p>
 </span><span id="L-337"><a href="#L-337"><span class="linenos"> 337</span></a>    <span class="k">return</span> <span class="n">files</span>
 </span><span id="L-338"><a href="#L-338"><span class="linenos"> 338</span></a>
 </span><span id="L-339"><a href="#L-339"><span class="linenos"> 339</span></a>
-</span><span id="L-340"><a href="#L-340"><span class="linenos"> 340</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+</span><span id="L-340"><a href="#L-340"><span class="linenos"> 340</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="L-341"><a href="#L-341"><span class="linenos"> 341</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of tool</span>
 </span><span id="L-342"><a href="#L-342"><span class="linenos"> 342</span></a>
 </span><span id="L-343"><a href="#L-343"><span class="linenos"> 343</span></a><span class="sd">    Returns:</span>
@@ -1225,7 +1225,7 @@ shown to specify flag values, names and colours:</p>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-341"><a href="#main-341"><span class="linenos"> 341</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-341"><a href="#main-341"><span class="linenos"> 341</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="main-342"><a href="#main-342"><span class="linenos"> 342</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of tool</span>
 </span><span id="main-343"><a href="#main-343"><span class="linenos"> 343</span></a>
 </span><span id="main-344"><a href="#main-344"><span class="linenos"> 344</span></a><span class="sd">    Returns:</span>
