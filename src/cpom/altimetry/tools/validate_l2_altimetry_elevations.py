@@ -131,7 +131,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         choices={"lrm", "sin", "sar", "all"},
         nargs="+",
-        help="[optional, default= all] CryoTempo modes to use. Space-separated list of: lrm sin"
+        help="[optional] CryoTempo modes to use. Space-separated list of: lrm sin"
         "For non-CryoTempo L2 CS2 data, specify multiple --altim_dir paths instead.",
     )
     parser.add_argument(
@@ -190,10 +190,10 @@ def get_variable(nc: Dataset, nc_var_path: str) -> np.array:
         for part in parts:
             var = var[part]
             if var is None:
-                raise KeyError(f"NetCDF parameter '{nc_var_path}' not found.")
+                raise IndexError(f"NetCDF parameter '{nc_var_path}' not found.")
         return var[:]
-    except KeyError as err:
-        raise KeyError(f"Get variable failed with error {err}") from err
+    except IndexError as err:
+        raise IndexError(f"NetCDF parameter or group {err} not found") from err
 
 
 def get_default_variables(file: str) -> dict:
@@ -207,6 +207,7 @@ def get_default_variables(file: str) -> dict:
         dict: Dictionary of default variable names
     """
     basename = os.path.basename(file)
+    print(basename)
 
     variable_map = {  # CS2 Products
         "SIR_LRMI2": {
@@ -223,7 +224,14 @@ def get_default_variables(file: str) -> dict:
             "lon": "lon_poca_20_ku",
             "elev": "height_1_20_ku",
         },
-        "SR_2_LAN_LI": {  # Sentinel data
+        "S3A_": {  # Sentinel data
+            "lat_nadir": "lat_20_ku",
+            "lon_nadir": "lon_20_ku",
+            "lat": "lat_cor_20_ku",
+            "lon": "lon_cor_20_ku",
+            "elev": "elevation_ocog_20_ku_filt",
+        },
+        "S3B_": {  # Sentinel data
             "lat_nadir": "lat_20_ku",
             "lon_nadir": "lon_20_ku",
             "lat": "lat_cor_20_ku",
@@ -297,21 +305,22 @@ def get_files_in_dir(
     all_files = []
     pattern = extensions[filetype]
     all_files.extend(Path(directory).rglob(pattern))
-    print(all_files)
     # Matches: YYYYMMDDT | YYYYMMDD_ | YYMMDD_ |YYYYMMDDHHMMSS
-    file_basename_regex = re.compile(
-        rf"(?:{year}{month}\d{{2}}(?:T\d+|_\d+)?|{year[-2:]}{month}\d{{2}}_)"
+    file_basename_regex =re.compile(
+    rf"(?:{year}{month}\d{{2}}T\d*|{year}{month}\d{{2}}_\d*|{year[-2:]}{month}\d{{2}}_|{year}{month}\d{{8}})"
     )
-    
     valid_files = [  # Exclude filenames containing multiple dots before the extension
         f
         for f in all_files
-        if any(file_basename_regex.search(part) for part in f.parts)  # Check if regex matches any part of the path
-        and not re.search(r"\..+\.", f.stem)  # Exclude filenames containing multiple dots before the extension
+        if any(
+            file_basename_regex.search(part) for part in f.parts
+        )  # Check if regex matches any part of the path
+        and "." not in f.stem  # Exclude filenames containing multiple dots before the extension
     ]
 
     if valid_files:
         return valid_files
+    return None
 
     # file_dir_regex = re.compile(rf"{year}\.{month}\.\d{{2}}")  # Matches YYYY.DD.MM/
     # return [
@@ -326,9 +335,9 @@ class ProcessData:
     Methods:
         get_altimetry_data_array: Extracts and processes altimetry data from NetCDF files.
         get_is2_data_array : Extracts and processes is2 elevation data from HDF5 files.
-        get_icebridge_data_array : Extracts and processes icebridge data from NetCDF files. 
-        _fill_empty_latlon_with_nadir: Fills missing lat/lon values using nadir coordinates.
-        _get_cryotempo_filters : Filters cryotempo data to valid modes. 
+        get_icebridge_data_array : Extracts and processes icebridge data from NetCDF files.
+        fill_empty_latlon_with_nadir: Fills missing lat/lon values using nadir coordinates.
+        get_cryotempo_filters : Filters cryotempo data to valid modes.
     """
 
     def __init__(self, args, area, log):
@@ -336,8 +345,9 @@ class ProcessData:
         self.area = area
         self.log = log
 
-    def _get_cryotempo_filters(self, nc, args):
+    def get_cryotempo_filters(self, nc, args):
         """Check Cryotempo data is in a valid mode."""
+        print("modes", args.cryotempo_modes)
         if args.cryotempo_modes == "all":
             return None
 
@@ -345,11 +355,12 @@ class ProcessData:
         valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
 
         instrument_mode = get_variable(nc, "instrument_mode")
+        print("instrument_mode", instrument_mode)
         valid_mask = np.isin(instrument_mode, list(valid_modes))
-
+        print("valid_mask", valid_mask)
         return valid_mask if valid_mask.any() else None
 
-    def _fill_empty_latlon_with_nadir(
+    def fill_empty_latlon_with_nadir(
         self, nc: str, lat: np.array, lon: np.array, config: dict
     ) -> np.array:
         """
@@ -362,7 +373,7 @@ class ProcessData:
         Returns:
             (np.array, np.arrray): Filled lat/lon arrays
         """
-        bad_indices = np.flatnonzero(lon.mask)  # Find empty longitude values
+        bad_indices = np.isnan(lon)  # np.flatnonzero(lon.mask)  # Find empty longitude values
         if bad_indices.size > 0:
             lat_nadir = get_variable(nc, config["lat_nadir"])
             lon_nadir = get_variable(nc, config["lon_nadir"])
@@ -382,17 +393,21 @@ class ProcessData:
         try:
             with Dataset(filename) as nc:
                 config = get_default_variables(filename)
+                if config is None:
+                    self.log.error("Unsupported file basename %s for file", filename)
+                    return None
+
                 lats = get_variable(nc, config["lat"])
                 lons = np.mod(get_variable(nc, config["lon"]), 360)
 
                 if config["lat_nadir"]:
-                    lats, lons = self._fill_empty_latlon_with_nadir(nc, lats, lons, config)
+                    lats, lons = self.fill_empty_latlon_with_nadir(nc, lats, lons, config)
 
                 lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
                 x, y = self.area.latlon_to_xy(lats, lons)
 
                 if self.args.cryotempo_modes is not None:  # Filter modes for cryotempo
-                    surface_type_mask = self._get_cryotempo_filters(nc, self.args)
+                    surface_type_mask = self.get_cryotempo_filters(nc, self.args)
                     x, y = x[surface_type_mask], (
                         x[surface_type_mask] if surface_type_mask else (x, y)
                     )
@@ -401,41 +416,43 @@ class ProcessData:
                 if not idx.size:
                     return None
 
-                x, y, elev = x[idx], y[idx], get_variable(nc, config["elev"])[idx]
+                try:
+                    x, y, elev = x[idx], y[idx], get_variable(nc, config["elev"])[idx]
+                except Exception as err:
+                    raise ValueError("Mismatch in variable lengths for x,y,h") from err
 
-                if not len(x) == len(y) == len(elev):
-                    raise ValueError("Mismatch in variable lengths for x,y,h")
+                try:
+                    add_vars = self.args.add_vars or []
+                    additional_data = {
+                        var.rsplit("/", 1)[-1]: get_variable(nc, var)[idx]
+                        for var in add_vars
+                        if var in nc.variables
+                    }
 
-                add_vars = self.args.add_vars or []
+                    if list(additional_data.keys()) != add_vars:
+                        print("Test this")
+                        self.log.info(
+                            "Variable(s) %s missing from netcdf",
+                            set(add_vars) - set(additional_data.keys()),
+                        )
+                except Exception as err:
+                    raise ValueError("Mismatch in additional variable lengths.") from err
 
-                additional_data = {
-                    var.rsplit("/", 1)[-1]: get_variable(nc, var)[idx]
-                    for var in add_vars
-                    if var in nc.variables
-                }
-                if not all(len(data) == len(x) for data in additional_data.values()):
-                    raise ValueError("Mismatch in additional variable lengths.")
-
-                # dtype = [("x", "float64"), ("y", "float64"), ("h", "float64")] + [
-                #     (var, str(data.dtype)) for var, data in additional_data.items()
-                # ]
             return np.array(
-                        list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
-                        dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
-                        + [(var, str(data.dtype)) for var, data in additional_data.items()],
-                    )
+                list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
+                dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
+                + [(var, str(data.dtype)) for var, data in additional_data.items()],
+            )
         except OSError as err:
-            self.log.error(f"Error loading altimetry data file {filename}, fialed with : {err}")
+            self.log.error(f"Error loading altimetry data file {filename}, failed with : {err}")
             return None
 
     def get_is2_data_array(self, filename: str) -> np.ndarray:
         """Extract and filter data from an is2 data file.
         Args:
             filename (str): IS2 data filename (.h5)
-
         Raises:
             ValueError: If variable lengths do not match
-
         Returns:
             np.ndarray: Structured nd.array containing x,y,h fields
         """
@@ -450,6 +467,7 @@ class ProcessData:
                     # Filter out files in wrong hemisphere. No files cross hemispheres
                     try:
                         hemisphere = get_variable(nc, config["lat"])[0]
+                        print(hemisphere)
                         if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
                             hemisphere > 0.0 and self.area.hemisphere == "south"
                         ):
@@ -492,10 +510,10 @@ class ProcessData:
                             )
                         )
                     except KeyError:
-                        self.log.error("Missing data in %s for beam %s", filename, beam)
+                        self.log.error(f"Missing data in {filename} for beam {beam}")
                         continue
         except OSError as err:
-            self.log.error("Cannot open file %s: %s", filename, err)
+            self.log.error(f"Error loading atl06 data file {filename} failed with : {err}")
             return np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
         return (
             np.concatenate(points)
@@ -514,7 +532,6 @@ class ProcessData:
         """
         with Dataset(filename) as nc:
             config = get_default_variables(filename)
-            print("THE CONFIG IS", config)
             lats, lons = get_variable(nc, config["lat"]), np.mod(
                 get_variable(nc, config["lon"]), 360
             )
@@ -558,14 +575,14 @@ def get_elev_differences(
         args (argparse.Namespace): Configuration parameters
         laser_points (np.ndarray): Is2 array containing x,y,h
         altimeter_points (np.ndarray): Altimetry array containing x,y,h
-        prefix(str): Reference dataset prefix. 
-        nearest_only (Boolean): Compare altimetry to only the nearest reference point 
+        prefix(str): Reference dataset prefix.
+        nearest_only (Boolean): Compare altimetry to only the nearest reference point
     Returns:
         nd,array: Dh between altimetry and is2 elevations.
     """
 
     is2_tree = cKDTree(np.c_[laser_points["x"], laser_points["y"]])
-    add_vars = [var for var in altimetry_points.dtype.names if var not in {"x", "y", "h"}]
+    add_vars = [var for var in altimeter_points.dtype.names if var not in {"x", "y", "h"}]
     results = {
         key: []
         for key in [
@@ -602,7 +619,7 @@ def get_elev_differences(
             ref_point = laser_points[idx]
             dh = altimeter_point["h"] - ref_point["h"]
 
-            if np.abs(dh) < args.maxdiff:
+            if np.abs(dh) <= args.maxdiff:
                 results["dh"].append(dh)
                 results["sep_dist"].append(
                     np.sqrt(
@@ -623,13 +640,13 @@ def get_elev_differences(
     return results
 
 
-def slope_correction(data, args, log, prefix)-> np.array:
-    """Slope Correction from reference DEM 
+def slope_correction(data, args, log, prefix) -> np.array:
+    """Slope Correction from reference DEM
     Args:
         data (nd.array): Output of "get_elev_differences"
         args (argparse.Namespace): Configuration parameters
         log (Logger): Logger
-        prefix (str): Reference data prefix 
+        prefix (str): Reference data prefix
     Returns
         nd.array: Slope corrected Dh between altimetry and is2 elevations.
     """
@@ -638,8 +655,16 @@ def slope_correction(data, args, log, prefix)-> np.array:
     dh_dem_elev = (dem.interp_dem(data[f"{prefix}x"], data[f"{prefix}y"])) - (
         dem.interp_dem(data["reference_x"], data["reference_y"])
     )
+
+    print("First dem check", dh_dem_elev)
+
+    # print("Second dem check",(dem.interp_dem(data["reference_x"], data["reference_y"])))
+    print("dem_dh", dh_dem_elev)
     data["reference_h"] = data["reference_h"] + dh_dem_elev
     data["dh"] = data["dh"] - dh_dem_elev
+
+    print("corrected_dh", data["dh"])
+    print("corrected ref_h", data["reference_h"])
 
     data = {key: np.array(data[key]) for key in data}
     return {key: val[~np.isnan(data["dh"])] for key, val in data.items()}
@@ -689,7 +714,7 @@ def compute_elevation_stats(output, prefix, output_file="elevation_stats.txt"):
     """
     Compute statistics for elevation differences.
     Args:
-        output (dict): Dictionary containing summary statistics. 
+        output (dict): Dictionary containing summary statistics.
     Writes:
         CSV file containing summary statistics.
     """
@@ -757,8 +782,8 @@ if __name__ == "__main__":
     reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
 
     processor = ProcessData(params, AREA_OBJ, logger)
-    file_ext = ("nc" if params.compare_to_icebridge else "h5")
-    reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, file_ext)
+    FILE_EXT = "nc" if params.compare_to_icebridge else "h5"
+    reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, FILE_EXT)
     logger.info("Loaded %d reference data files", len(reference_files))
 
     chunksize = max(1, len(reference_files) // (params.max_workers * 4))
@@ -804,7 +829,9 @@ if __name__ == "__main__":
         logger.info("Chunksize %d", chunksize)
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
             altim_results = list(
-                executor.map(processor.get_altimetry_data_array, altimetry_files, chunksize=chunksize)
+                executor.map(
+                    processor.get_altimetry_data_array, altimetry_files, chunksize=chunksize
+                )
             )
         valid_altim_results = [result for result in altim_results if result is not None]
         altimetry_points = np.concatenate(valid_altim_results)
@@ -824,9 +851,7 @@ if __name__ == "__main__":
             outfile = month_outdir / f"{MISSION}_minus_{REF_MISSION}_p2p_diffs_{params.area}"
 
     # Get elevation differences #
-    elev_differences = get_elev_differences(
-        params, reference_points, altimetry_points, PREFIX
-    )
+    elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
     if params.compare_to_icebridge:
         slope_correction(elev_differences, params, logger, PREFIX)
 
@@ -838,7 +863,7 @@ if __name__ == "__main__":
         elev_differences["reference_x"], elev_differences["reference_y"]
     )
 
-    # Output                 #
+    # Output #
     logger.info("Saving month data to %s", outfile)
     save_data = {
         "dh": elev_differences["dh"],
