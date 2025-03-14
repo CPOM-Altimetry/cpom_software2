@@ -272,7 +272,7 @@ class Area3d:
         Returns:
             (np.ndarray,np.ndarray): latitude values, longitude values
         """
-        return self.xy_to_lonlat_transformer.transform(x, y)
+        return self.xy_to_lonlat_transformer.transform(x, y)[::-1]
 
     def inside_xy_extent(
         self,

@@ -23,6 +23,8 @@ scikit-learn = "^1.5.2"
 spyder = "^6.0.3"
 spyder-kernels = "^3.0.2"
 plotly = "^5.24.1"
+xarray = "^2025.1.2"
+dask = "^2025.2.0"
 
 
 [tool.poetry.group.dev.dependencies]

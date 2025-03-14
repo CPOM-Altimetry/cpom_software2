@@ -58,7 +58,7 @@ area_definition = {
     "show_polygon_mask": False,  # show mask polygon
     "polygon_mask_color": "red",  # color to draw mask polygon
     # 3d plot settings
-    "dem_name": "rema_ant_1km_zarr",  # DEM used for 3d plots in this area
+    "dem_name": "atl14_ant_100m_004_004_zarr",  # DEM used for 3d plots in this area
     "smooth_dem": False,  # Smooth DEM before displaying
     "page_width": 1200,  # browser page width (doesn't affect aspect ratio)
     "dem_stride": 10,  # sampling stride of the DEM
