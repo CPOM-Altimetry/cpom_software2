@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Utility to convert NetCDF format DEM files to Zarr format using a
+Utility to convert ATL14 NetCDF format DEM files to Zarr format using a
 chunk size equivalent to the CS2 beamwidth or a selectable chunk size.
 """
 import argparse
