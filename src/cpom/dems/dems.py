@@ -102,8 +102,8 @@ class Dem:
         self.reference_year = 0  # YYYY, the year the DEM's elevations are referenced to
         self.xdem = np.array([])
         self.ydem = np.array([])
-        self.zdem = np.array([])
-        self.zdem_flip = np.array([])
+        self.zdem: zarr.core.Array | np.ndarray = np.array([])
+        self.zdem_flip: zarr.core.Array | np.ndarray = np.array([])
         self.mindemx = None
         self.mindemy = None
         self.binsize = 0
