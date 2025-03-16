@@ -9,7 +9,7 @@ TODO: grid support
 import logging
 import os
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import cartopy.crs as ccrs  # type: ignore
 import matplotlib.colors as mcolors
@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 
 def get_unique_colors(
     n: int, cmap_name_override: str | None = None, as_hex: bool = False
-) -> List[str | Tuple[float, float, float, float]]:
+) -> List[Union[str, Tuple[float, float, float, float]]]:
     """Get a list of n unique colors for plotting flag data (when no colors are
        provided), as sampled from the tab20 or tab10 colormap.
 
@@ -65,7 +65,7 @@ def get_unique_colors(
 
     # Get and resample colormap
     cmap = colormaps[cmap_name].resampled(n)
-    colors = [cmap(i) for i in range(cmap.N)]
+    colors: List[Union[str, Tuple[float, float, float, float]]] = [cmap(i) for i in range(cmap.N)]
 
     # Convert to hex if requested
     if as_hex:

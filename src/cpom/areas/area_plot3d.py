@@ -90,19 +90,22 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
     # find the offset in to the DEM grid of the areas bottom left corner
 
     dem_bin_offset_x = int((xll - thisdem.mindemx) / thisdem.binsize)
+
     dem_bin_offset_y = int((yll - thisdem.mindemy) / thisdem.binsize)
     # if the offset is < 0 in x or y, set to zero
     dem_bin_offset_y = max(dem_bin_offset_y, 0)
     dem_bin_offset_x = max(dem_bin_offset_x, 0)
 
-    print(f"dem_bin_offset_x {dem_bin_offset_x} dem_bin_offset_y {dem_bin_offset_y}")
-
-    # needs transposing to work
-    #
+    # zdem needs transposing if originated from geotiff
     if thisdem.zarr_type:
         zdem = thisdem.zdem_flip
-    else:
+        ydem = np.flip(thisdem.ydem)
+    elif thisdem.zflip:
         zdem = np.flip(thisdem.zdem, 0)
+        ydem = np.flip(thisdem.ydem)
+    else:
+        zdem = thisdem.zdem
+        ydem = thisdem.ydem
 
     # Create a new DEM grid that corresponds to the AOI rectangle
     new_dem_max_x = dem_bin_offset_x + int(thisarea.width_km * 1000 / thisdem.binsize)
@@ -115,15 +118,36 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
 
     print(zdem.shape)
 
-    zdem = zdem[dem_bin_offset_y:new_dem_max_y, dem_bin_offset_x:new_dem_max_x]
+    # Override calculated DEM sampling for the plot from the command line inputs
+    if not thisarea.dem_stride:
+        # was previously: plot_surface_stride = 1 + int(zdem.shape[0] / thisarea.page_width)
+        raise ValueError("no dem_stride provided in Area3d object")
+    plot_surface_stride = thisarea.dem_stride
+
+    print(f"plot_surface_stride={plot_surface_stride}")
+
+    print("Subsetting DEM...")
+    zdem = zdem[
+        dem_bin_offset_y:new_dem_max_y:plot_surface_stride,
+        dem_bin_offset_x:new_dem_max_x:plot_surface_stride,
+    ]
+    print("done...")
+
     # Do the same with x and y
-    xdem = thisdem.xdem[dem_bin_offset_x:new_dem_max_x]
-    ydem = np.flip(thisdem.ydem)
-    ydem = ydem[dem_bin_offset_y:new_dem_max_y]
+
+    print("Subsetting xdem...")
+
+    xdem = thisdem.xdem[dem_bin_offset_x:new_dem_max_x:plot_surface_stride]
+
+    print("Subsetting ydem...")
+
+    ydem = ydem[dem_bin_offset_y:new_dem_max_y:plot_surface_stride]
 
     # make the x,y coordinates start from 0,0
     shifted_xdem = xdem - xdem.min()
     shifted_ydem = ydem - ydem.min()
+
+    print("creating x,y mesh...")
 
     # create a mesh of x,y coordinates
     x_grid, y_grid = np.meshgrid(shifted_xdem, shifted_ydem)
@@ -147,25 +171,6 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
         smooth_ww = gaussian_filter(smooth_w, sigma=sigma)
         zdem = smooth_vv / smooth_ww
         print("Done")
-
-    plot_surface_stride = 1 + int(zdem.shape[0] / thisarea.page_width)
-
-    print(f"plot_surface_stride={plot_surface_stride}")
-
-    # Override calculated DEM sampling for the plot from the command line inputs
-    if thisarea.dem_stride:
-        print("overriding plot_surface_stride from command line: ", thisarea.dem_stride)
-        plot_surface_stride = thisarea.dem_stride
-
-    # Calculate a DEM sampling for page size
-
-    # --------------------------------------------------------------------------------------------
-    # Resample DEM to match output plot page resolution
-    # --------------------------------------------------------------------------------------------
-
-    zdem = zdem[::plot_surface_stride, ::plot_surface_stride]
-    x_grid = x_grid[::plot_surface_stride, ::plot_surface_stride]
-    y_grid = y_grid[::plot_surface_stride, ::plot_surface_stride]
 
     # --------------------------------------------------------------------------------------------
     #  Create optional latitude and longitude, and Place annotations (uses transformer
