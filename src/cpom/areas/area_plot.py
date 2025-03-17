@@ -3,15 +3,13 @@ class to plot areas defined in cpom.areas.definitions
 
 To do reminder:
 
-TODO: doc in __init__.py
 TODO: grid support
-TODO: vostok antarctic area still to be added
-TODO: arctic area
 """
 
 import logging
 import os
 from dataclasses import dataclass
+from typing import List, Tuple, Union
 
 import cartopy.crs as ccrs  # type: ignore
 import matplotlib.colors as mcolors
@@ -41,29 +39,38 @@ from cpom.backgrounds.backgrounds import (  # background images functions for po
 log = logging.getLogger(__name__)
 
 
-def get_unique_colors(n: int, cmap_name_override: str | None = None):
-    """get a list of n unique colors for plotting flag data (when no colors are
-       provided, as sampled from the tab20 or tab10 colormap
+def get_unique_colors(
+    n: int, cmap_name_override: str | None = None, as_hex: bool = False
+) -> List[Union[str, Tuple[float, float, float, float]]]:
+    """Get a list of n unique colors for plotting flag data (when no colors are
+       provided), as sampled from the tab20 or tab10 colormap.
 
     Args:
-        n (int): number of colors required (<= 20 will provide unique colors
-        otherwise some repetition)
-        cmap_name_override (str): override colormap name to use, Typical alternatives are
-                         "tab10", "tab20b", "tab20c", and "Set1", "Set2","Set3"
+        n (int): Number of colors required (<= 20 will provide unique colors,
+                 otherwise some repetition).
+        cmap_name_override (str | None): Override colormap name to use. Typical alternatives are
+                                         "tab10", "tab20b", "tab20c", "Set1", "Set2", "Set3".
+        as_hex (bool): If True, returns colors as hex strings. If False, returns RGBA tuples.
 
     Returns:
-        List[Tuple[float,float,float,float]]: list of color RGBA
+        List[str | Tuple[float, float, float, float]]: List of colors as hex strings or RGBA tuples.
     """
+    # Select colormap
     if n <= 10:
         cmap_name = "tab10"
     else:
         cmap_name = "tab20"
     if cmap_name_override is not None:
         cmap_name = cmap_name_override
-    cmap = colormaps[cmap_name].resampled(
-        n
-    )  # Using the dictionary-like access and resampled method
-    colors = [cmap(i) for i in range(cmap.N)]
+
+    # Get and resample colormap
+    cmap = colormaps[cmap_name].resampled(n)
+    colors: List[Union[str, Tuple[float, float, float, float]]] = [cmap(i) for i in range(cmap.N)]
+
+    # Convert to hex if requested
+    if as_hex:
+        colors = [mcolors.to_hex(color) for color in colors]
+
     return colors
 
 
@@ -1221,7 +1228,7 @@ class Polarplot:
     def draw_minimap(
         self,
     ):
-        """draw a minimap to show Nan, FV and out of range values
+        """draw a minimap to show area coverage
 
         Args:
 
@@ -1293,6 +1300,19 @@ class Polarplot:
                     transform=dataprj_minimap,
                     zorder=30,
                 )
+            )
+
+        print(f"self.thisarea.masktype {self.thisarea.masktype} ")
+        if self.thisarea.masktype in ("polygon", "xylimits"):
+
+            self.draw_area_polygon_mask(
+                ax_minimap,
+                override_mask_display=True,
+                override_mask_color="r",
+                dataprj=dataprj_minimap,
+                fill=True,
+                linestyle="-",
+                linewidth=1,
             )
 
     def draw_latitude_vs_vals_plot(
@@ -2088,6 +2108,11 @@ class Polarplot:
             linewidth (int, optional): line width to use for polygon edges. Defaults to 2.
         """
 
+        print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
+        xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
+        print(f"{xc - self.thisarea.width_km*1000/2 ,xc+ self.thisarea.width_km*1000/2}")
+        print(f"{yc - self.thisarea.height_km*1000/2 ,yc+ self.thisarea.height_km*1000/2}")
+
         polygon_color = "red"
         if override_mask_color:
             polygon_color = override_mask_color
@@ -2097,6 +2122,8 @@ class Polarplot:
         if override_mask_display is not None:
             display_polygon_mask = override_mask_display
 
+        print(f"display_polygon_mask {display_polygon_mask}")
+
         # form a polygon from xy limits mask. Only show xy limits polygon for global map where
         # fill is specified
         if (
@@ -2105,6 +2132,8 @@ class Polarplot:
             and display_polygon_mask
             and fill
         ):
+            print("drawing filled xylimits mask...")
+
             x = [
                 self.thisarea.mask.xlimits[0],
                 self.thisarea.mask.xlimits[1],

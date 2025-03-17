@@ -79,5 +79,5 @@ jobs:
           pylint --version
           pylint src/cpom
           mypy --ignore-missing-imports src/cpom
-          echo "running pytest -m not non_core and not requires_external_data"
-          pytest -m "not non_core and not requires_external_data"
+          echo "running pytest -m not non_core and not requires_external_data and not plots"
+          pytest -m "not non_core and not requires_external_data and not plots"

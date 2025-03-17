@@ -4,6 +4,7 @@
 
 area_definition = {
     "long_name": "Ronne Filchner",
+    "area_summary": "Ronne Filchner ice shelves",
     # --------------------------------------------
     # Area definition
     # --------------------------------------------
@@ -35,15 +36,16 @@ area_definition = {
     # Data filtering using lat/lon extent (used as a quick data pre-filter before masking)
     # --------------------------------------------
     #   Area min/max lat/lon for initial data filtering
-    "minlon": 265.0,  # minimum longitude to initially filter records for area (0..360E)
+    "minlon": 260.0,  # minimum longitude to initially filter records for area (0..360E)
     "maxlon": 350.0,  # maximum longitude to initially filter records for area (0..360E)
     "minlat": -87.0,  # minimum latitude to initially filter records for area
     "maxlat": -70.0,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from clev2er.utils.masks.Mask
     # --------------------------------------------
-    "apply_area_mask_to_data": False,  # filter data using areas clev2er.utils.masks.Mask
-    "maskname": "",  # from  clev2er.utils.masks.Mask
+    "apply_area_mask_to_data": True,  # filter data using areas clev2er.utils.masks.Mask
+    "maskname": "ronne_filchner_xylimits_mask",  # from  clev2er.utils.masks.Mask
+    "masktype": "xylimits",
     "basin_numbers": [],  # [n1,n2,..] if mask allows basin numbers
     # for bedmachine v2, 2=grounded ice, 3=floating, 4=vostok
     "show_polygon_mask": False,  # show mask polygon
@@ -159,16 +161,16 @@ area_definition = {
     #       Lat/lon grid lines to show in main area
     #           - use empty lists to not include
     # ------------------------------------------------------
-    "longitude_gridlines": [270, 280, 290, 300, 310, 320, 330],  # deg E
+    "longitude_gridlines": [260, 270, 280, 290, 300, 310, 320, 330],  # deg E
     "latitude_gridlines": [-71, -73, -75, -77, -79, -81, -83, -85, -87],  # deg N
-    "gridline_color": "lightgrey",  # color to use for lat/lon grid lines
+    "gridline_color": "darkgrey",  # color to use for lat/lon grid lines
     "gridlabel_color": "darkgrey",  # color of grid labels
     "gridlabel_size": 8,  # size of grid labels
     "draw_gridlabels": True,  # whether to draw the grid labels
     "inner_gridlabel_color": "white",  # color of grid labels
     "inner_gridlabel_size": 8,  # size of grid labels
     "latitude_of_radial_labels": -58.3,  # latitude for radial grid line labels for circular plots
-    "labels_at_top": False,  # allow lat or lon labels at top of plot
+    "labels_at_top": True,  # allow lat or lon labels at top of plot
     "labels_at_bottom": True,  # allow lat or lon labels at bottom of plot
     "labels_at_left": True,  # allow lat or lon labels at left of plot
     "labels_at_right": True,  # allow lat or lon labels at right of plot

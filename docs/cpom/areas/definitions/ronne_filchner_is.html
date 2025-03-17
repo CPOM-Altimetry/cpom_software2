@@ -96,14 +96,16 @@
 </span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>
 </span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="n">area_definition</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>    <span class="s2">&quot;use_definitions_from&quot;</span><span class="p">:</span> <span class="s2">&quot;ronne_filchner&quot;</span><span class="p">,</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>    <span class="s2">&quot;apply_area_mask_to_data&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># filter data using areas clev2er.utils.masks.Mask</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a>    <span class="s2">&quot;maskname&quot;</span><span class="p">:</span> <span class="s2">&quot;antarctica_bedmachine_v2_grid_mask&quot;</span><span class="p">,</span>  <span class="c1"># from  clev2er.utils.masks.Mask</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a>    <span class="s2">&quot;basin_numbers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>  <span class="c1"># [n1,n2,..] if mask allows basin numbers</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>    <span class="c1"># for bedmachine v2, 2=grounded ice, 3=floating, 4=vostok</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>    <span class="s2">&quot;show_polygon_mask&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>  <span class="c1"># show mask polygon</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>    <span class="s2">&quot;polygon_mask_color&quot;</span><span class="p">:</span> <span class="s2">&quot;red&quot;</span><span class="p">,</span>  <span class="c1"># color to draw mask polygon</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="p">}</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>    <span class="s2">&quot;area_summary&quot;</span><span class="p">:</span> <span class="s2">&quot;Ronne Filchner ice shelves [ice sheet mask]&quot;</span><span class="p">,</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>    <span class="s2">&quot;use_definitions_from&quot;</span><span class="p">:</span> <span class="s2">&quot;ronne_filchner&quot;</span><span class="p">,</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a>    <span class="s2">&quot;apply_area_mask_to_data&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># filter data using areas clev2er.utils.masks.Mask</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a>    <span class="s2">&quot;maskname&quot;</span><span class="p">:</span> <span class="s2">&quot;antarctica_bedmachine_v2_grid_mask&quot;</span><span class="p">,</span>  <span class="c1"># from  clev2er.utils.masks.Mask</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>    <span class="s2">&quot;masktype&quot;</span><span class="p">:</span> <span class="s2">&quot;grid&quot;</span><span class="p">,</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>    <span class="s2">&quot;basin_numbers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>  <span class="c1"># [n1,n2,..] if mask allows basin numbers</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>    <span class="c1"># for bedmachine v2, 2=grounded ice, 3=floating, 4=vostok</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>    <span class="s2">&quot;show_polygon_mask&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>  <span class="c1"># show mask polygon</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>    <span class="s2">&quot;polygon_mask_color&quot;</span><span class="p">:</span> <span class="s2">&quot;red&quot;</span><span class="p">,</span>  <span class="c1"># color to draw mask polygon</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="p">}</span>
 </span></pre></div>
 
 
@@ -112,7 +114,7 @@
                     <div class="attr variable">
             <span class="name">area_definition</span>        =
 <input id="area_definition-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
-            <label class="view-value-button pdoc-button" for="area_definition-view-value"></label><span class="default_value">{&#39;use_definitions_from&#39;: &#39;ronne_filchner&#39;, &#39;apply_area_mask_to_data&#39;: True, &#39;maskname&#39;: &#39;antarctica_bedmachine_v2_grid_mask&#39;, &#39;basin_numbers&#39;: [2, 4], &#39;show_polygon_mask&#39;: False, &#39;polygon_mask_color&#39;: &#39;red&#39;}</span>
+            <label class="view-value-button pdoc-button" for="area_definition-view-value"></label><span class="default_value">{&#39;area_summary&#39;: &#39;Ronne Filchner ice shelves [ice sheet mask]&#39;, &#39;use_definitions_from&#39;: &#39;ronne_filchner&#39;, &#39;apply_area_mask_to_data&#39;: True, &#39;maskname&#39;: &#39;antarctica_bedmachine_v2_grid_mask&#39;, &#39;masktype&#39;: &#39;grid&#39;, &#39;basin_numbers&#39;: [2, 4], &#39;show_polygon_mask&#39;: False, &#39;polygon_mask_color&#39;: &#39;red&#39;}</span>
 
         
     </div>
