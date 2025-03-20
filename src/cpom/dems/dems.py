@@ -58,12 +58,11 @@ dem_list = [
     "arcticdem_100m_greenland_v4.1",  # ArcticDEM v4.1, 100m resolution, subarea greenland
     "arcticdem_100m_greenland_v4.1_zarr",  # Zarr format of ArcticDEM v4.1, 100m resolution, grn
     "atl14_grn_100m_004_003_zarr",  # Zarr format of IS/IS2 ATL14_GL_0324_100m_004_03.nc
-    "alt14_ant_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A(1-4)_0324_100m_004_04.nc
-    "alt14_ant_a1_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A1_0324_100m_004_04.nc (AIS NE)
-    "alt14_ant_a2_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A2_0324_100m_004_04.nc (AIS NW)
-    "alt14_ant_a3_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A3_0324_100m_004_04.nc (AIS SW)
-    "alt14_ant_a4_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A4_0324_100m_004_04.nc (AIS SE)
-    "atl14_ant_100m_004_004_zarr",  # nc format of IS/IS2 ATL14_A(1-4)_0324_100m_004_04.nc
+    "atl14_ant_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A(1-4)_0324_100m_004_04.nc
+    "atl14_ant_a1_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A1_0324_100m_004_04.nc (AIS NE)
+    "atl14_ant_a2_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A2_0324_100m_004_04.nc (AIS NW)
+    "atl14_ant_a3_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A3_0324_100m_004_04.nc (AIS SW)
+    "atl14_ant_a4_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A4_0324_100m_004_04.nc (AIS SE)
 ]
 
 
@@ -816,17 +815,22 @@ class Dem:
             self.reference_year = 2010  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
-        elif self.name == "alt14_ant_a1_100m_004_004_zarr":
+        elif self.name == "atl14_ant_a1_100m_004_004_zarr":
             # ATL-14 Antarctic sector A1 (NE) 100m DEM
             # zarr version created with
             # python src/cpom/dems/netcdf_to_zarr.py -f \
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A1_0324_100m_004_04.nc -v 3.402823e+38 -o \
             # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_A1_0324_100m_004_04.zarr"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A1 100m"
             self.src_institute = "NASA"
@@ -838,17 +842,22 @@ class Dem:
             self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
-        elif self.name == "alt14_ant_a2_100m_004_004_zarr":
+        elif self.name == "atl14_ant_a2_100m_004_004_zarr":
             # ATL-14 Antarctic sector A2 (NW) 100m DEM
             # zarr version created with
             # python src/cpom/dems/netcdf_to_zarr.py -f \
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A2_0324_100m_004_04.nc -v 3.402823e+38 -o \
             # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_A2_0324_100m_004_04.zarr"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A2 100m"
             self.src_institute = "NASA"
@@ -860,17 +869,22 @@ class Dem:
             self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
-        elif self.name == "alt14_ant_a3_100m_004_004_zarr":
+        elif self.name == "atl14_ant_a3_100m_004_004_zarr":
             # ATL-14 Antarctic sector A3 (SW) 100m DEM
             # zarr version created with
             # python src/cpom/dems/netcdf_to_zarr.py -f \
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A3_0324_100m_004_04.nc -v 3.402823e+38 -o \
             # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_A3_0324_100m_004_04.zarr"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A3 100m"
             self.src_institute = "NASA"
@@ -882,17 +896,22 @@ class Dem:
             self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
-        elif self.name == "alt14_ant_a4_100m_004_004_zarr":
+        elif self.name == "atl14_ant_a4_100m_004_004_zarr":
             # ATL-14 Antarctic sector A4 (SE) 100m DEM
             # zarr version created with
             # python src/cpom/dems/netcdf_to_zarr.py -f \
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc -v 3.402823e+38 -o \
             # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_A4_0324_100m_004_04.zarr"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A4 100m"
             self.src_institute = "NASA"
@@ -904,14 +923,19 @@ class Dem:
             self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
-        elif self.name == "alt14_ant_a4_100m_004_004":
+        elif self.name == "atl14_ant_a4_100m_004_004":
             # ATL-14 Antarctic sector A4 (SE) 100m DEM
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_A4_0324_100m_004_04.nc"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A4 100m"
             self.src_institute = "NASA"
@@ -927,6 +951,8 @@ class Dem:
 
         elif self.name == "atl14_ant_100m_004_004_zarr":
             # ATL-14 Antarctic A1-A4 100m DEM
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
             # zarr version created with
             # python src/cpom/dems/atl14_ant_4quadrant_nc_to_zarr.py \
             # --nc_files \
@@ -935,11 +961,16 @@ class Dem:
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A3_0324_100m_004_04.nc \
             # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc \
             # -o /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
 
             filename = "ATL14_0324_100m_004_04.zarr"
             filled_filename = filename
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
-            self.src_url = ""
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
             self.src_url_filled = ""
             self.dem_version = "ATL14 A4 100m"
             self.src_institute = "NASA"

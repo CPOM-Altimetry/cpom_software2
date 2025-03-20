@@ -173,18 +173,18 @@ on a map: </p>
 </span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a>
 </span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a>
-</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
-</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">glob</span>
-</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
+</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="kn">import</span> <span class="nn">argparse</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a><span class="kn">import</span> <span class="nn">glob</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="kn">import</span> <span class="nn">os</span>
+</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="kn">import</span> <span class="nn">sys</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
 </span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a>
-</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
-</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a><span class="kn">import</span> <span class="nn">matplotlib</span>
+</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
 </span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a>
-</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.area_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">Polarplot</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.areas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="kn">from</span> <span class="nn">cpom.areas.area_plot</span> <span class="kn">import</span> <span class="n">Polarplot</span>
+</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span><span class="p">,</span> <span class="n">list_all_area_definition_names</span>
 </span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a>
 </span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a><span class="c1"># pylint: disable=too-many-return-statements</span>
 </span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>
@@ -196,7 +196,7 @@ on a map: </p>
 </span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a><span class="n">NC</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[0m&quot;</span>  <span class="c1"># No Color, pylint: disable=invalid-name</span>
 </span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>
 </span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a><span class="k">def</span><span class="w"> </span><span class="nf">find_nc_files</span><span class="p">(</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a><span class="k">def</span> <span class="nf">find_nc_files</span><span class="p">(</span>
 </span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">max_files</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 </span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -230,7 +230,7 @@ on a map: </p>
 </span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>    <span class="k">return</span> <span class="n">files</span>
 </span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>
 </span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="k">def</span> <span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default latitude and longitude names to plot from filename</span>
 </span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
 </span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="sd">    Args:</span>
@@ -304,7 +304,7 @@ on a map: </p>
 </span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a>    <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
 </span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a>
 </span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a>
-</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve variable from NetCDF file, handling groups if necessary.</span>
 </span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a>
 </span><span id="L-172"><a href="#L-172"><span class="linenos">172</span></a><span class="sd">    This function navigates through groups in a NetCDF file to retrieve the specified variable.</span>
@@ -330,7 +330,7 @@ on a map: </p>
 </span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a>    <span class="k">return</span> <span class="n">var</span>
 </span><span id="L-193"><a href="#L-193"><span class="linenos">193</span></a>
 </span><span id="L-194"><a href="#L-194"><span class="linenos">194</span></a>
-</span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a><span class="k">def</span><span class="w"> </span><span class="nf">haversine</span><span class="p">(</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon2</span><span class="p">):</span>
+</span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a><span class="k">def</span> <span class="nf">haversine</span><span class="p">(</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon2</span><span class="p">):</span>
 </span><span id="L-196"><a href="#L-196"><span class="linenos">196</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-197"><a href="#L-197"><span class="linenos">197</span></a><span class="sd">    Calculate the great-circle distance between two points on the Earth.</span>
 </span><span id="L-198"><a href="#L-198"><span class="linenos">198</span></a>
@@ -354,7 +354,7 @@ on a map: </p>
 </span><span id="L-216"><a href="#L-216"><span class="linenos">216</span></a>    <span class="k">return</span> <span class="mi">6371000</span> <span class="o">*</span> <span class="n">c</span>
 </span><span id="L-217"><a href="#L-217"><span class="linenos">217</span></a>
 </span><span id="L-218"><a href="#L-218"><span class="linenos">218</span></a>
-</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a><span class="k">def</span><span class="w"> </span><span class="nf">is_within_distance</span><span class="p">(</span>
+</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a><span class="k">def</span> <span class="nf">is_within_distance</span><span class="p">(</span>
 </span><span id="L-220"><a href="#L-220"><span class="linenos">220</span></a>    <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">target_lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">target_lon</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span>
 </span><span id="L-221"><a href="#L-221"><span class="linenos">221</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 </span><span id="L-222"><a href="#L-222"><span class="linenos">222</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -378,7 +378,7 @@ on a map: </p>
 </span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a>    <span class="k">return</span> <span class="kc">False</span>
 </span><span id="L-241"><a href="#L-241"><span class="linenos">241</span></a>
 </span><span id="L-242"><a href="#L-242"><span class="linenos">242</span></a>
-</span><span id="L-243"><a href="#L-243"><span class="linenos">243</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+</span><span id="L-243"><a href="#L-243"><span class="linenos">243</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="L-244"><a href="#L-244"><span class="linenos">244</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of tool</span>
 </span><span id="L-245"><a href="#L-245"><span class="linenos">245</span></a>
 </span><span id="L-246"><a href="#L-246"><span class="linenos">246</span></a><span class="sd">    Returns:</span>
@@ -739,7 +739,7 @@ on a map: </p>
 
     </div>
     <a class="headerlink" href="#find_nc_files"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="find_nc_files-62"><a href="#find_nc_files-62"><span class="linenos">62</span></a><span class="k">def</span><span class="w"> </span><span class="nf">find_nc_files</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="find_nc_files-62"><a href="#find_nc_files-62"><span class="linenos">62</span></a><span class="k">def</span> <span class="nf">find_nc_files</span><span class="p">(</span>
 </span><span id="find_nc_files-63"><a href="#find_nc_files-63"><span class="linenos">63</span></a>    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">max_files</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 </span><span id="find_nc_files-64"><a href="#find_nc_files-64"><span class="linenos">64</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="find_nc_files-65"><a href="#find_nc_files-65"><span class="linenos">65</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -804,7 +804,7 @@ on a map: </p>
 
     </div>
     <a class="headerlink" href="#get_default_latlon_names"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_latlon_names-96"><a href="#get_default_latlon_names-96"><span class="linenos"> 96</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_latlon_names-96"><a href="#get_default_latlon_names-96"><span class="linenos"> 96</span></a><span class="k">def</span> <span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="get_default_latlon_names-97"><a href="#get_default_latlon_names-97"><span class="linenos"> 97</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default latitude and longitude names to plot from filename</span>
 </span><span id="get_default_latlon_names-98"><a href="#get_default_latlon_names-98"><span class="linenos"> 98</span></a>
 </span><span id="get_default_latlon_names-99"><a href="#get_default_latlon_names-99"><span class="linenos"> 99</span></a><span class="sd">    Args:</span>
@@ -907,7 +907,7 @@ on a map: </p>
 
     </div>
     <a class="headerlink" href="#get_variable"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-170"><a href="#get_variable-170"><span class="linenos">170</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-170"><a href="#get_variable-170"><span class="linenos">170</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="get_variable-171"><a href="#get_variable-171"><span class="linenos">171</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve variable from NetCDF file, handling groups if necessary.</span>
 </span><span id="get_variable-172"><a href="#get_variable-172"><span class="linenos">172</span></a>
 </span><span id="get_variable-173"><a href="#get_variable-173"><span class="linenos">173</span></a><span class="sd">    This function navigates through groups in a NetCDF file to retrieve the specified variable.</span>
@@ -972,7 +972,7 @@ with groups separated by '/'.</li>
 
     </div>
     <a class="headerlink" href="#haversine"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="haversine-196"><a href="#haversine-196"><span class="linenos">196</span></a><span class="k">def</span><span class="w"> </span><span class="nf">haversine</span><span class="p">(</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon2</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="haversine-196"><a href="#haversine-196"><span class="linenos">196</span></a><span class="k">def</span> <span class="nf">haversine</span><span class="p">(</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon2</span><span class="p">):</span>
 </span><span id="haversine-197"><a href="#haversine-197"><span class="linenos">197</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="haversine-198"><a href="#haversine-198"><span class="linenos">198</span></a><span class="sd">    Calculate the great-circle distance between two points on the Earth.</span>
 </span><span id="haversine-199"><a href="#haversine-199"><span class="linenos">199</span></a>
@@ -1020,7 +1020,7 @@ Distance in meters.</p>
 
     </div>
     <a class="headerlink" href="#is_within_distance"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="is_within_distance-220"><a href="#is_within_distance-220"><span class="linenos">220</span></a><span class="k">def</span><span class="w"> </span><span class="nf">is_within_distance</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="is_within_distance-220"><a href="#is_within_distance-220"><span class="linenos">220</span></a><span class="k">def</span> <span class="nf">is_within_distance</span><span class="p">(</span>
 </span><span id="is_within_distance-221"><a href="#is_within_distance-221"><span class="linenos">221</span></a>    <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">target_lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">target_lon</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span>
 </span><span id="is_within_distance-222"><a href="#is_within_distance-222"><span class="linenos">222</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 </span><span id="is_within_distance-223"><a href="#is_within_distance-223"><span class="linenos">223</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1072,7 +1072,7 @@ bool: True if any point is within the distance, False otherwise.</p>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-244"><a href="#main-244"><span class="linenos">244</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-244"><a href="#main-244"><span class="linenos">244</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="main-245"><a href="#main-245"><span class="linenos">245</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of tool</span>
 </span><span id="main-246"><a href="#main-246"><span class="linenos">246</span></a>
 </span><span id="main-247"><a href="#main-247"><span class="linenos">247</span></a><span class="sd">    Returns:</span>

@@ -221,19 +221,19 @@ fine. Needs further investigation.</p>
 </span><span id="L-56"><a href="#L-56"><span class="linenos">  56</span></a>
 </span><span id="L-57"><a href="#L-57"><span class="linenos">  57</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-58"><a href="#L-58"><span class="linenos">  58</span></a>
-</span><span id="L-59"><a href="#L-59"><span class="linenos">  59</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos">  60</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">glob</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos">  61</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos">  62</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos">  63</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos">  64</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos">  65</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
+</span><span id="L-59"><a href="#L-59"><span class="linenos">  59</span></a><span class="kn">import</span> <span class="nn">argparse</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos">  60</span></a><span class="kn">import</span> <span class="nn">glob</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos">  61</span></a><span class="kn">import</span> <span class="nn">logging</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos">  62</span></a><span class="kn">import</span> <span class="nn">os</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos">  63</span></a><span class="kn">import</span> <span class="nn">re</span>
+</span><span id="L-64"><a href="#L-64"><span class="linenos">  64</span></a><span class="kn">import</span> <span class="nn">sys</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos">  65</span></a><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
 </span><span id="L-66"><a href="#L-66"><span class="linenos">  66</span></a>
-</span><span id="L-67"><a href="#L-67"><span class="linenos">  67</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos">  68</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos">  67</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos">  68</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=E0611</span>
 </span><span id="L-69"><a href="#L-69"><span class="linenos">  69</span></a>
-</span><span id="L-70"><a href="#L-70"><span class="linenos">  70</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.area_plot3d</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_3d_area</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos">  71</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.areas3d</span><span class="w"> </span><span class="kn">import</span> <span class="n">Area3d</span><span class="p">,</span> <span class="n">list_all_3d_area_definition_names</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos">  70</span></a><span class="kn">from</span> <span class="nn">cpom.areas.area_plot3d</span> <span class="kn">import</span> <span class="n">plot_3d_area</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos">  71</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas3d</span> <span class="kn">import</span> <span class="n">Area3d</span><span class="p">,</span> <span class="n">list_all_3d_area_definition_names</span>
 </span><span id="L-72"><a href="#L-72"><span class="linenos">  72</span></a>
 </span><span id="L-73"><a href="#L-73"><span class="linenos">  73</span></a><span class="c1"># pylint: disable=too-many-branches</span>
 </span><span id="L-74"><a href="#L-74"><span class="linenos">  74</span></a><span class="c1"># pylint: disable=too-many-return-statements</span>
@@ -248,7 +248,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-83"><a href="#L-83"><span class="linenos">  83</span></a><span class="n">NC</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[0m&quot;</span>  <span class="c1"># No Color, pylint: disable=invalid-name</span>
 </span><span id="L-84"><a href="#L-84"><span class="linenos">  84</span></a>
 </span><span id="L-85"><a href="#L-85"><span class="linenos">  85</span></a>
-</span><span id="L-86"><a href="#L-86"><span class="linenos">  86</span></a><span class="k">def</span><span class="w"> </span><span class="nf">setup_logging</span><span class="p">():</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos">  86</span></a><span class="k">def</span> <span class="nf">setup_logging</span><span class="p">():</span>
 </span><span id="L-87"><a href="#L-87"><span class="linenos">  87</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Setup logging handlers&quot;&quot;&quot;</span>
 </span><span id="L-88"><a href="#L-88"><span class="linenos">  88</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span>
 </span><span id="L-89"><a href="#L-89"><span class="linenos">  89</span></a>    <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
@@ -259,7 +259,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-94"><a href="#L-94"><span class="linenos">  94</span></a>    <span class="k">return</span> <span class="n">logger</span>
 </span><span id="L-95"><a href="#L-95"><span class="linenos">  95</span></a>
 </span><span id="L-96"><a href="#L-96"><span class="linenos">  96</span></a>
-</span><span id="L-97"><a href="#L-97"><span class="linenos">  97</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos">  97</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="L-98"><a href="#L-98"><span class="linenos">  98</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve variable from NetCDF file, handling groups if necessary.</span>
 </span><span id="L-99"><a href="#L-99"><span class="linenos">  99</span></a>
 </span><span id="L-100"><a href="#L-100"><span class="linenos"> 100</span></a><span class="sd">    This function navigates through groups in a NetCDF file to retrieve the specified variable.</span>
@@ -285,7 +285,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-120"><a href="#L-120"><span class="linenos"> 120</span></a>    <span class="k">return</span> <span class="n">var</span>
 </span><span id="L-121"><a href="#L-121"><span class="linenos"> 121</span></a>
 </span><span id="L-122"><a href="#L-122"><span class="linenos"> 122</span></a>
-</span><span id="L-123"><a href="#L-123"><span class="linenos"> 123</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_param</span><span class="p">(</span>
+</span><span id="L-123"><a href="#L-123"><span class="linenos"> 123</span></a><span class="k">def</span> <span class="nf">get_default_param</span><span class="p">(</span>
 </span><span id="L-124"><a href="#L-124"><span class="linenos"> 124</span></a>    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="L-125"><a href="#L-125"><span class="linenos"> 125</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-126"><a href="#L-126"><span class="linenos"> 126</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default parameter to plot from known file types</span>
@@ -372,7 +372,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-207"><a href="#L-207"><span class="linenos"> 207</span></a>    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
 </span><span id="L-208"><a href="#L-208"><span class="linenos"> 208</span></a>
 </span><span id="L-209"><a href="#L-209"><span class="linenos"> 209</span></a>
-</span><span id="L-210"><a href="#L-210"><span class="linenos"> 210</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+</span><span id="L-210"><a href="#L-210"><span class="linenos"> 210</span></a><span class="k">def</span> <span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-211"><a href="#L-211"><span class="linenos"> 211</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default latitude and longitude names to plot from filename</span>
 </span><span id="L-212"><a href="#L-212"><span class="linenos"> 212</span></a>
 </span><span id="L-213"><a href="#L-213"><span class="linenos"> 213</span></a><span class="sd">    Args:</span>
@@ -450,7 +450,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-285"><a href="#L-285"><span class="linenos"> 285</span></a>    <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
 </span><span id="L-286"><a href="#L-286"><span class="linenos"> 286</span></a>
 </span><span id="L-287"><a href="#L-287"><span class="linenos"> 287</span></a>
-</span><span id="L-288"><a href="#L-288"><span class="linenos"> 288</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="L-288"><a href="#L-288"><span class="linenos"> 288</span></a><span class="k">def</span> <span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 </span><span id="L-289"><a href="#L-289"><span class="linenos"> 289</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;select a default area definition based on latitude</span>
 </span><span id="L-290"><a href="#L-290"><span class="linenos"> 290</span></a>
 </span><span id="L-291"><a href="#L-291"><span class="linenos"> 291</span></a><span class="sd">    Args:</span>
@@ -470,7 +470,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-305"><a href="#L-305"><span class="linenos"> 305</span></a>    <span class="k">return</span> <span class="s2">&quot;global&quot;</span>
 </span><span id="L-306"><a href="#L-306"><span class="linenos"> 306</span></a>
 </span><span id="L-307"><a href="#L-307"><span class="linenos"> 307</span></a>
-</span><span id="L-308"><a href="#L-308"><span class="linenos"> 308</span></a><span class="k">def</span><span class="w"> </span><span class="nf">find_nc_files</span><span class="p">(</span>
+</span><span id="L-308"><a href="#L-308"><span class="linenos"> 308</span></a><span class="k">def</span> <span class="nf">find_nc_files</span><span class="p">(</span>
 </span><span id="L-309"><a href="#L-309"><span class="linenos"> 309</span></a>    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">max_files</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 </span><span id="L-310"><a href="#L-310"><span class="linenos"> 310</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="L-311"><a href="#L-311"><span class="linenos"> 311</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -504,7 +504,7 @@ fine. Needs further investigation.</p>
 </span><span id="L-339"><a href="#L-339"><span class="linenos"> 339</span></a>    <span class="k">return</span> <span class="n">files</span>
 </span><span id="L-340"><a href="#L-340"><span class="linenos"> 340</span></a>
 </span><span id="L-341"><a href="#L-341"><span class="linenos"> 341</span></a>
-</span><span id="L-342"><a href="#L-342"><span class="linenos"> 342</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+</span><span id="L-342"><a href="#L-342"><span class="linenos"> 342</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="L-343"><a href="#L-343"><span class="linenos"> 343</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of 3d plotting tool</span>
 </span><span id="L-344"><a href="#L-344"><span class="linenos"> 344</span></a>
 </span><span id="L-345"><a href="#L-345"><span class="linenos"> 345</span></a><span class="sd">    Returns:</span>
@@ -1450,7 +1450,7 @@ fine. Needs further investigation.</p>
 
     </div>
     <a class="headerlink" href="#setup_logging"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="setup_logging-87"><a href="#setup_logging-87"><span class="linenos">87</span></a><span class="k">def</span><span class="w"> </span><span class="nf">setup_logging</span><span class="p">():</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="setup_logging-87"><a href="#setup_logging-87"><span class="linenos">87</span></a><span class="k">def</span> <span class="nf">setup_logging</span><span class="p">():</span>
 </span><span id="setup_logging-88"><a href="#setup_logging-88"><span class="linenos">88</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Setup logging handlers&quot;&quot;&quot;</span>
 </span><span id="setup_logging-89"><a href="#setup_logging-89"><span class="linenos">89</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span>
 </span><span id="setup_logging-90"><a href="#setup_logging-90"><span class="linenos">90</span></a>    <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
@@ -1478,7 +1478,7 @@ fine. Needs further investigation.</p>
 
     </div>
     <a class="headerlink" href="#get_variable"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-98"><a href="#get_variable-98"><span class="linenos"> 98</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-98"><a href="#get_variable-98"><span class="linenos"> 98</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">nc</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">nc_var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="get_variable-99"><a href="#get_variable-99"><span class="linenos"> 99</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve variable from NetCDF file, handling groups if necessary.</span>
 </span><span id="get_variable-100"><a href="#get_variable-100"><span class="linenos">100</span></a>
 </span><span id="get_variable-101"><a href="#get_variable-101"><span class="linenos">101</span></a><span class="sd">    This function navigates through groups in a NetCDF file to retrieve the specified variable.</span>
@@ -1543,7 +1543,7 @@ with groups separated by '/'.</li>
 
     </div>
     <a class="headerlink" href="#get_default_param"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_param-124"><a href="#get_default_param-124"><span class="linenos">124</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_param</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_param-124"><a href="#get_default_param-124"><span class="linenos">124</span></a><span class="k">def</span> <span class="nf">get_default_param</span><span class="p">(</span>
 </span><span id="get_default_param-125"><a href="#get_default_param-125"><span class="linenos">125</span></a>    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="get_default_param-126"><a href="#get_default_param-126"><span class="linenos">126</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="get_default_param-127"><a href="#get_default_param-127"><span class="linenos">127</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default parameter to plot from known file types</span>
@@ -1663,7 +1663,7 @@ Cryo-TEMPO Sea Ice: file name starts with CS_OFFL_SIR_TDP_SI</p>
 
     </div>
     <a class="headerlink" href="#get_default_latlon_names"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_latlon_names-211"><a href="#get_default_latlon_names-211"><span class="linenos">211</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_latlon_names-211"><a href="#get_default_latlon_names-211"><span class="linenos">211</span></a><span class="k">def</span> <span class="nf">get_default_latlon_names</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 </span><span id="get_default_latlon_names-212"><a href="#get_default_latlon_names-212"><span class="linenos">212</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a default latitude and longitude names to plot from filename</span>
 </span><span id="get_default_latlon_names-213"><a href="#get_default_latlon_names-213"><span class="linenos">213</span></a>
 </span><span id="get_default_latlon_names-214"><a href="#get_default_latlon_names-214"><span class="linenos">214</span></a><span class="sd">    Args:</span>
@@ -1770,7 +1770,7 @@ Cryo-TEMPO Sea Ice: file name starts with CS_OFFL_SIR_TDP_SI</p>
 
     </div>
     <a class="headerlink" href="#get_default_area"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_area-289"><a href="#get_default_area-289"><span class="linenos">289</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_default_area-289"><a href="#get_default_area-289"><span class="linenos">289</span></a><span class="k">def</span> <span class="nf">get_default_area</span><span class="p">(</span><span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 </span><span id="get_default_area-290"><a href="#get_default_area-290"><span class="linenos">290</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;select a default area definition based on latitude</span>
 </span><span id="get_default_area-291"><a href="#get_default_area-291"><span class="linenos">291</span></a>
 </span><span id="get_default_area-292"><a href="#get_default_area-292"><span class="linenos">292</span></a><span class="sd">    Args:</span>
@@ -1820,7 +1820,7 @@ Cryo-TEMPO Sea Ice: file name starts with CS_OFFL_SIR_TDP_SI</p>
 
     </div>
     <a class="headerlink" href="#find_nc_files"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="find_nc_files-309"><a href="#find_nc_files-309"><span class="linenos">309</span></a><span class="k">def</span><span class="w"> </span><span class="nf">find_nc_files</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="find_nc_files-309"><a href="#find_nc_files-309"><span class="linenos">309</span></a><span class="k">def</span> <span class="nf">find_nc_files</span><span class="p">(</span>
 </span><span id="find_nc_files-310"><a href="#find_nc_files-310"><span class="linenos">310</span></a>    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recursive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">max_files</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 </span><span id="find_nc_files-311"><a href="#find_nc_files-311"><span class="linenos">311</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 </span><span id="find_nc_files-312"><a href="#find_nc_files-312"><span class="linenos">312</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1885,7 +1885,7 @@ Cryo-TEMPO Sea Ice: file name starts with CS_OFFL_SIR_TDP_SI</p>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-343"><a href="#main-343"><span class="linenos"> 343</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-343"><a href="#main-343"><span class="linenos"> 343</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
 </span><span id="main-344"><a href="#main-344"><span class="linenos"> 344</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function of 3d plotting tool</span>
 </span><span id="main-345"><a href="#main-345"><span class="linenos"> 345</span></a>
 </span><span id="main-346"><a href="#main-346"><span class="linenos"> 346</span></a><span class="sd">    Returns:</span>

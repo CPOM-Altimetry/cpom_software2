@@ -139,20 +139,20 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a>
 </span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a>
-</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span> <span class="nn">argparse</span>
+</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="kn">import</span> <span class="nn">sys</span>
 </span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a>
-</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">scipy.interpolate</span><span class="w"> </span><span class="kn">import</span> <span class="n">griddata</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">griddata</span>
 </span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>
-</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.roughness.roughness</span><span class="w"> </span><span class="kn">import</span> <span class="n">Roughness</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.slopes.slopes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slopes</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="kn">from</span> <span class="nn">cpom.roughness.roughness</span> <span class="kn">import</span> <span class="n">Roughness</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="kn">from</span> <span class="nn">cpom.slopes.slopes</span> <span class="kn">import</span> <span class="n">Slopes</span>
 </span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a>
 </span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="c1"># pylint: disable=too-many-locals,too-many-arguments</span>
 </span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a>
 </span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>
-</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calculate_binned_median</span><span class="p">(</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="k">def</span> <span class="nf">calculate_binned_median</span><span class="p">(</span>
 </span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -210,7 +210,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>    <span class="k">return</span> <span class="n">binned_median_pivot</span>
 </span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>
 </span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
-</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calculate_binned_mad</span><span class="p">(</span>
+</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="k">def</span> <span class="nf">calculate_binned_mad</span><span class="p">(</span>
 </span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -250,7 +250,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>    <span class="p">)</span>
 </span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>
 </span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a>    <span class="c1"># Group by the bins and calculate the MAD of the elevation difference</span>
-</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">mad</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>    <span class="k">def</span> <span class="nf">mad</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
 </span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a>        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
 </span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>        <span class="c1"># return median_absolute_deviation(x)</span>
 </span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a>
@@ -266,7 +266,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a>    <span class="k">return</span> <span class="n">binned_mad_pivot</span>
 </span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a>
 </span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a>
-</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="k">def</span><span class="w"> </span><span class="nf">interpolate_missing_values_with_nearest_neighbour</span><span class="p">(</span>
+</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="k">def</span> <span class="nf">interpolate_missing_values_with_nearest_neighbour</span><span class="p">(</span>
 </span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a>    <span class="n">binned_median_pivot</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
 </span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a>    <span class="n">slope_bins</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a>    <span class="n">roughness_bins</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -316,7 +316,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-201"><a href="#L-201"><span class="linenos">201</span></a>    <span class="k">return</span> <span class="n">binned_median_pivot</span>
 </span><span id="L-202"><a href="#L-202"><span class="linenos">202</span></a>
 </span><span id="L-203"><a href="#L-203"><span class="linenos">203</span></a>
-</span><span id="L-204"><a href="#L-204"><span class="linenos">204</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_binned_values</span><span class="p">(</span>
+</span><span id="L-204"><a href="#L-204"><span class="linenos">204</span></a><span class="k">def</span> <span class="nf">get_binned_values</span><span class="p">(</span>
 </span><span id="L-205"><a href="#L-205"><span class="linenos">205</span></a>    <span class="n">slope_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-206"><a href="#L-206"><span class="linenos">206</span></a>    <span class="n">roughness_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-207"><a href="#L-207"><span class="linenos">207</span></a>    <span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
@@ -365,7 +365,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-250"><a href="#L-250"><span class="linenos">250</span></a>    <span class="k">return</span> <span class="n">values</span>
 </span><span id="L-251"><a href="#L-251"><span class="linenos">251</span></a>
 </span><span id="L-252"><a href="#L-252"><span class="linenos">252</span></a>
-</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calc_2d_uncertainty_table</span><span class="p">(</span>
+</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a><span class="k">def</span> <span class="nf">calc_2d_uncertainty_table</span><span class="p">(</span>
 </span><span id="L-254"><a href="#L-254"><span class="linenos">254</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-255"><a href="#L-255"><span class="linenos">255</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-256"><a href="#L-256"><span class="linenos">256</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -416,7 +416,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-301"><a href="#L-301"><span class="linenos">301</span></a>    <span class="k">return</span> <span class="n">interpolated_binned_table</span>
 </span><span id="L-302"><a href="#L-302"><span class="linenos">302</span></a>
 </span><span id="L-303"><a href="#L-303"><span class="linenos">303</span></a>
-</span><span id="L-304"><a href="#L-304"><span class="linenos">304</span></a><span class="k">def</span><span class="w"> </span><span class="nf">save_table_as_pickle</span><span class="p">(</span><span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-304"><a href="#L-304"><span class="linenos">304</span></a><span class="k">def</span> <span class="nf">save_table_as_pickle</span><span class="p">(</span><span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-305"><a href="#L-305"><span class="linenos">305</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Save the binned table as a Pickle file.</span>
 </span><span id="L-306"><a href="#L-306"><span class="linenos">306</span></a>
 </span><span id="L-307"><a href="#L-307"><span class="linenos">307</span></a><span class="sd">    Args:</span>
@@ -426,7 +426,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-311"><a href="#L-311"><span class="linenos">311</span></a>    <span class="n">binned_table</span><span class="o">.</span><span class="n">to_pickle</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
 </span><span id="L-312"><a href="#L-312"><span class="linenos">312</span></a>
 </span><span id="L-313"><a href="#L-313"><span class="linenos">313</span></a>
-</span><span id="L-314"><a href="#L-314"><span class="linenos">314</span></a><span class="k">def</span><span class="w"> </span><span class="nf">load_table_from_pickle</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+</span><span id="L-314"><a href="#L-314"><span class="linenos">314</span></a><span class="k">def</span> <span class="nf">load_table_from_pickle</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 </span><span id="L-315"><a href="#L-315"><span class="linenos">315</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Load the binned table from a Pickle file.</span>
 </span><span id="L-316"><a href="#L-316"><span class="linenos">316</span></a>
 </span><span id="L-317"><a href="#L-317"><span class="linenos">317</span></a><span class="sd">    Args:</span>
@@ -441,7 +441,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 </span><span id="L-326"><a href="#L-326"><span class="linenos">326</span></a><span class="c1"># ------------------------------------------------------------------------------------------------</span>
 </span><span id="L-327"><a href="#L-327"><span class="linenos">327</span></a>
 </span><span id="L-328"><a href="#L-328"><span class="linenos">328</span></a>
-</span><span id="L-329"><a href="#L-329"><span class="linenos">329</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="L-329"><a href="#L-329"><span class="linenos">329</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
 </span><span id="L-330"><a href="#L-330"><span class="linenos">330</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function for command line tool&quot;&quot;&quot;</span>
 </span><span id="L-331"><a href="#L-331"><span class="linenos">331</span></a>    <span class="c1"># initiate the command line parser</span>
 </span><span id="L-332"><a href="#L-332"><span class="linenos">332</span></a>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
@@ -593,7 +593,7 @@ python cryotempo_2d_uncertainty.py -g -m median     -dh_file ~/downloads/cs2_min
 
     </div>
     <a class="headerlink" href="#calculate_binned_median"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="calculate_binned_median-41"><a href="#calculate_binned_median-41"><span class="linenos">41</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calculate_binned_median</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="calculate_binned_median-41"><a href="#calculate_binned_median-41"><span class="linenos">41</span></a><span class="k">def</span> <span class="nf">calculate_binned_median</span><span class="p">(</span>
 </span><span id="calculate_binned_median-42"><a href="#calculate_binned_median-42"><span class="linenos">42</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calculate_binned_median-43"><a href="#calculate_binned_median-43"><span class="linenos">43</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calculate_binned_median-44"><a href="#calculate_binned_median-44"><span class="linenos">44</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -686,7 +686,7 @@ two measurement techniques.</li>
 
     </div>
     <a class="headerlink" href="#calculate_binned_mad"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="calculate_binned_mad-99"><a href="#calculate_binned_mad-99"><span class="linenos"> 99</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calculate_binned_mad</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="calculate_binned_mad-99"><a href="#calculate_binned_mad-99"><span class="linenos"> 99</span></a><span class="k">def</span> <span class="nf">calculate_binned_mad</span><span class="p">(</span>
 </span><span id="calculate_binned_mad-100"><a href="#calculate_binned_mad-100"><span class="linenos">100</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calculate_binned_mad-101"><a href="#calculate_binned_mad-101"><span class="linenos">101</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calculate_binned_mad-102"><a href="#calculate_binned_mad-102"><span class="linenos">102</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -726,7 +726,7 @@ two measurement techniques.</li>
 </span><span id="calculate_binned_mad-136"><a href="#calculate_binned_mad-136"><span class="linenos">136</span></a>    <span class="p">)</span>
 </span><span id="calculate_binned_mad-137"><a href="#calculate_binned_mad-137"><span class="linenos">137</span></a>
 </span><span id="calculate_binned_mad-138"><a href="#calculate_binned_mad-138"><span class="linenos">138</span></a>    <span class="c1"># Group by the bins and calculate the MAD of the elevation difference</span>
-</span><span id="calculate_binned_mad-139"><a href="#calculate_binned_mad-139"><span class="linenos">139</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">mad</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="calculate_binned_mad-139"><a href="#calculate_binned_mad-139"><span class="linenos">139</span></a>    <span class="k">def</span> <span class="nf">mad</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
 </span><span id="calculate_binned_mad-140"><a href="#calculate_binned_mad-140"><span class="linenos">140</span></a>        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
 </span><span id="calculate_binned_mad-141"><a href="#calculate_binned_mad-141"><span class="linenos">141</span></a>        <span class="c1"># return median_absolute_deviation(x)</span>
 </span><span id="calculate_binned_mad-142"><a href="#calculate_binned_mad-142"><span class="linenos">142</span></a>
@@ -778,7 +778,7 @@ techniques.</li>
 
     </div>
     <a class="headerlink" href="#interpolate_missing_values_with_nearest_neighbour"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="interpolate_missing_values_with_nearest_neighbour-155"><a href="#interpolate_missing_values_with_nearest_neighbour-155"><span class="linenos">155</span></a><span class="k">def</span><span class="w"> </span><span class="nf">interpolate_missing_values_with_nearest_neighbour</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="interpolate_missing_values_with_nearest_neighbour-155"><a href="#interpolate_missing_values_with_nearest_neighbour-155"><span class="linenos">155</span></a><span class="k">def</span> <span class="nf">interpolate_missing_values_with_nearest_neighbour</span><span class="p">(</span>
 </span><span id="interpolate_missing_values_with_nearest_neighbour-156"><a href="#interpolate_missing_values_with_nearest_neighbour-156"><span class="linenos">156</span></a>    <span class="n">binned_median_pivot</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
 </span><span id="interpolate_missing_values_with_nearest_neighbour-157"><a href="#interpolate_missing_values_with_nearest_neighbour-157"><span class="linenos">157</span></a>    <span class="n">slope_bins</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="interpolate_missing_values_with_nearest_neighbour-158"><a href="#interpolate_missing_values_with_nearest_neighbour-158"><span class="linenos">158</span></a>    <span class="n">roughness_bins</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -862,7 +862,7 @@ nearest-neighbor interpolation.</p>
 
     </div>
     <a class="headerlink" href="#get_binned_values"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_binned_values-205"><a href="#get_binned_values-205"><span class="linenos">205</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_binned_values</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_binned_values-205"><a href="#get_binned_values-205"><span class="linenos">205</span></a><span class="k">def</span> <span class="nf">get_binned_values</span><span class="p">(</span>
 </span><span id="get_binned_values-206"><a href="#get_binned_values-206"><span class="linenos">206</span></a>    <span class="n">slope_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="get_binned_values-207"><a href="#get_binned_values-207"><span class="linenos">207</span></a>    <span class="n">roughness_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="get_binned_values-208"><a href="#get_binned_values-208"><span class="linenos">208</span></a>    <span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
@@ -946,7 +946,7 @@ median differences.</li>
 
     </div>
     <a class="headerlink" href="#calc_2d_uncertainty_table"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="calc_2d_uncertainty_table-254"><a href="#calc_2d_uncertainty_table-254"><span class="linenos">254</span></a><span class="k">def</span><span class="w"> </span><span class="nf">calc_2d_uncertainty_table</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="calc_2d_uncertainty_table-254"><a href="#calc_2d_uncertainty_table-254"><span class="linenos">254</span></a><span class="k">def</span> <span class="nf">calc_2d_uncertainty_table</span><span class="p">(</span>
 </span><span id="calc_2d_uncertainty_table-255"><a href="#calc_2d_uncertainty_table-255"><span class="linenos">255</span></a>    <span class="n">delta_elevation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calc_2d_uncertainty_table-256"><a href="#calc_2d_uncertainty_table-256"><span class="linenos">256</span></a>    <span class="n">slope</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="calc_2d_uncertainty_table-257"><a href="#calc_2d_uncertainty_table-257"><span class="linenos">257</span></a>    <span class="n">roughness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -1036,7 +1036,7 @@ interpolation leaves NaNs.</li>
 
     </div>
     <a class="headerlink" href="#save_table_as_pickle"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="save_table_as_pickle-305"><a href="#save_table_as_pickle-305"><span class="linenos">305</span></a><span class="k">def</span><span class="w"> </span><span class="nf">save_table_as_pickle</span><span class="p">(</span><span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="save_table_as_pickle-305"><a href="#save_table_as_pickle-305"><span class="linenos">305</span></a><span class="k">def</span> <span class="nf">save_table_as_pickle</span><span class="p">(</span><span class="n">binned_table</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="save_table_as_pickle-306"><a href="#save_table_as_pickle-306"><span class="linenos">306</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Save the binned table as a Pickle file.</span>
 </span><span id="save_table_as_pickle-307"><a href="#save_table_as_pickle-307"><span class="linenos">307</span></a>
 </span><span id="save_table_as_pickle-308"><a href="#save_table_as_pickle-308"><span class="linenos">308</span></a><span class="sd">    Args:</span>
@@ -1070,7 +1070,7 @@ interpolation leaves NaNs.</li>
 
     </div>
     <a class="headerlink" href="#load_table_from_pickle"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="load_table_from_pickle-315"><a href="#load_table_from_pickle-315"><span class="linenos">315</span></a><span class="k">def</span><span class="w"> </span><span class="nf">load_table_from_pickle</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="load_table_from_pickle-315"><a href="#load_table_from_pickle-315"><span class="linenos">315</span></a><span class="k">def</span> <span class="nf">load_table_from_pickle</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 </span><span id="load_table_from_pickle-316"><a href="#load_table_from_pickle-316"><span class="linenos">316</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Load the binned table from a Pickle file.</span>
 </span><span id="load_table_from_pickle-317"><a href="#load_table_from_pickle-317"><span class="linenos">317</span></a>
 </span><span id="load_table_from_pickle-318"><a href="#load_table_from_pickle-318"><span class="linenos">318</span></a><span class="sd">    Args:</span>
@@ -1111,7 +1111,7 @@ interpolation leaves NaNs.</li>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-330"><a href="#main-330"><span class="linenos">330</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-330"><a href="#main-330"><span class="linenos">330</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
 </span><span id="main-331"><a href="#main-331"><span class="linenos">331</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function for command line tool&quot;&quot;&quot;</span>
 </span><span id="main-332"><a href="#main-332"><span class="linenos">332</span></a>    <span class="c1"># initiate the command line parser</span>
 </span><span id="main-333"><a href="#main-333"><span class="linenos">333</span></a>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>

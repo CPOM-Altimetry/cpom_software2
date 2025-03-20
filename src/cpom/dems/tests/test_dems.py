@@ -57,8 +57,7 @@ log = logging.getLogger(__name__)
         # ("awi_ant_1km_floating", [-80], [182], [0]),  # Ross Ice Shelf
         # ("awi_ant_1km_grounded", [-77], [106], [3516]),  # Vostok
         # ("awi_ant_1km", [-77], [106], [3516]),  # Vostok),# Vostok
-        ("alt14_ant_100m_004_004_zarr", [-77], [106], [3516]),  # Vostok),# Vostok
-        ("alt14_ant_100m_004_004", [-77], [106], [3516]),  # Vostok),# Vostok
+        ("atl14_ant_100m_004_004_zarr", [-77], [106], [3516]),  # Vostok),# Vostok
     ],
 )
 def test_dems_all(dem_name, lats, lons, elevs):
