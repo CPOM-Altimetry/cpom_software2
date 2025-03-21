@@ -2,39 +2,24 @@
 # -*- coding: utf-8 -*-
 """cpom.altimetry.tools.nc_vals.py
 
-# Purpose
+Tool to print out NetCDF values with more control than ncdump.
 
-tool to print out netcdf values with more control than
-ncdump. By default it prints scaled values (scale_factor, add_offset) (disable with -r)
+By default it prints scaled values (scale_factor, add_offset) unless disabled with `-r`.
 
 # Command Line Options
 
-```
-  -h, --help            show this help message and exit
-  -d, --describe        Print only the specified parameter definition and attributes (like ncdump)
-  -g, --global-atts     Print only global attributes from the file
-  -p PARAM, --param PARAM
-                        Parameter path (e.g., data/ku/power_noise_floor)
-  -r, --raw             Print raw values without applying scale_factor or add_offset
-  -s, --show_every_index
-                        Print every value with its index (one per line)
+  -h, --help              Show this help message and exit
+  -d, --describe          Print only the specified parameter definition and attributes (like ncdump)
+  -g, --global-atts       Print only global attributes from the file
+  -p PARAM, --param PARAM Parameter path (e.g., data/ku/power_noise_floor)
+  -r, --raw               Print raw values without applying scale_factor or add_offset
+  -s, --show_every_index  Print every value with its index (one per line)
   -n PRECISION, --precision PRECISION
-                        Number of decimal places to print for float values
-```
+                          Number of decimal places to print for float values
 
 # Example
 
-```
-nc_vals.py -h  : print help 
-```
-
-```
-nc_vals.py -s -p data/ku/power_noise_floor \
-    CRA_IR_GR_HR__SIC_...T____.NC 
-```
-
-
-
+    nc_vals.py -s -p data/ku/power_noise_floor yourfile.nc
 """
 
 import argparse
@@ -61,12 +46,10 @@ def print_variable_description(var: Variable, varname: str) -> None:
     if group_path:
         print(f"group: {group_path}")
 
-    # Print type and dimensions
     dtype = var.dtype
     dims = ", ".join(var.dimensions)
     print(f"{dtype} {varname}({dims}) ;")
 
-    # Print attributes
     for attr in var.ncattrs():
         val = getattr(var, attr)
         if isinstance(val, str):
@@ -92,7 +75,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Print values of a NetCDF parameter, with optional scaling and formatting."
     )
-    parser.add_argument("filename", help="Path to the NetCDF file")
+    parser.add_argument(
+        "-f",
+        "--filename",
+        required=not any(arg in sys.argv for arg in ["-g", "--global-atts", "-h", "--help"]),
+        help="Path to the NetCDF file",
+    )
 
     parser.add_argument(
         "-d",
@@ -100,21 +88,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print only the specified parameter definition and attributes (like ncdump)",
     )
-
     parser.add_argument(
         "-g",
         "--global-atts",
         action="store_true",
         help="Print only global attributes from the file",
     )
-
     parser.add_argument(
         "-p",
         "--param",
-        required=True,
-        help="Parameter path (e.g., data/ku/power_noise_floor). "
-        "By default variables are printed scaled with (scale_factor, add_offset) if they apply."
-        "Disable this with -r",
+        required=False,
+        help=(
+            "Parameter path (e.g., data/ku/power_noise_floor). "
+            "By default, values are scaled unless --raw is passed."
+        ),
     )
     parser.add_argument(
         "-r",
@@ -139,14 +126,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_variable(dataset: Dataset, var_path: str) -> Variable:
-    """Traverse the NetCDF file structure to retrieve a variable from a path.
+    """Retrieve a variable from the dataset given a path.
 
     Args:
         dataset: The open NetCDF dataset.
-        var_path: Slash-separated path to the variable (e.g., data/ku/var).
+        var_path: Slash-separated variable path (e.g., data/ku/var).
 
     Returns:
-        The corresponding NetCDF variable object.
+        The NetCDF variable object.
 
     Raises:
         KeyError: If the group or variable is not found.
@@ -164,51 +151,43 @@ def get_variable(dataset: Dataset, var_path: str) -> Variable:
 
 
 def apply_scaling(var: Variable, data: np.ndarray) -> np.ndarray:
-    """Apply scale_factor and add_offset attributes to raw NetCDF data.
+    """Apply scale_factor and add_offset to data.
 
     Args:
         var: The NetCDF variable.
-        data: The raw data as a NumPy array.
+        data: The data array (possibly masked).
 
     Returns:
-        A scaled NumPy array as float64.
+        Scaled NumPy array.
     """
     scale = getattr(var, "scale_factor", 1.0)
     offset = getattr(var, "add_offset", 0.0)
-
-    # Ensure data is float64 (for correct scale application)
-    data = data.astype(np.float64)
-
-    # Apply scale and offset
-    scaled = data * scale + offset
-
-    return scaled
+    return data.astype(np.float64) * scale + offset
 
 
 def is_float_dtype(dtype: np.dtype) -> bool:
-    """Check if a NumPy dtype is a float type.
+    """Check if dtype is floating-point.
 
     Args:
-        dtype: The NumPy data type.
+        dtype: NumPy data type.
 
     Returns:
-        True if it's a float type, else False.
+        True if float, else False.
     """
-
     return np.issubdtype(dtype, np.floating)
 
 
 def print_indexed(data: np.ndarray, precision: int | None = None) -> None:
-    """Print values one per line with their index, masking fill values as '--'.
+    """Print each value with its index. Masked values are shown as '--FV--'.
 
     Args:
-        data: The data to print.
-        precision: Number of decimal places to print for float values.
+        data: Data array (masked or regular).
+        precision: Decimal precision for float values.
     """
     flat = data.flatten()
     for i, val in enumerate(flat):
         if np.ma.is_masked(val):
-            print(f"{i}: --")
+            print(f"{i}: --FV--")
         else:
             if isinstance(val, float) and precision is not None:
                 print(f"{i}: {val:.{precision}f}")
@@ -217,7 +196,7 @@ def print_indexed(data: np.ndarray, precision: int | None = None) -> None:
 
 
 def print_global_attributes(dataset: Dataset) -> None:
-    """Print all global attributes from the NetCDF file.
+    """Print global attributes of the dataset.
 
     Args:
         dataset: The open NetCDF dataset.
@@ -238,8 +217,8 @@ def print_global_attributes(dataset: Dataset) -> None:
             print(f"    :{attr} = {val} ;  // unhandled type")
 
 
-def main():
-    """main function of tool. No args."""
+def main() -> None:
+    """Main function to drive CLI behavior."""
     args = parse_args()
 
     if not os.path.exists(args.filename):
@@ -252,27 +231,41 @@ def main():
                 print_global_attributes(ds)
                 return
 
+            if not args.param:
+                print("Error: --param is required unless using --global-atts", file=sys.stderr)
+                sys.exit(1)
+
             var = get_variable(ds, args.param)
-            var.set_auto_maskandscale(False)  # Disable auto-scaling
+            fill_value = getattr(var, "_FillValue", None)
+            var.set_auto_maskandscale(False)
 
             if args.describe:
                 print_variable_description(var, args.param.split("/")[-1])
                 return
 
-            data = var[:]
+            raw_data = var[:]
+
+            # Mask fill values before scaling
+            if fill_value is not None:
+                data = np.ma.masked_equal(raw_data, fill_value)
+            else:
+                data = raw_data
 
             if not args.raw:
                 data = apply_scaling(var, data)
 
-            # Float precision formatting
             if args.show_every_index:
                 print_indexed(data, precision=args.precision)
             else:
-                # Apply numpy precision if it's a float dtype
-                if args.precision is not None and is_float_dtype(data.dtype):
-                    np.set_printoptions(precision=args.precision)
-                np.set_printoptions(threshold=1000, linewidth=120)
-                print(data)
+                output_array = data.filled(np.nan) if np.ma.isMaskedArray(data) else data
+
+                np.set_printoptions(
+                    precision=args.precision if args.precision is not None else 8,
+                    threshold=1000,
+                    linewidth=120,
+                    floatmode="fixed",
+                )
+                print(output_array)
 
     except FileNotFoundError:
         print(f"Error: File '{args.filename}' not found.", file=sys.stderr)
