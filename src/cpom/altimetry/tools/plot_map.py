@@ -63,7 +63,6 @@ import sys
 from typing import List
 
 import numpy as np
-import pyproj
 from matplotlib import use as use_headless
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
@@ -1078,11 +1077,6 @@ def main(args):
     area_overrides = {}
     if args.hillshade:
         area_overrides["apply_hillshade_to_vals"] = True
-
-    pyproj.set_use_global_context(
-        True
-    )  # This is required to speed up Cartopy (>0.20) projection transforms.
-    # If not set the geolocation will run extremely slowly
 
     Polarplot(def_area, area_overrides=area_overrides, area_file=args.areadef_file).plot_points(
         *datasets,
