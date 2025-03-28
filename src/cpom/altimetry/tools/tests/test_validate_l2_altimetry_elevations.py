@@ -20,7 +20,7 @@ from cpom.altimetry.tools.validate_l2_altimetry_elevations import (
     get_elev_differences,
     get_files_in_dir,
     get_variable,
-    slope_correction,
+    correct_elevation_using_slope,
 )
 
 
@@ -233,9 +233,9 @@ def test_get_elev_differences(mock_args):
     assert result == expected_result
 
 
-# --------------------------#
-# Test Slope Correction     #
-# --------------------------#
+# -----------------------------------#
+# Test correct_elevation_using_slope #
+# -----------------------------------#
 class MockDem:
     """Mocked Dem class that returns None"""
 
@@ -271,7 +271,7 @@ def test_slope_correction(mock_args):
         "cpom.altimetry.tools.validate_l2_altimetry_elevations.Dem", MockDem
     ):  # Replace Dem with MockDem
         with patch.object(MockDem, "interp_dem", side_effect=[dem1, dem2]):  # Mock iterp_dem method
-            result = slope_correction(test_data, mock_args, MagicMock(), "")
+            result = correct_elevation_using_slope(test_data, mock_args, MagicMock(), "")
 
     assert np.all(result["reference_h"] == [508, 610, 701, 405])
     assert np.all(result["dh"] == [7, 0, -6, -5])
@@ -298,7 +298,7 @@ def test_slope_correction_missing_data(mock_args):
         "cpom.altimetry.tools.validate_l2_altimetry_elevations.Dem", MockDem
     ):  # Replace Dem with MockDem
         with patch.object(MockDem, "interp_dem", side_effect=[dem1, dem2]):  # Mock iterp_dem method
-            result = slope_correction(test_data, mock_args, MagicMock(), "")
+            result = correct_elevation_using_slope(test_data, mock_args, MagicMock(), "")
 
     assert np.all(result["reference_h"] == [508, 610, 701])
     assert np.all(result["dh"] == [7, 0, -6])
@@ -643,7 +643,7 @@ def test_get_is2_data_array_hemisphere(
         patch("cpom.altimetry.tools.validate_l2_altimetry_elevations.h5py.File", MagicMock()),
     ):
 
-        def side_effect(nc, var): # pylint: disable=W0613
+        def side_effect(nc, var):  # pylint: disable=W0613
             if var == mock_config["lat"]:
                 return measured_lat  # Negative hemisphere
             return np.array([0, 0, 0, 0])  # Dummy for other vars
@@ -691,7 +691,7 @@ def test_get_is2_data_array_filtering(mock_process_data, mock_config):
         patch("cpom.altimetry.tools.validate_l2_altimetry_elevations.h5py.File", MagicMock()),
     ):
 
-        def side_effect(nc, var): # pylint: disable=W0613
+        def side_effect(nc, var):  # pylint: disable=W0613
             """Mock variable retrieval behavior."""
             if var == mock_config["elev"]:
                 return np.array([500, 600, 11000, 800])  # Third value >10e3 should be removed

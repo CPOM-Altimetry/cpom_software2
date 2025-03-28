@@ -1,20 +1,21 @@
-""" cpom.altimetry.tools.validate_against_is2.py
+"""cpom.altimetry.tools.validate_against_is2.py
 
 A tool to compare a selected month of altimetry mission data elevations to
 Laser reference elevations.
-Options to add additional variables to the output or compare refernce mission to itself. 
+Options to add additional variables to the output or compare reference mission to itself.
 
-Supports : CS2 (Native l2 and cryotempo), S3A , S3B , ENVISAT, ERS1 , ERS2 
-Against : ICESAT-2 (ATL06), Icebridge(ILATM2, ILUTP2) , Pre-Icebridge(BRMCR2, BLATM2) 
+Supports : CS2 (Native l2 and cryotempo), S3A , S3B , ENVISAT, ERS1 , ERS2
+Against : ICESAT-2 (ATL06), Icebridge(ILATM2, ILUTP2) , Pre-Icebridge(BRMCR2, BLATM2)
 
 For full list of command line options:  validate_l2_is2_atl06.py -h
+
 ```
-Run for cs2 data sin and lrm mode, with 2 beams. Parallelised across 20 workers: 
+Run for cs2 data sin and lrm mode, with 2 beams. Parallelised across 20 workers:
 for m in {1..12}
 do
-./validate_against_is2.py 
+./validate_against_is2.py
 --altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN /media/luna/archive/SATS/RA/CRY/L2I/LRM
---reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022 
+--reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022
 --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r
 --add_vars uncertainty_variable_name --max_workers 20 --chunksize 50 &
 done
@@ -22,16 +23,16 @@ done
 ```
 Run for CS2 CryoTEMPO comparison over Antarctica using 1 beam :
 Cryotempo data requires an additional parameter --cryotempo_modes to filter to mode.
-./validate_against_is2.py 
+./validate_against_is2.py
 --altim_dir /media/luna/archive/SATS/RA/CRY/Cryo-TEMPO/BASELINE-D101/LAND_ICE/ANTARC
---reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 
+--reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006
 --outdir /tmp --year 2020 --month 1 --area antarctica_is --beams gt2r --cryotempo_modes lrm sin &
 
 ```
 Run to compare IS2 to itself over Greenland :
-./compare_to_is2_atl06.py 
---reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006--outdir /tmp 
---year 2022 --month 1 --area greenland --beams gt2r --max_workers 20 --compare_to_self 
+./compare_to_is2_atl06.py
+--reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006--outdir /tmp
+--year 2022 --month 1 --area greenland --beams gt2r --max_workers 20 --compare_to_self
 """
 
 import argparse
@@ -109,9 +110,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="[optional] IS2 beams to use. Space separated list: gt1l gt1r gt2l gt2r gt3l gt3r",
     )
-    parser.add_argument(
-        "--dem", help="Digital Elevation Model.(Required for icebridge/pre-icebridge)"
-    )
+    parser.add_argument("--dem", help="[optional] DEM, used in 'correct_elevation_using_slope'")
     parser.add_argument("--radius", type=float, default=20.0, help="[optional] search radius in m")
     parser.add_argument(
         "--maxdiff",
@@ -207,8 +206,6 @@ def get_default_variables(file: str) -> dict:
         dict: Dictionary of default variable names
     """
     basename = os.path.basename(file)
-    print(basename)
-
     variable_map = {  # CS2 Products
         "SIR_LRMI2": {
             "lat_nadir": "lat_20_ku",
@@ -306,8 +303,8 @@ def get_files_in_dir(
     pattern = extensions[filetype]
     all_files.extend(Path(directory).rglob(pattern))
     # Matches: YYYYMMDDT | YYYYMMDD_ | YYMMDD_ |YYYYMMDDHHMMSS
-    file_basename_regex =re.compile(
-    rf"(?:{year}{month}\d{{2}}T\d*|{year}{month}\d{{2}}_\d*|{year[-2:]}{month}\d{{2}}_|{year}{month}\d{{8}})"
+    file_basename_regex = re.compile(
+        rf"(?:{year}{month}\d{{2}}T\d*|{year}{month}\d{{2}}_\d*|{year[-2:]}{month}\d{{2}}_|{year}{month}\d{{8}})"
     )
     valid_files = [  # Exclude filenames containing multiple dots before the extension
         f
@@ -320,12 +317,14 @@ def get_files_in_dir(
 
     if valid_files:
         return valid_files
-    return None
 
-    # file_dir_regex = re.compile(rf"{year}\.{month}\.\d{{2}}")  # Matches YYYY.DD.MM/
-    # return [
-    #     str(file) for file in all_files if file_dir_regex.fullmatch(part) for part in file.parts
-    # ]
+    try:
+        file_dir_regex = re.compile(rf"{year}\.{month}\.\d{{2}}")  # Matches YYYY.DD.MM/
+        return [
+            str(file) for file in all_files if file_dir_regex.fullmatch(part) for part in file.parts
+        ]
+    except:
+        return None
 
 
 class ProcessData:
@@ -347,7 +346,6 @@ class ProcessData:
 
     def get_cryotempo_filters(self, nc, args):
         """Check Cryotempo data is in a valid mode."""
-        print("modes", args.cryotempo_modes)
         if args.cryotempo_modes == "all":
             return None
 
@@ -355,9 +353,7 @@ class ProcessData:
         valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
 
         instrument_mode = get_variable(nc, "instrument_mode")
-        print("instrument_mode", instrument_mode)
         valid_mask = np.isin(instrument_mode, list(valid_modes))
-        print("valid_mask", valid_mask)
         return valid_mask if valid_mask.any() else None
 
     def fill_empty_latlon_with_nadir(
@@ -430,7 +426,6 @@ class ProcessData:
                     }
 
                     if list(additional_data.keys()) != add_vars:
-                        print("Test this")
                         self.log.info(
                             "Variable(s) %s missing from netcdf",
                             set(add_vars) - set(additional_data.keys()),
@@ -467,7 +462,6 @@ class ProcessData:
                     # Filter out files in wrong hemisphere. No files cross hemispheres
                     try:
                         hemisphere = get_variable(nc, config["lat"])[0]
-                        print(hemisphere)
                         if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
                             hemisphere > 0.0 and self.area.hemisphere == "south"
                         ):
@@ -640,8 +634,11 @@ def get_elev_differences(
     return results
 
 
-def slope_correction(data, args, log, prefix) -> np.array:
-    """Slope Correction from reference DEM
+def correct_elevation_using_slope(data, args, log, prefix) -> np.array:
+    """Correct for differences in the measurement location
+    of the reference and altimetry data point.
+    Conceptually shift reference location, to be located at altimetry datapoint,
+    using DEM slope.
     Args:
         data (nd.array): Output of "get_elev_differences"
         args (argparse.Namespace): Configuration parameters
@@ -655,16 +652,8 @@ def slope_correction(data, args, log, prefix) -> np.array:
     dh_dem_elev = (dem.interp_dem(data[f"{prefix}x"], data[f"{prefix}y"])) - (
         dem.interp_dem(data["reference_x"], data["reference_y"])
     )
-
-    print("First dem check", dh_dem_elev)
-
-    # print("Second dem check",(dem.interp_dem(data["reference_x"], data["reference_y"])))
-    print("dem_dh", dh_dem_elev)
     data["reference_h"] = data["reference_h"] + dh_dem_elev
     data["dh"] = data["dh"] - dh_dem_elev
-
-    print("corrected_dh", data["dh"])
-    print("corrected ref_h", data["reference_h"])
 
     data = {key: np.array(data[key]) for key in data}
     return {key: val[~np.isnan(data["dh"])] for key, val in data.items()}
@@ -771,6 +760,9 @@ if __name__ == "__main__":
     except OSError as e:
         sys.exit("Failed  create directory %s: %s", month_outdir, e)
 
+    with open(month_outdir / "command_line_args.txt", "w", encoding="utf-8") as f:
+        f.write(" ".join(sys.argv) + "\n")
+
     logger = setup_logging(
         log_file_info=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.info.log",
         log_file_error=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.errors.log",
@@ -798,22 +790,11 @@ if __name__ == "__main__":
     reference_points = reference_points[unique_indices]
     logger.info("Loaded reference data points, len : %d", len(reference_points))
 
-    ref_missions = ["ATL06", "ILATM2", "ILUTP2", "BLATM2", "BRMCR2"]
-    REF_MISSION = next(
-        (m for m in ref_missions if m in os.path.basename(str(reference_files[0]))), "UNDEFINED"
-    )
-
     # Load altimetry data #
     if params.compare_to_self:
         logger.info("Performing reference self-comparison")
         PREFIX = "neighbour_"
         altimetry_points = reference_points  # Compare is2 to itself
-        outfile = month_outdir / f"{REF_MISSION}_vs_{REF_MISSION}_p2p_diffs_{params.area}"
-        if params.beams:
-            outfile = (
-                month_outdir
-                / f"{REF_MISSION}_vs_{REF_MISSION}_{''.join(params.beams)}_p2p_diffs_{params.area}"
-            )
     else:
         logger.info("Comparing reference to altimetry")
         PREFIX = ""
@@ -839,21 +820,12 @@ if __name__ == "__main__":
         altimetry_points = altimetry_points[unique_indices]
         logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
 
-        mission_ids = {"CRY", "S3A", "S3B", "ERS2", "ERS1", "ENV"}
-        MISSION = next((i for i in Path(altimetry_files[0]).parts if i in mission_ids), "UNKNOWN")
-
-        if params.beams:
-            outfile = (
-                month_outdir
-                / f"{MISSION}_minus_{REF_MISSION}_{''.join(params.beams)}_p2p_diffs_{params.area}"
-            )
-        else:
-            outfile = month_outdir / f"{MISSION}_minus_{REF_MISSION}_p2p_diffs_{params.area}"
+    outfile = month_outdir / f"p2p_diffs_{params.area}"
 
     # Get elevation differences #
     elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
-    if params.compare_to_icebridge:
-        slope_correction(elev_differences, params, logger, PREFIX)
+    if params.dem:
+        correct_elevation_using_slope(elev_differences, params, logger, PREFIX)
 
     # Convert to lat/lon #
     alt_lons, alt_lats = AREA_OBJ.xy_to_latlon(
@@ -864,7 +836,7 @@ if __name__ == "__main__":
     )
 
     # Output #
-    logger.info("Saving month data to %s", outfile)
+    logger.info("Saving month data to %s.npz", outfile)
     save_data = {
         "dh": elev_differences["dh"],
         "seperation_distance": elev_differences["sep_dist"],
@@ -879,8 +851,6 @@ if __name__ == "__main__":
         "reference_y": elev_differences["reference_y"],
         "reference_h": elev_differences["reference_h"],
     }
-
-    logger.info("Saving data to %s", outfile)
     np.savez(f"{outfile}.npz", **save_data)
 
     compute_elevation_stats(save_data, prefix=PREFIX, output_file=f"{outfile}_elevation_stats.csv")
@@ -894,6 +864,5 @@ if __name__ == "__main__":
         },
         output_dir=month_outdir,
     )
-
     elev_dh_histograms(save_data["dh"], f"{outfile}_dh_histogram.png", bins=params.bins)
     elevation_dh_cumulative_dist(save_data["dh"], f"{outfile}_dh_cumulative_distribution.png")
