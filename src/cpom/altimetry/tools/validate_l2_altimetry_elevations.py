@@ -630,15 +630,6 @@ def get_elev_differences(
                 for var in add_vars:
                     results[var].append(altimeter_point[var])
 
-    print(
-        "results",
-        min(results["reference_x"]),
-        min(results["reference_y"]),
-        "max :",
-        max(results["reference_x"]),
-        max(results["reference_y"]),
-    )
-
     return results
 
 
@@ -841,13 +832,6 @@ if __name__ == "__main__":
     )
     reference_lats, reference_lons = AREA_OBJ.xy_to_latlon(
         elev_differences["reference_x"], elev_differences["reference_y"]
-    )
-    print(
-        "After transform",
-        min(reference_lats),
-        min(reference_lons),
-        max(reference_lats),
-        max(reference_lons),
     )
 
     # Output #
