@@ -529,7 +529,6 @@ class ProcessData:
             lats, lons = get_variable(nc, config["lat"]), np.mod(
                 get_variable(nc, config["lon"]), 360
             )
-
             lats, lons, bounded_indices, _ = self.area.inside_latlon_bounds(lats, lons)
             x, y = self.area.latlon_to_xy(lats, lons)
             elevation = get_variable(nc, config["elev"])[bounded_indices]
@@ -630,6 +629,15 @@ def get_elev_differences(
 
                 for var in add_vars:
                     results[var].append(altimeter_point[var])
+
+    print(
+        "results",
+        min(results["reference_x"]),
+        min(results["reference_y"]),
+        "max :",
+        max(results["reference_x"]),
+        max(results["reference_y"]),
+    )
 
     return results
 
@@ -828,11 +836,18 @@ if __name__ == "__main__":
         correct_elevation_using_slope(elev_differences, params, logger, PREFIX)
 
     # Convert to lat/lon #
-    alt_lons, alt_lats = AREA_OBJ.xy_to_latlon(
+    alt_lats, alt_lons = AREA_OBJ.xy_to_latlon(
         elev_differences[f"{PREFIX}x"], elev_differences[f"{PREFIX}y"]
     )
-    reference_lons, reference_lats = AREA_OBJ.xy_to_latlon(
+    reference_lats, reference_lons = AREA_OBJ.xy_to_latlon(
         elev_differences["reference_x"], elev_differences["reference_y"]
+    )
+    print(
+        "After transform",
+        min(reference_lats),
+        min(reference_lons),
+        max(reference_lats),
+        max(reference_lons),
     )
 
     # Output #
