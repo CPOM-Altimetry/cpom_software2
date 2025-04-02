@@ -1,15 +1,49 @@
-"""cpom.altimetry.tools.validate_against_is2.py
+"""cpom.altimetry.tools.validate_l2_altimetry_elevations.py
 
-A tool to compare a selected month of altimetry mission data elevations to
-Laser reference elevations.
-Options to add additional variables to the output or compare reference mission to itself.
+This tool compares a selected month of radar altimetry mission elevation data against laser
+atimetry reference elevations.
+It also allows comparing a reference mission to itself.
 
-Supports : CS2 (Native l2 and cryotempo), S3A , S3B , ENVISAT, ERS1 , ERS2
-Against : ICESAT-2 (ATL06), Icebridge(ILATM2, ILUTP2) , Pre-Icebridge(BRMCR2, BLATM2)
+### **Supported Missions**
+- **Altimetry Missions**: CS2 (Native L2 and CryoTempo), S3A, S3B, ENVISAT, ERS1, ERS2
+- **Reference Missions**: ICESat-2 (ATL06), IceBridge (ILATM2, ILUTP2),
+                        Pre-IceBridge (BRMCR2, BLATM2)
+To add a new mission edit : 'get_default_variables'
 
-For full list of command line options:  validate_l2_is2_atl06.py -h
+### **Note to user**
+When comparing to icebridge : The default radius increases from 20m to 10000m,
+to capture enough points for validation. For the best performance alter the radius and
+max_diff argument for your usecase, or provide a DEM to correct reference locations
+to align with altimetry measurements.
 
-```
+When running for Cryotempo, the Cryotempo_Modes argument must be set.
+
+### **Command Line Options**
+**Required**
+- `reference_dir`: Path to reference dataset.
+- `altim_dir`: Path to altimetry dataset.
+- `year`: Year of data.
+- `month`: Month of data.
+- `area`: CPOM area.
+- `outdir`: Output directory.
+
+**Optional**
+- `dem`: Provide a DEM to correct location when comparing to IceBridge with a large radius,
+        used in 'correct_elevation_using_slope'
+- `radius`: Search radius (in meters) for validation points.
+- `max_diff`: Maximum elevation difference between matched points.
+- `add_vars`: Additional variables to include in output (e.g., uncertainty).
+- `cryotempo_modes`: CryoTempo modes to include (required if using CryoTempo data).
+- `max_workers`: Number of parallel processing threads.
+- `compare_to_icebridge`: Set `True` when comparing to IceBridge (default: `False`).
+                Argument is automatically set 'True' if reference_dir path contains 'ICEBRIGE'
+- `compare_to_self`: Compare reference data points to nearby reference points (default: `False`).
+- `bins`: Number of bins for output data plot.
+
+For a full list of the command line descriptions run:
+validate_l2_altimetry_elevations -h
+
+### **Example Useage**
 Run for cs2 data sin and lrm mode, with 2 beams. Parallelised across 20 workers:
 for m in {1..12}
 do
@@ -19,20 +53,6 @@ do
 --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r
 --add_vars uncertainty_variable_name --max_workers 20 --chunksize 50 &
 done
-
-```
-Run for CS2 CryoTEMPO comparison over Antarctica using 1 beam :
-Cryotempo data requires an additional parameter --cryotempo_modes to filter to mode.
-./validate_against_is2.py
---altim_dir /media/luna/archive/SATS/RA/CRY/Cryo-TEMPO/BASELINE-D101/LAND_ICE/ANTARC
---reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006
---outdir /tmp --year 2020 --month 1 --area antarctica_is --beams gt2r --cryotempo_modes lrm sin &
-
-```
-Run to compare IS2 to itself over Greenland :
-./compare_to_is2_atl06.py
---reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006--outdir /tmp
---year 2022 --month 1 --area greenland --beams gt2r --max_workers 20 --compare_to_self
 """
 
 import argparse
@@ -318,13 +338,7 @@ def get_files_in_dir(
     if valid_files:
         return valid_files
 
-    try:
-        file_dir_regex = re.compile(rf"{year}\.{month}\.\d{{2}}")  # Matches YYYY.DD.MM/
-        return [
-            str(file) for file in all_files if file_dir_regex.fullmatch(part) for part in file.parts
-        ]
-    except:
-        return None
+    return None
 
 
 class ProcessData:
