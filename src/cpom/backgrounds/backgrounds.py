@@ -40,7 +40,7 @@ all_backgrounds = {
     "cartopy_stock": ["antarctica_is", "arctic"],
     "cartopy_stock_ocean": ["antarctica_is", "arctic"],
     "arcgis_shaded_relief": ["antarctica_is", "arctic"],
-    # "google_satellite": ["canadianlake_woods"],
+    "google_satellite": ["sweden"],
     "bluemarble": ["antarctica_is", "arctic"],
     "natural_earth_cbh": ["antarctica_is", "arctic"],
     "natural_earth_cbh_oceanmasked": ["antarctica_is", "arctic"],
