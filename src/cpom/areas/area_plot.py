@@ -2360,7 +2360,10 @@ class Polarplot:
         # EPSG:3395: World Mercator/ WGS 84
         elif self.thisarea.epsg_number == 3395:
             dataprj = ccrs.epsg("3395")
-            this_projection = ccrs.PlateCarree()
+            if self.thisarea.name == "global":
+                this_projection = ccrs.PlateCarree()
+            else:
+                this_projection = ccrs.Mercator()
 
         else:
             raise ValueError(f"EPSG-{self.thisarea.epsg_number} not supported")
