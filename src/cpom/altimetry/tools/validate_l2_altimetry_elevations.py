@@ -51,7 +51,7 @@ do
 --altim_dir /media/luna/archive/SATS/RA/CRY/L2I/SIN /media/luna/archive/SATS/RA/CRY/L2I/LRM
 --reference_dir /media/luna/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006 --year 2022
 --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r
---add_vars uncertainty_variable_name --max_workers 20 --chunksize 50 &
+--add_vars uncertainty_variable_name --max_workers 20 &
 done
 """
 
