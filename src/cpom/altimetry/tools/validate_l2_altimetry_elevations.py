@@ -864,6 +864,12 @@ if __name__ == "__main__":
         "reference_y": elev_differences["reference_y"],
         "reference_h": elev_differences["reference_h"],
     }
+
+    # Include any additional variables
+    for var in elev_differences:
+        if var not in save_data:
+            save_data[var] = elev_differences[var]
+
     np.savez(f"{outfile}.npz", **save_data)
 
     compute_elevation_stats(save_data, prefix=PREFIX, output_file=f"{outfile}_elevation_stats.csv")
