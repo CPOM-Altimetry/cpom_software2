@@ -12,6 +12,7 @@ By default it prints scaled values (scale_factor, add_offset) unless disabled wi
   -d, --describe          Print only the specified parameter definition and attributes (like ncdump)
   -g, --global-atts       Print only global attributes from the file
   -p PARAM, --param PARAM Parameter path (e.g., data/ku/power_noise_floor)
+  -plt, --plot            Plot parameter
   -r, --raw               Print raw values without applying scale_factor or add_offset
   -s, --show_every_index  Print every value with its index (one per line)
   -n PRECISION, --precision PRECISION
@@ -25,7 +26,9 @@ By default it prints scaled values (scale_factor, add_offset) unless disabled wi
 import argparse
 import os
 import sys
+from typing import Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 from netCDF4 import Dataset, Variable  # pylint: disable=no-name-in-module
 
@@ -104,6 +107,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "-plt",
+        "--plot",
+        required=False,
+        help=("plot selected parameter"),
+        action="store_true",
+    )
+    parser.add_argument(
         "-r",
         "--raw",
         action="store_true",
@@ -148,6 +158,35 @@ def get_variable(dataset: Dataset, var_path: str) -> Variable:
     if varname not in grp.variables:
         raise KeyError(f"Variable '{varname}' not found in path '{var_path}'")
     return grp.variables[varname]
+
+
+def get_variable2(dataset: Dataset, var_path: str) -> Tuple[Variable, Optional[str]]:
+    """Retrieve a variable from the dataset given a path, along with its units if available.
+
+    Args:
+        dataset: The open NetCDF dataset.
+        var_path: Slash-separated variable path (e.g., data/ku/var).
+
+    Returns:
+        A tuple containing:
+            - The NetCDF variable object.
+            - The units of the variable if present, else None.
+
+    Raises:
+        KeyError: If the group or variable is not found.
+    """
+    parts = var_path.strip("/").split("/")
+    grp = dataset
+    for part in parts[:-1]:
+        if part not in grp.groups:
+            raise KeyError(f"Group '{part}' not found in path '{var_path}'")
+        grp = grp.groups[part]
+    varname = parts[-1]
+    if varname not in grp.variables:
+        raise KeyError(f"Variable '{varname}' not found in path '{var_path}'")
+    var = grp.variables[varname]
+    units = getattr(var, "units", None)
+    return var, units
 
 
 def apply_scaling(var: Variable, data: np.ndarray) -> np.ndarray:
@@ -217,6 +256,32 @@ def print_global_attributes(dataset: Dataset) -> None:
             print(f"    :{attr} = {val} ;  // unhandled type")
 
 
+def plot_var(arr, name: str, units: str | None):
+    """plot netcdf parameter array
+
+    Args:
+        arr (np.ndarray): netcdf parameter array
+        name (str): name of netcdf parameter
+        units (str): units of netcdf parameter
+    Returns:
+        None
+    """
+    if not isinstance(arr, np.ndarray):
+        print("plotting of non-array parameters not supported")
+        return
+    if len(arr) < 1:
+        print("plotting of parameters of length < 1 not supported")
+        return
+    # Plot the array
+    plt.plot(arr)
+    plt.title(name)
+    plt.xlabel("Index")
+    plt.ylabel(f" {name.split('/')[-1]} ({units})")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
 def main() -> None:
     """Main function to drive CLI behavior."""
     args = parse_args()
@@ -235,7 +300,7 @@ def main() -> None:
                 print("Error: --param is required unless using --global-atts", file=sys.stderr)
                 sys.exit(1)
 
-            var = get_variable(ds, args.param)
+            var, units = get_variable2(ds, args.param)
             fill_value = getattr(var, "_FillValue", None)
             var.set_auto_maskandscale(False)
 
@@ -266,6 +331,9 @@ def main() -> None:
                     floatmode="fixed",
                 )
                 print(output_array)
+
+            if args.plot:
+                plot_var(data, args.param, units)
 
     except FileNotFoundError:
         print(f"Error: File '{args.filename}' not found.", file=sys.stderr)
