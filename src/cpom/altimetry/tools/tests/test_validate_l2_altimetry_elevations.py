@@ -11,17 +11,17 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset  # pylint: disable=E0611
 
-# import h5py
-
 # from cpom.dems.dems import Dem
 from cpom.altimetry.tools.validate_l2_altimetry_elevations import (
     ProcessData,
+    correct_elevation_using_slope,
     get_default_variables,
     get_elev_differences,
     get_files_in_dir,
     get_variable,
-    correct_elevation_using_slope,
 )
+
+# import h5py
 
 
 # ------------------#
@@ -663,6 +663,7 @@ def test_get_is2_data_array_hemisphere(
 def test_get_is2_data_array_empty_inside_mask(mock_process_data, mock_config):
     """Test get_is2_data_array : Returns None when no valid points found in masked
     object"""
+
     with (
         patch(
             "cpom.altimetry.tools.validate_l2_altimetry_elevations.get_default_variables",
@@ -679,7 +680,8 @@ def test_get_is2_data_array_empty_inside_mask(mock_process_data, mock_config):
 
 
 def test_get_is2_data_array_filtering(mock_process_data, mock_config):
-    """Test get_is2_data_array : Correctly filters data using atl06_quality_summary and elevation."""
+    """Test get_is2_data_array :
+    Correctly filters data using atl06_quality_summary and elevation."""
 
     mock_process_data.args.beams = ["gt1l"]  # Simulate a single beam
 
