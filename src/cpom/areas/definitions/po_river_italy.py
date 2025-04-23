@@ -159,8 +159,8 @@ area_definition = {
     #       Lat/lon grid lines to show in main area
     #           - use empty lists to not include
     # ------------------------------------------------------
-    "longitude_gridlines": range(0, 25, 5),  # deg E
-    "latitude_gridlines": range(50, 75, 2),  # deg N
+    "longitude_gridlines": [9.5, 10, 10.5],  # deg E
+    "latitude_gridlines": [44.92],  # deg N
     "gridline_color": "lightgrey",  # color to use for lat/lon grid lines
     "gridlabel_color": "darkgrey",  # color of grid labels
     "gridlabel_size": 8,  # size of grid labels
