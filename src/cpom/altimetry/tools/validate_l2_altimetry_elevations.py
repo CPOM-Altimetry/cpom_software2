@@ -12,16 +12,13 @@ It also allows comparing a reference mission to itself.
 **Please note you may need to add your dataset to 'get_default_variables' if you are testing
 with a none standard altimetry data product.**
 
-### **Note to user**
+### **Notes to user**
 When comparing to icebridge : The default radius increases from 20m to 10000m,
 to capture enough points for validation. For the best performance alter the radius and
 max_diff argument for your usecase, or provide a DEM to correct reference locations
 to align with altimetry measurements.
 
 When running for Cryotempo, the Cryotempo_Modes argument must be set.
-
-**Please note you may need to add your dataset to get_default_variables if you are testing
-with a none standard altimetry data product.**
 
 ### **Command Line Options**
 **Required**
