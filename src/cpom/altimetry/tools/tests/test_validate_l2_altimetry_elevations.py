@@ -132,8 +132,7 @@ def test_get_files_in_dir(test_directory):
     "test_basename, expected_config",
     [
         (
-            f"{os.environ['CPDATA_DIR']}/SATS/RA/CRY/L2I/SIN/2020/01/01/ \
-            CS_OFFL_SIR_SINI2__20200131T235329_20200131T235346_D001.nc",
+            "/some_path/CS_OFFL_SIR_SINI2__20200131T235329_20200131T235346_D001.nc",
             {
                 "lat_nadir": "lat_20_ku",
                 "lon_nadir": "lon_20_ku",
@@ -143,8 +142,7 @@ def test_get_files_in_dir(test_directory):
             },
         ),
         (
-            f"{os.environ['CPDATA_DIR']}/SATS/RA/CRY/L2I/LRM/ 2020/01/01/ \
-                CS_OFFL_SIR_LRMI2__20200131T235859_20200201T001028_D001.nc",
+            "/some_path/CS_OFFL_SIR_LRMI2__20200131T235859_20200201T001028_D001.nc",
             {
                 "lat_nadir": "lat_20_ku",
                 "lon_nadir": "lon_20_ku",
@@ -154,8 +152,7 @@ def test_get_files_in_dir(test_directory):
             },
         ),
         (
-            f"{os.environ['CPDATA_DIR']}/SATS/RA/ENV/L2/FDR4ALT/TDP/greenland/land_ice/Cycle_105/ \
-            EN1_F4A_ALT_TDP_LI_GREENL_105_0860_20110823T190810_20110823T190837_V01.nc",
+            "/some_path/EN1_F4A_ALT_TDP_LI_GREENL_105_0860_20110823T190810_20110823T190837_V01.nc",
             {
                 "lat_nadir": "expert/ice_sheet_lat_poca",
                 "lon_nadir": "expert/ice_sheet_lon_poca",

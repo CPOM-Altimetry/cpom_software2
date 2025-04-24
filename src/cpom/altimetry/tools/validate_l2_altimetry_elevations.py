@@ -442,9 +442,14 @@ class ProcessData:
 
                 if self.args.cryotempo_modes is not None:  # Filter modes for cryotempo
                     surface_type_mask = self.get_cryotempo_filters(nc, self.args)
-                    x, y = x[surface_type_mask], (
-                        x[surface_type_mask] if surface_type_mask else (x, y)
-                    )
+                    if surface_type_mask is not None:
+                        x, y = x[surface_type_mask], y[surface_type_mask]
+                    else:
+                        self.log.info(
+                            "File does not contain %s data : %s",
+                            self.args.cryotempo_modes,
+                            filename,
+                        )
 
                 idx, _ = self.area.inside_mask(x, y)
                 if not idx.size:
@@ -888,9 +893,8 @@ if __name__ == "__main__":
     processor = ProcessData(params, AREA_OBJ, logger)
     reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "h5")  # is1 & is2
     if reference_files is None:
-        reference_files = get_files_in_dir(
-            reference_dir, DATE_YEAR, DATE_MONTH, "nc"
-        )  # icebridge/pre-icebridge
+        reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
+    # icebridge/pre-icebridge
 
     logger.info("Loaded %d reference data files", len(reference_files))
 
