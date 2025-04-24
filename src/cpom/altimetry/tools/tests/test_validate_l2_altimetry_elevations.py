@@ -1,7 +1,6 @@
 """pytest for cpom.altimetry.tools.validate_l2_altimetry_elevations.py"""
 
 import argparse
-import os
 import tempfile
 from argparse import Namespace
 from pathlib import Path
