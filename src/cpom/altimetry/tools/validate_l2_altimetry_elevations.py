@@ -37,8 +37,9 @@ When running for Cryotempo, the Cryotempo_Modes argument must be set.
 - `add_vars`: Additional variables to include in output (e.g., uncertainty).
 - `cryotempo_modes`: CryoTempo modes to include (required if using CryoTempo data).
 - `max_workers`: Number of parallel processing threads.
-- `compare_to_icebridge`: Set `True` when comparing to IceBridge (default: `False`).
-                Argument is automatically set 'True' if reference_dir path contains 'ICEBRIGE'
+- `compare_to_historical_reference`: (default: `False`) Set `True` when comparing to :
+                IceBridge/PreIcebridge or ICESAT-1. Increases the max radius to 10000m. 
+                It is advised to use DEM location correction in this mode.
 - `compare_to_self`: Compare reference data points to nearby reference points (default: `False`).
 - `bins`: Number of bins for output data plot.
 
@@ -73,7 +74,7 @@ import pandas as pd
 from astropy.stats import median_absolute_deviation, sigma_clipped_stats
 from netCDF4 import Dataset  # pylint: disable=E0611
 from pyproj import CRS, Transformer
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area, list_all_area_definition_names_only
@@ -164,9 +165,10 @@ def parse_args() -> argparse.Namespace:
         help="[optional, default=10] number of worker processes to use",
     )
     parser.add_argument(  # Default is False, becomes True if provided
-        "--compare_to_icebridge",
+        "--compare_to_historical_reference",
         action="store_true",
-        help="[optional] When set, compare to icebridge/pre_icebridge",
+        help="Use historical reference datasets (IceBridge, Pre-IceBridge, ICESat-1) " \
+        "with expanded search radius",
     )
     parser.add_argument(
         "--compare_to_self",  # Default is False, becomes True if provided
@@ -184,12 +186,7 @@ def parse_args() -> argparse.Namespace:
     if args.area not in list_all_area_definition_names_only():
         parser.error(f"{args.area} not a valid cpom area name")
 
-    if any(
-        word in str(args.reference_dir).upper() for word in ["ICEBRIDGE", "PRE_ICEBRIDGE", "ICESAT"]
-    ):
-        args.compare_to_icebridge = True
-
-    if args.compare_to_icebridge:
+    if args.compare_to_historical_reference:
         if args.radius == 20:  # Change default if no value passed.
             args.radius = 1e4
     return args
@@ -476,6 +473,7 @@ class ProcessData:
                 except Exception as err:
                     raise ValueError("Mismatch in additional variable lengths.") from err
 
+            # Structured NumPy array containing x, y, elevation, and any additional variables
             return np.array(
                 list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
                 dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
@@ -539,7 +537,7 @@ class ProcessData:
 
                         if not len(x) == len(y) == len(elevation):
                             raise ValueError("Mismatch in variable lengths for x,y,h")
-
+                        # Structured NumPy array containing x, y, elevation
                         points.append(
                             np.array(
                                 list(zip(x, y, elevation)),
@@ -556,7 +554,7 @@ class ProcessData:
             np.concatenate(points)
             if points
             else np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
-        )
+        )  # Concat point arrays into one, or return an empty structured array if none exist
 
     def get_icebridge_data_array(self, filename: Path) -> np.ndarray:
         """Extract and filter icebridge and pre-icebridge data.
@@ -579,6 +577,7 @@ class ProcessData:
             if not len(x) == len(y) == len(elevation):
                 raise ValueError("Mismatch in variable lengths for x,y,h")
 
+            # Structured NumPy array containing x, y, elevation
             return np.array(
                 list(zip(x, y, elevation)),
                 dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
@@ -607,6 +606,7 @@ class ProcessData:
 
         with h5py.File(filename, "r") as file:
             config = get_default_variables(filename)
+            # Get the hemisphere of the file
             hemisphere = get_variable(file, config["lat"])[0]
             if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
                 hemisphere > 0.0 and self.area.hemisphere == "south"
@@ -691,7 +691,7 @@ def get_elev_differences(
         dict: Dh between altimetry and is2 elevations.
     """
 
-    is2_tree = cKDTree(np.c_[laser_points["x"], laser_points["y"]])
+    is2_tree = KDTree(np.c_[laser_points["x"], laser_points["y"]])
     add_vars = [var for var in altimeter_points.dtype.names if var not in {"x", "y", "h"}]
     results: dict = {
         key: []
