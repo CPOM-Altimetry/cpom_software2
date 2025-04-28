@@ -38,7 +38,7 @@ When running for Cryotempo, the Cryotempo_Modes argument must be set.
 - `cryotempo_modes`: CryoTempo modes to include (required if using CryoTempo data).
 - `max_workers`: Number of parallel processing threads.
 - `compare_to_historical_reference`: (default: `False`) Set `True` when comparing to :
-                IceBridge/PreIcebridge or ICESAT-1. Increases the max radius to 10000m. 
+                IceBridge/PreIcebridge or ICESAT-1. Increases the max radius to 10000m.
                 It is advised to use DEM location correction in this mode.
 - `compare_to_self`: Compare reference data points to nearby reference points (default: `False`).
 - `bins`: Number of bins for output data plot.
@@ -167,7 +167,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(  # Default is False, becomes True if provided
         "--compare_to_historical_reference",
         action="store_true",
-        help="Use historical reference datasets (IceBridge, Pre-IceBridge, ICESat-1) " \
+        help="Use historical reference datasets (IceBridge, Pre-IceBridge, ICESat-1) "
         "with expanded search radius",
     )
     parser.add_argument(
@@ -381,14 +381,13 @@ class ProcessData:
 
     def get_cryotempo_filters(self, nc, args):
         """Check Cryotempo data is in a valid mode."""
-        if args.cryotempo_modes == "all":
+        if "all" in args.cryotempo_modes:
             return None
-
         mode_map = {"lrm": 1, "sar": 2, "sin": 3}
         valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
-
-        instrument_mode = get_variable(nc, "instrument_mode")
-        valid_mask = np.isin(instrument_mode, list(valid_modes))
+        if not valid_modes:
+            return None
+        valid_mask = np.isin(get_variable(nc, "instrument_mode"), list(valid_modes))
         return valid_mask if valid_mask.any() else None
 
     def fill_empty_latlon_with_nadir(
@@ -428,43 +427,19 @@ class ProcessData:
                     self.log.error("Unsupported file basename %s for file", filename)
                     return None
 
-                lats = get_variable(nc, config["lat"])
-                lons = np.mod(get_variable(nc, config["lon"]), 360)
-
-                if "lat_nadir" in config and "lon_nadir" in config:
-                    lats, lons = self.fill_empty_latlon_with_nadir(nc, lats, lons, config)
-
-                lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
-                x, y = self.area.latlon_to_xy(lats, lons)
-
-                if self.args.cryotempo_modes is not None:  # Filter modes for cryotempo
-                    surface_type_mask = self.get_cryotempo_filters(nc, self.args)
-                    if surface_type_mask is not None:
-                        x, y = x[surface_type_mask], y[surface_type_mask]
-                    else:
-                        self.log.info(
-                            "File does not contain %s data : %s",
-                            self.args.cryotempo_modes,
-                            filename,
-                        )
-
-                idx, _ = self.area.inside_mask(x, y)
-                if not idx.size:
-                    return None
-
-                try:
-                    x, y, elev = x[idx], y[idx], get_variable(nc, config["elev"])[idx]
-                except Exception as err:
-                    raise ValueError("Mismatch in variable lengths for x,y,h") from err
+                lats, lons, elev = (
+                    get_variable(nc, config["lat"]),
+                    np.mod(get_variable(nc, config["lon"]), 360),
+                    get_variable(nc, config["elev"]),
+                )
 
                 try:
                     add_vars = self.args.add_vars or []
                     additional_data = {
-                        var.rsplit("/", 1)[-1]: get_variable(nc, var)[idx]
+                        var.rsplit("/", 1)[-1]: get_variable(nc, var)
                         for var in add_vars
                         if var in nc.variables
                     }
-
                     if list(additional_data.keys()) != add_vars:
                         self.log.info(
                             "Variable(s) %s missing from netcdf",
@@ -472,6 +447,33 @@ class ProcessData:
                         )
                 except Exception as err:
                     raise ValueError("Mismatch in additional variable lengths.") from err
+
+                if self.args.cryotempo_modes:
+                    mask = self.get_cryotempo_filters(nc, self.args)
+                    if mask is not None:
+                        lats, lons, elev = lats[mask], lons[mask], elev[mask]
+                        for k in additional_data:
+                            additional_data[k] = additional_data[k][mask]
+                    else:
+                        return None
+
+                if "lat_nadir" in config and "lon_nadir" in config:
+                    lats, lons = self.fill_empty_latlon_with_nadir(nc, lats, lons, config)
+
+                lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
+                x, y = self.area.latlon_to_xy(lats, lons)
+
+                idx, _ = self.area.inside_mask(x, y)
+                if not idx.size:
+                    return None
+
+                try:
+                    x, y, elev = x[idx], y[idx], elev[idx]
+                    for k in additional_data:
+                        additional_data[k] = additional_data[k][idx]
+
+                except Exception as err:
+                    raise ValueError("Mismatch in variable lengths for x,y,h") from err
 
             # Structured NumPy array containing x, y, elevation, and any additional variables
             return np.array(
