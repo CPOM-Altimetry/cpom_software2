@@ -16,11 +16,14 @@ that contain lat/lon locations within a CPOM Area's
 mask or within a radius (km) of a specified lat,lon point. Optionally plot tracks 
 in area map. 
 
+Further details at `cpom.altimetry.tools.find_files_in_area`
 
 ## nc_vals.py
 
 Tool which prints netcdf parameters. A bit like ncdump but with more options
 and allows single parameters to be printed more easily.
+
+Further details at `cpom.altimetry.tools.nc_vals`
 
 ## validate_l2_altimetry_elevations.py
 
