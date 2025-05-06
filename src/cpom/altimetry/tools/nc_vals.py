@@ -22,7 +22,13 @@ By default it prints scaled values (scale_factor, add_offset) unless disabled wi
 
 # Example
 
+To print the netcdf parameter *data/ku/power_noise_floor* (noted nested groups supported)
+with each value on a separate line:
+
+```
     nc_vals.py -s -p data/ku/power_noise_floor yourfile.nc
+```
+
 """
 
 import argparse
