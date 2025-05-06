@@ -8,6 +8,7 @@ By default it prints scaled values (scale_factor, add_offset) unless disabled wi
 
 # Command Line Options
 
+```
   -h, --help              Show this help message and exit
   -d, --describe          Print only the specified parameter definition and attributes (like ncdump)
   -g, --global-atts       Print only global attributes from the file
@@ -17,6 +18,7 @@ By default it prints scaled values (scale_factor, add_offset) unless disabled wi
   -s, --show_every_index  Print every value with its index (one per line)
   -n PRECISION, --precision PRECISION
                           Number of decimal places to print for float values
+```
 
 # Example
 
