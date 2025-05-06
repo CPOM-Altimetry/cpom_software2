@@ -106,21 +106,21 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">Utility to convert NetCDF format DEM files to Zarr format using a</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="sd">chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</span>
 </span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">import</span> <span class="nn">shutil</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 </span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span> <span class="nn">zarr</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint:disable=E0611</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint:disable=E0611</span>
 </span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a>
 </span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a>
-</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="k">class</span> <span class="nc">DEMConverter</span><span class="p">:</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="k">class</span><span class="w"> </span><span class="nc">DEMConverter</span><span class="p">:</span>
 </span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Class to convert NetCDF DEM files to Zarr&quot;&quot;&quot;</span>
 </span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
-</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a>
-</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a>    <span class="k">def</span> <span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
 </span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="sd">        Get DEM extent and resolution .</span>
 </span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>
@@ -158,7 +158,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>
 </span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>        <span class="k">return</span> <span class="n">ncols</span><span class="p">,</span> <span class="n">nrows</span><span class="p">,</span> <span class="n">top_left</span><span class="p">,</span> <span class="n">top_right</span><span class="p">,</span> <span class="n">bottom_left</span><span class="p">,</span> <span class="n">bottom_right</span><span class="p">,</span> <span class="n">binsize</span>
 </span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>    <span class="k">def</span> <span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
 </span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>        <span class="n">x</span><span class="p">,</span>
 </span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>        <span class="n">y</span><span class="p">,</span>
@@ -262,7 +262,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Created </span><span class="si">{</span><span class="n">flipped_zarrfile</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>
 </span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>
-</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a><span class="k">def</span> <span class="nf">combine_nc_files</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;combine x,y,h(y,x) from 4 netcdf files</span>
 </span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a><span class="sd">       each file contains x,y values stepped by 100.00 but</span>
 </span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a><span class="sd">       in different segments of cartesian space.</span>
@@ -387,7 +387,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-284"><a href="#L-284"><span class="linenos">284</span></a>    <span class="k">return</span> <span class="n">h_grid</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span>
 </span><span id="L-285"><a href="#L-285"><span class="linenos">285</span></a>
 </span><span id="L-286"><a href="#L-286"><span class="linenos">286</span></a>
-</span><span id="L-287"><a href="#L-287"><span class="linenos">287</span></a><span class="k">def</span> <span class="nf">combine_nc_files2</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+</span><span id="L-287"><a href="#L-287"><span class="linenos">287</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files2</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="L-288"><a href="#L-288"><span class="linenos">288</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Combine x, y, h(y,x) from 4 netCDF files into a single grid.&quot;&quot;&quot;</span>
 </span><span id="L-289"><a href="#L-289"><span class="linenos">289</span></a>
 </span><span id="L-290"><a href="#L-290"><span class="linenos">290</span></a>    <span class="c1"># Read each file and collect data along with their extents</span>
@@ -454,7 +454,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-351"><a href="#L-351"><span class="linenos">351</span></a>    <span class="k">return</span> <span class="n">h_grid</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span>
 </span><span id="L-352"><a href="#L-352"><span class="linenos">352</span></a>
 </span><span id="L-353"><a href="#L-353"><span class="linenos">353</span></a>
-</span><span id="L-354"><a href="#L-354"><span class="linenos">354</span></a><span class="k">def</span> <span class="nf">combine_nc_files3</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+</span><span id="L-354"><a href="#L-354"><span class="linenos">354</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files3</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="L-355"><a href="#L-355"><span class="linenos">355</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Combine x, y, h(y,x) from 4 netCDF files with a uniform grid spacing.</span>
 </span><span id="L-356"><a href="#L-356"><span class="linenos">356</span></a>
 </span><span id="L-357"><a href="#L-357"><span class="linenos">357</span></a><span class="sd">    Each file contains x, y values stepped by 100.0, covering different segments</span>
@@ -515,7 +515,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="L-412"><a href="#L-412"><span class="linenos">412</span></a>    <span class="k">return</span> <span class="n">h_grid</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span>
 </span><span id="L-413"><a href="#L-413"><span class="linenos">413</span></a>
 </span><span id="L-414"><a href="#L-414"><span class="linenos">414</span></a>
-</span><span id="L-415"><a href="#L-415"><span class="linenos">415</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+</span><span id="L-415"><a href="#L-415"><span class="linenos">415</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="L-416"><a href="#L-416"><span class="linenos">416</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Main function for the command-line tool.&quot;&quot;&quot;</span>
 </span><span id="L-417"><a href="#L-417"><span class="linenos">417</span></a>
 </span><span id="L-418"><a href="#L-418"><span class="linenos">418</span></a>    <span class="n">a1_file</span> <span class="o">=</span> <span class="s2">&quot;/cpdata/SATS/RA/DEMS/ATL14/ATL14_A1_0324_100m_004_04.nc&quot;</span>  <span class="c1"># NE</span>
@@ -572,13 +572,13 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter-15"><a href="#DEMConverter-15"><span class="linenos"> 15</span></a><span class="k">class</span> <span class="nc">DEMConverter</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter-15"><a href="#DEMConverter-15"><span class="linenos"> 15</span></a><span class="k">class</span><span class="w"> </span><span class="nc">DEMConverter</span><span class="p">:</span>
 </span><span id="DEMConverter-16"><a href="#DEMConverter-16"><span class="linenos"> 16</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Class to convert NetCDF DEM files to Zarr&quot;&quot;&quot;</span>
 </span><span id="DEMConverter-17"><a href="#DEMConverter-17"><span class="linenos"> 17</span></a>
-</span><span id="DEMConverter-18"><a href="#DEMConverter-18"><span class="linenos"> 18</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="DEMConverter-18"><a href="#DEMConverter-18"><span class="linenos"> 18</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="DEMConverter-19"><a href="#DEMConverter-19"><span class="linenos"> 19</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span><span id="DEMConverter-20"><a href="#DEMConverter-20"><span class="linenos"> 20</span></a>
-</span><span id="DEMConverter-21"><a href="#DEMConverter-21"><span class="linenos"> 21</span></a>    <span class="k">def</span> <span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+</span><span id="DEMConverter-21"><a href="#DEMConverter-21"><span class="linenos"> 21</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
 </span><span id="DEMConverter-22"><a href="#DEMConverter-22"><span class="linenos"> 22</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="DEMConverter-23"><a href="#DEMConverter-23"><span class="linenos"> 23</span></a><span class="sd">        Get DEM extent and resolution .</span>
 </span><span id="DEMConverter-24"><a href="#DEMConverter-24"><span class="linenos"> 24</span></a>
@@ -616,7 +616,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 </span><span id="DEMConverter-56"><a href="#DEMConverter-56"><span class="linenos"> 56</span></a>
 </span><span id="DEMConverter-57"><a href="#DEMConverter-57"><span class="linenos"> 57</span></a>        <span class="k">return</span> <span class="n">ncols</span><span class="p">,</span> <span class="n">nrows</span><span class="p">,</span> <span class="n">top_left</span><span class="p">,</span> <span class="n">top_right</span><span class="p">,</span> <span class="n">bottom_left</span><span class="p">,</span> <span class="n">bottom_right</span><span class="p">,</span> <span class="n">binsize</span>
 </span><span id="DEMConverter-58"><a href="#DEMConverter-58"><span class="linenos"> 58</span></a>
-</span><span id="DEMConverter-59"><a href="#DEMConverter-59"><span class="linenos"> 59</span></a>    <span class="k">def</span> <span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
+</span><span id="DEMConverter-59"><a href="#DEMConverter-59"><span class="linenos"> 59</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
 </span><span id="DEMConverter-60"><a href="#DEMConverter-60"><span class="linenos"> 60</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DEMConverter-61"><a href="#DEMConverter-61"><span class="linenos"> 61</span></a>        <span class="n">x</span><span class="p">,</span>
 </span><span id="DEMConverter-62"><a href="#DEMConverter-62"><span class="linenos"> 62</span></a>        <span class="n">y</span><span class="p">,</span>
@@ -735,7 +735,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.__init__-18"><a href="#DEMConverter.__init__-18"><span class="linenos">18</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.__init__-18"><a href="#DEMConverter.__init__-18"><span class="linenos">18</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="DEMConverter.__init__-19"><a href="#DEMConverter.__init__-19"><span class="linenos">19</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span></pre></div>
 
@@ -765,7 +765,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.get_netcdf_extent"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.get_netcdf_extent-21"><a href="#DEMConverter.get_netcdf_extent-21"><span class="linenos">21</span></a>    <span class="k">def</span> <span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.get_netcdf_extent-21"><a href="#DEMConverter.get_netcdf_extent-21"><span class="linenos">21</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_netcdf_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
 </span><span id="DEMConverter.get_netcdf_extent-22"><a href="#DEMConverter.get_netcdf_extent-22"><span class="linenos">22</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="DEMConverter.get_netcdf_extent-23"><a href="#DEMConverter.get_netcdf_extent-23"><span class="linenos">23</span></a><span class="sd">        Get DEM extent and resolution .</span>
 </span><span id="DEMConverter.get_netcdf_extent-24"><a href="#DEMConverter.get_netcdf_extent-24"><span class="linenos">24</span></a>
@@ -847,7 +847,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.convert_netcdf_to_zarr"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.convert_netcdf_to_zarr-59"><a href="#DEMConverter.convert_netcdf_to_zarr-59"><span class="linenos"> 59</span></a>    <span class="k">def</span> <span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.convert_netcdf_to_zarr-59"><a href="#DEMConverter.convert_netcdf_to_zarr-59"><span class="linenos"> 59</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_netcdf_to_zarr</span><span class="p">(</span>
 </span><span id="DEMConverter.convert_netcdf_to_zarr-60"><a href="#DEMConverter.convert_netcdf_to_zarr-60"><span class="linenos"> 60</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DEMConverter.convert_netcdf_to_zarr-61"><a href="#DEMConverter.convert_netcdf_to_zarr-61"><span class="linenos"> 61</span></a>        <span class="n">x</span><span class="p">,</span>
 </span><span id="DEMConverter.convert_netcdf_to_zarr-62"><a href="#DEMConverter.convert_netcdf_to_zarr-62"><span class="linenos"> 62</span></a>        <span class="n">y</span><span class="p">,</span>
@@ -978,7 +978,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#combine_nc_files"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files-163"><a href="#combine_nc_files-163"><span class="linenos">163</span></a><span class="k">def</span> <span class="nf">combine_nc_files</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files-163"><a href="#combine_nc_files-163"><span class="linenos">163</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="combine_nc_files-164"><a href="#combine_nc_files-164"><span class="linenos">164</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;combine x,y,h(y,x) from 4 netcdf files</span>
 </span><span id="combine_nc_files-165"><a href="#combine_nc_files-165"><span class="linenos">165</span></a><span class="sd">       each file contains x,y values stepped by 100.00 but</span>
 </span><span id="combine_nc_files-166"><a href="#combine_nc_files-166"><span class="linenos">166</span></a><span class="sd">       in different segments of cartesian space.</span>
@@ -1139,7 +1139,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#combine_nc_files2"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files2-288"><a href="#combine_nc_files2-288"><span class="linenos">288</span></a><span class="k">def</span> <span class="nf">combine_nc_files2</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files2-288"><a href="#combine_nc_files2-288"><span class="linenos">288</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files2</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="combine_nc_files2-289"><a href="#combine_nc_files2-289"><span class="linenos">289</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Combine x, y, h(y,x) from 4 netCDF files into a single grid.&quot;&quot;&quot;</span>
 </span><span id="combine_nc_files2-290"><a href="#combine_nc_files2-290"><span class="linenos">290</span></a>
 </span><span id="combine_nc_files2-291"><a href="#combine_nc_files2-291"><span class="linenos">291</span></a>    <span class="c1"># Read each file and collect data along with their extents</span>
@@ -1223,7 +1223,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size.</p>
 
     </div>
     <a class="headerlink" href="#combine_nc_files3"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files3-355"><a href="#combine_nc_files3-355"><span class="linenos">355</span></a><span class="k">def</span> <span class="nf">combine_nc_files3</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="combine_nc_files3-355"><a href="#combine_nc_files3-355"><span class="linenos">355</span></a><span class="k">def</span><span class="w"> </span><span class="nf">combine_nc_files3</span><span class="p">(</span><span class="n">a1_file</span><span class="p">,</span> <span class="n">a2_file</span><span class="p">,</span> <span class="n">a3_file</span><span class="p">,</span> <span class="n">a4_file</span><span class="p">):</span>
 </span><span id="combine_nc_files3-356"><a href="#combine_nc_files3-356"><span class="linenos">356</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Combine x, y, h(y,x) from 4 netCDF files with a uniform grid spacing.</span>
 </span><span id="combine_nc_files3-357"><a href="#combine_nc_files3-357"><span class="linenos">357</span></a>
 </span><span id="combine_nc_files3-358"><a href="#combine_nc_files3-358"><span class="linenos">358</span></a><span class="sd">    Each file contains x, y values stepped by 100.0, covering different segments</span>
@@ -1320,7 +1320,7 @@ of the data and fills in the values from each file.</p>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-416"><a href="#main-416"><span class="linenos">416</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-416"><a href="#main-416"><span class="linenos">416</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="main-417"><a href="#main-417"><span class="linenos">417</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Main function for the command-line tool.&quot;&quot;&quot;</span>
 </span><span id="main-418"><a href="#main-418"><span class="linenos">418</span></a>
 </span><span id="main-419"><a href="#main-419"><span class="linenos">419</span></a>    <span class="n">a1_file</span> <span class="o">=</span> <span class="s2">&quot;/cpdata/SATS/RA/DEMS/ATL14/ATL14_A1_0324_100m_004_04.nc&quot;</span>  <span class="c1"># NE</span>

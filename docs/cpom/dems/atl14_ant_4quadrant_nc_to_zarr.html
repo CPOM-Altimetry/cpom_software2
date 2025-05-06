@@ -128,17 +128,17 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 </span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="sd">A Zarr mosaic (and a vertically flipped copy) are then written using a specified chunk size.</span>
 </span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>
-</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="kn">import</span> <span class="nn">argparse</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="kn">import</span> <span class="nn">sys</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span> <span class="nn">shutil</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 </span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a>
-</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a><span class="kn">import</span> <span class="nn">xarray</span> <span class="k">as</span> <span class="nn">xr</span>
-</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span> <span class="nn">zarr</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 </span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a>
 </span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>
-</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="k">def</span> <span class="nf">get_quadrant_data</span><span class="p">(</span><span class="n">nc_file</span><span class="p">):</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_quadrant_data</span><span class="p">(</span><span class="n">nc_file</span><span class="p">):</span>
 </span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="sd">    Open the NetCDF file, read the DEM (&quot;h&quot;) and GeoTransform from the</span>
 </span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="sd">    &quot;Polar_Stereographic&quot; variable, and compute the full x and y coordinate arrays.</span>
@@ -180,7 +180,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 </span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;h&quot;</span><span class="p">:</span> <span class="n">h</span><span class="p">,</span> <span class="s2">&quot;nx&quot;</span><span class="p">:</span> <span class="n">nx</span><span class="p">,</span> <span class="s2">&quot;ny&quot;</span><span class="p">:</span> <span class="n">ny</span><span class="p">,</span> <span class="s2">&quot;GT&quot;</span><span class="p">:</span> <span class="n">GT</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">}</span>
 </span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>
 </span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="k">def</span> <span class="nf">parse_quadrant_files</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_quadrant_files</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
 </span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd">    Determine which file is which quadrant based on filename.</span>
 </span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">    For this mosaic we require:</span>
@@ -209,7 +209,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 </span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>    <span class="k">return</span> <span class="n">quadrants</span>
 </span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a>
 </span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>
-</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="k">def</span> <span class="nf">build_global_grid</span><span class="p">(</span><span class="n">qdata</span><span class="p">):</span>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="k">def</span><span class="w"> </span><span class="nf">build_global_grid</span><span class="p">(</span><span class="n">qdata</span><span class="p">):</span>
 </span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a><span class="sd">    Given a dictionary of quadrant data (with keys A1, A2, A3, A4), compute the global mosaic grid.</span>
 </span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a><span class="sd">    </span>
@@ -259,7 +259,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 </span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a>    <span class="k">return</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span><span class="p">,</span> <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span><span class="p">,</span> <span class="n">ncols_global</span><span class="p">,</span> <span class="n">nrows_global</span>
 </span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a>
 </span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a>
-</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="k">def</span> <span class="nf">place_quadrant</span><span class="p">(</span><span class="n">mosaic</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span><span class="p">,</span> <span class="n">qdat</span><span class="p">):</span>
+</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="k">def</span><span class="w"> </span><span class="nf">place_quadrant</span><span class="p">(</span><span class="n">mosaic</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span><span class="p">,</span> <span class="n">qdat</span><span class="p">):</span>
 </span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a><span class="sd">    Place a quadrant’s DEM (qdat) into the mosaic.</span>
 </span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a><span class="sd">    </span>
@@ -278,7 +278,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 </span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a>    <span class="n">mosaic</span><span class="p">[</span><span class="n">offset_row</span> <span class="p">:</span> <span class="n">offset_row</span> <span class="o">+</span> <span class="n">ny</span><span class="p">,</span> <span class="n">offset_col</span> <span class="p">:</span> <span class="n">offset_col</span> <span class="o">+</span> <span class="n">nx</span><span class="p">]</span> <span class="o">=</span> <span class="n">qdat</span><span class="p">[</span><span class="s2">&quot;h&quot;</span><span class="p">]</span>
 </span><span id="L-172"><a href="#L-172"><span class="linenos">172</span></a>
 </span><span id="L-173"><a href="#L-173"><span class="linenos">173</span></a>
-</span><span id="L-174"><a href="#L-174"><span class="linenos">174</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+</span><span id="L-174"><a href="#L-174"><span class="linenos">174</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="L-175"><a href="#L-175"><span class="linenos">175</span></a>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
 </span><span id="L-176"><a href="#L-176"><span class="linenos">176</span></a>        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Combine four quadrant ATL14 Antarctic DEM NetCDF files into a single Zarr mosaic.&quot;</span>
 </span><span id="L-177"><a href="#L-177"><span class="linenos">177</span></a>    <span class="p">)</span>
@@ -432,7 +432,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 
     </div>
     <a class="headerlink" href="#get_quadrant_data"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_quadrant_data-35"><a href="#get_quadrant_data-35"><span class="linenos">35</span></a><span class="k">def</span> <span class="nf">get_quadrant_data</span><span class="p">(</span><span class="n">nc_file</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_quadrant_data-35"><a href="#get_quadrant_data-35"><span class="linenos">35</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_quadrant_data</span><span class="p">(</span><span class="n">nc_file</span><span class="p">):</span>
 </span><span id="get_quadrant_data-36"><a href="#get_quadrant_data-36"><span class="linenos">36</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="get_quadrant_data-37"><a href="#get_quadrant_data-37"><span class="linenos">37</span></a><span class="sd">    Open the NetCDF file, read the DEM (&quot;h&quot;) and GeoTransform from the</span>
 </span><span id="get_quadrant_data-38"><a href="#get_quadrant_data-38"><span class="linenos">38</span></a><span class="sd">    &quot;Polar_Stereographic&quot; variable, and compute the full x and y coordinate arrays.</span>
@@ -505,7 +505,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 
     </div>
     <a class="headerlink" href="#parse_quadrant_files"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="parse_quadrant_files-77"><a href="#parse_quadrant_files-77"><span class="linenos"> 77</span></a><span class="k">def</span> <span class="nf">parse_quadrant_files</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="parse_quadrant_files-77"><a href="#parse_quadrant_files-77"><span class="linenos"> 77</span></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_quadrant_files</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
 </span><span id="parse_quadrant_files-78"><a href="#parse_quadrant_files-78"><span class="linenos"> 78</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="parse_quadrant_files-79"><a href="#parse_quadrant_files-79"><span class="linenos"> 79</span></a><span class="sd">    Determine which file is which quadrant based on filename.</span>
 </span><span id="parse_quadrant_files-80"><a href="#parse_quadrant_files-80"><span class="linenos"> 80</span></a><span class="sd">    For this mosaic we require:</span>
@@ -564,7 +564,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 
     </div>
     <a class="headerlink" href="#build_global_grid"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="build_global_grid-106"><a href="#build_global_grid-106"><span class="linenos">106</span></a><span class="k">def</span> <span class="nf">build_global_grid</span><span class="p">(</span><span class="n">qdata</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="build_global_grid-106"><a href="#build_global_grid-106"><span class="linenos">106</span></a><span class="k">def</span><span class="w"> </span><span class="nf">build_global_grid</span><span class="p">(</span><span class="n">qdata</span><span class="p">):</span>
 </span><span id="build_global_grid-107"><a href="#build_global_grid-107"><span class="linenos">107</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="build_global_grid-108"><a href="#build_global_grid-108"><span class="linenos">108</span></a><span class="sd">    Given a dictionary of quadrant data (with keys A1, A2, A3, A4), compute the global mosaic grid.</span>
 </span><span id="build_global_grid-109"><a href="#build_global_grid-109"><span class="linenos">109</span></a><span class="sd">    </span>
@@ -656,7 +656,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 
     </div>
     <a class="headerlink" href="#place_quadrant"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="place_quadrant-156"><a href="#place_quadrant-156"><span class="linenos">156</span></a><span class="k">def</span> <span class="nf">place_quadrant</span><span class="p">(</span><span class="n">mosaic</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span><span class="p">,</span> <span class="n">qdat</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="place_quadrant-156"><a href="#place_quadrant-156"><span class="linenos">156</span></a><span class="k">def</span><span class="w"> </span><span class="nf">place_quadrant</span><span class="p">(</span><span class="n">mosaic</span><span class="p">,</span> <span class="n">global_x</span><span class="p">,</span> <span class="n">global_y</span><span class="p">,</span> <span class="n">qdat</span><span class="p">):</span>
 </span><span id="place_quadrant-157"><a href="#place_quadrant-157"><span class="linenos">157</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="place_quadrant-158"><a href="#place_quadrant-158"><span class="linenos">158</span></a><span class="sd">    Place a quadrant’s DEM (qdat) into the mosaic.</span>
 </span><span id="place_quadrant-159"><a href="#place_quadrant-159"><span class="linenos">159</span></a><span class="sd">    </span>
@@ -701,7 +701,7 @@ A Zarr mosaic (and a vertically flipped copy) are then written using a specified
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-175"><a href="#main-175"><span class="linenos">175</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-175"><a href="#main-175"><span class="linenos">175</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="main-176"><a href="#main-176"><span class="linenos">176</span></a>    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
 </span><span id="main-177"><a href="#main-177"><span class="linenos">177</span></a>        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Combine four quadrant ATL14 Antarctic DEM NetCDF files into a single Zarr mosaic.&quot;</span>
 </span><span id="main-178"><a href="#main-178"><span class="linenos">178</span></a>    <span class="p">)</span>

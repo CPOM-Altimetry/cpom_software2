@@ -5,6 +5,7 @@ atimetry reference elevations.
 It also allows comparing a reference mission to itself.
 
 ### **Supported Missions**
+
 - **Altimetry Missions**: CS2 (Native L2 and CryoTempo), S3A, S3B, ENVISAT, ERS1, ERS2
 - **Reference Missions**: ICESat-2 (ATL06), IceBridge (ILATM2, ILUTP2),
                         Pre-IceBridge (BRMCR2, BLATM2), ICESat1 (GLAH12)
@@ -167,7 +168,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(  # Default is False, becomes True if provided
         "--compare_to_historical_reference",
         action="store_true",
-        help="Use historical reference datasets (IceBridge, Pre-IceBridge, ICESat-1) " \
+        help="Use historical reference datasets (IceBridge, Pre-IceBridge, ICESat-1) "
         "with expanded search radius",
     )
     parser.add_argument(

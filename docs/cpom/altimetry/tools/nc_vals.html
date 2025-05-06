@@ -152,17 +152,17 @@
 </span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a><span class="sd">    nc_vals.py -s -p data/ku/power_noise_floor yourfile.nc</span>
 </span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a>
-</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="kn">import</span> <span class="nn">argparse</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="kn">import</span> <span class="nn">sys</span>
-</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 </span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a>
-</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=no-name-in-module</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Variable</span>  <span class="c1"># pylint: disable=no-name-in-module</span>
 </span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a>
 </span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a>
-</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="k">def</span> <span class="nf">print_variable_description</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">varname</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_variable_description</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">varname</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the NetCDF variable&#39;s group, type, dimensions, and attributes.</span>
 </span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a>
 </span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a><span class="sd">    Args:</span>
@@ -198,7 +198,7 @@
 </span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    </span><span class="si">{</span><span class="n">varname</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2"> ;  // unhandled type&quot;</span><span class="p">)</span>
 </span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a>
 </span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="k">def</span> <span class="nf">parse_args</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">:</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_args</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">:</span>
 </span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse command-line arguments.</span>
 </span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>
 </span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="sd">    Returns:</span>
@@ -264,7 +264,7 @@
 </span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>    <span class="k">return</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
 </span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>
 </span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a>
-</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve a variable from the dataset given a path.</span>
 </span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>
 </span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">    Args:</span>
@@ -289,7 +289,7 @@
 </span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>    <span class="k">return</span> <span class="n">grp</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="n">varname</span><span class="p">]</span>
 </span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>
 </span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a>
-</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="k">def</span> <span class="nf">get_variable2</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Variable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable2</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Variable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 </span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve a variable from the dataset given a path, along with its units if available.</span>
 </span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>
 </span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a><span class="sd">    Args:</span>
@@ -318,7 +318,7 @@
 </span><span id="L-189"><a href="#L-189"><span class="linenos">189</span></a>    <span class="k">return</span> <span class="n">var</span><span class="p">,</span> <span class="n">units</span>
 </span><span id="L-190"><a href="#L-190"><span class="linenos">190</span></a>
 </span><span id="L-191"><a href="#L-191"><span class="linenos">191</span></a>
-</span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a><span class="k">def</span> <span class="nf">apply_scaling</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a><span class="k">def</span><span class="w"> </span><span class="nf">apply_scaling</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 </span><span id="L-193"><a href="#L-193"><span class="linenos">193</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply scale_factor and add_offset to data.</span>
 </span><span id="L-194"><a href="#L-194"><span class="linenos">194</span></a>
 </span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a><span class="sd">    Args:</span>
@@ -333,7 +333,7 @@
 </span><span id="L-204"><a href="#L-204"><span class="linenos">204</span></a>    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">*</span> <span class="n">scale</span> <span class="o">+</span> <span class="n">offset</span>
 </span><span id="L-205"><a href="#L-205"><span class="linenos">205</span></a>
 </span><span id="L-206"><a href="#L-206"><span class="linenos">206</span></a>
-</span><span id="L-207"><a href="#L-207"><span class="linenos">207</span></a><span class="k">def</span> <span class="nf">is_float_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+</span><span id="L-207"><a href="#L-207"><span class="linenos">207</span></a><span class="k">def</span><span class="w"> </span><span class="nf">is_float_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 </span><span id="L-208"><a href="#L-208"><span class="linenos">208</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if dtype is floating-point.</span>
 </span><span id="L-209"><a href="#L-209"><span class="linenos">209</span></a>
 </span><span id="L-210"><a href="#L-210"><span class="linenos">210</span></a><span class="sd">    Args:</span>
@@ -345,7 +345,7 @@
 </span><span id="L-216"><a href="#L-216"><span class="linenos">216</span></a>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">issubdtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">)</span>
 </span><span id="L-217"><a href="#L-217"><span class="linenos">217</span></a>
 </span><span id="L-218"><a href="#L-218"><span class="linenos">218</span></a>
-</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a><span class="k">def</span> <span class="nf">print_indexed</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_indexed</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-220"><a href="#L-220"><span class="linenos">220</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print each value with its index. Masked values are shown as &#39;--FV--&#39;.</span>
 </span><span id="L-221"><a href="#L-221"><span class="linenos">221</span></a>
 </span><span id="L-222"><a href="#L-222"><span class="linenos">222</span></a><span class="sd">    Args:</span>
@@ -363,7 +363,7 @@
 </span><span id="L-234"><a href="#L-234"><span class="linenos">234</span></a>                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="L-235"><a href="#L-235"><span class="linenos">235</span></a>
 </span><span id="L-236"><a href="#L-236"><span class="linenos">236</span></a>
-</span><span id="L-237"><a href="#L-237"><span class="linenos">237</span></a><span class="k">def</span> <span class="nf">print_global_attributes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-237"><a href="#L-237"><span class="linenos">237</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_global_attributes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-238"><a href="#L-238"><span class="linenos">238</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print global attributes of the dataset.</span>
 </span><span id="L-239"><a href="#L-239"><span class="linenos">239</span></a>
 </span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a><span class="sd">    Args:</span>
@@ -385,7 +385,7 @@
 </span><span id="L-256"><a href="#L-256"><span class="linenos">256</span></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    :</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2"> ;  // unhandled type&quot;</span><span class="p">)</span>
 </span><span id="L-257"><a href="#L-257"><span class="linenos">257</span></a>
 </span><span id="L-258"><a href="#L-258"><span class="linenos">258</span></a>
-</span><span id="L-259"><a href="#L-259"><span class="linenos">259</span></a><span class="k">def</span> <span class="nf">plot_var</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">units</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="L-259"><a href="#L-259"><span class="linenos">259</span></a><span class="k">def</span><span class="w"> </span><span class="nf">plot_var</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">units</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="L-260"><a href="#L-260"><span class="linenos">260</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;plot netcdf parameter array</span>
 </span><span id="L-261"><a href="#L-261"><span class="linenos">261</span></a>
 </span><span id="L-262"><a href="#L-262"><span class="linenos">262</span></a><span class="sd">    Args:</span>
@@ -411,7 +411,7 @@
 </span><span id="L-282"><a href="#L-282"><span class="linenos">282</span></a>    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </span><span id="L-283"><a href="#L-283"><span class="linenos">283</span></a>
 </span><span id="L-284"><a href="#L-284"><span class="linenos">284</span></a>
-</span><span id="L-285"><a href="#L-285"><span class="linenos">285</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-285"><a href="#L-285"><span class="linenos">285</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="L-286"><a href="#L-286"><span class="linenos">286</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Main function to drive CLI behavior.&quot;&quot;&quot;</span>
 </span><span id="L-287"><a href="#L-287"><span class="linenos">287</span></a>    <span class="n">args</span> <span class="o">=</span> <span class="n">parse_args</span><span class="p">()</span>
 </span><span id="L-288"><a href="#L-288"><span class="linenos">288</span></a>
@@ -492,7 +492,7 @@
 
     </div>
     <a class="headerlink" href="#print_variable_description"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="print_variable_description-37"><a href="#print_variable_description-37"><span class="linenos">37</span></a><span class="k">def</span> <span class="nf">print_variable_description</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">varname</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="print_variable_description-37"><a href="#print_variable_description-37"><span class="linenos">37</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_variable_description</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">varname</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="print_variable_description-38"><a href="#print_variable_description-38"><span class="linenos">38</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the NetCDF variable&#39;s group, type, dimensions, and attributes.</span>
 </span><span id="print_variable_description-39"><a href="#print_variable_description-39"><span class="linenos">39</span></a>
 </span><span id="print_variable_description-40"><a href="#print_variable_description-40"><span class="linenos">40</span></a><span class="sd">    Args:</span>
@@ -552,7 +552,7 @@
 
     </div>
     <a class="headerlink" href="#parse_args"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="parse_args-73"><a href="#parse_args-73"><span class="linenos"> 73</span></a><span class="k">def</span> <span class="nf">parse_args</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="parse_args-73"><a href="#parse_args-73"><span class="linenos"> 73</span></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_args</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">:</span>
 </span><span id="parse_args-74"><a href="#parse_args-74"><span class="linenos"> 74</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse command-line arguments.</span>
 </span><span id="parse_args-75"><a href="#parse_args-75"><span class="linenos"> 75</span></a>
 </span><span id="parse_args-76"><a href="#parse_args-76"><span class="linenos"> 76</span></a><span class="sd">    Returns:</span>
@@ -641,7 +641,7 @@
 
     </div>
     <a class="headerlink" href="#get_variable"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-139"><a href="#get_variable-139"><span class="linenos">139</span></a><span class="k">def</span> <span class="nf">get_variable</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable-139"><a href="#get_variable-139"><span class="linenos">139</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Variable</span><span class="p">:</span>
 </span><span id="get_variable-140"><a href="#get_variable-140"><span class="linenos">140</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve a variable from the dataset given a path.</span>
 </span><span id="get_variable-141"><a href="#get_variable-141"><span class="linenos">141</span></a>
 </span><span id="get_variable-142"><a href="#get_variable-142"><span class="linenos">142</span></a><span class="sd">    Args:</span>
@@ -702,7 +702,7 @@
 
     </div>
     <a class="headerlink" href="#get_variable2"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable2-164"><a href="#get_variable2-164"><span class="linenos">164</span></a><span class="k">def</span> <span class="nf">get_variable2</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Variable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="get_variable2-164"><a href="#get_variable2-164"><span class="linenos">164</span></a><span class="k">def</span><span class="w"> </span><span class="nf">get_variable2</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">var_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Variable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 </span><span id="get_variable2-165"><a href="#get_variable2-165"><span class="linenos">165</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieve a variable from the dataset given a path, along with its units if available.</span>
 </span><span id="get_variable2-166"><a href="#get_variable2-166"><span class="linenos">166</span></a>
 </span><span id="get_variable2-167"><a href="#get_variable2-167"><span class="linenos">167</span></a><span class="sd">    Args:</span>
@@ -769,7 +769,7 @@
 
     </div>
     <a class="headerlink" href="#apply_scaling"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="apply_scaling-193"><a href="#apply_scaling-193"><span class="linenos">193</span></a><span class="k">def</span> <span class="nf">apply_scaling</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="apply_scaling-193"><a href="#apply_scaling-193"><span class="linenos">193</span></a><span class="k">def</span><span class="w"> </span><span class="nf">apply_scaling</span><span class="p">(</span><span class="n">var</span><span class="p">:</span> <span class="n">Variable</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 </span><span id="apply_scaling-194"><a href="#apply_scaling-194"><span class="linenos">194</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply scale_factor and add_offset to data.</span>
 </span><span id="apply_scaling-195"><a href="#apply_scaling-195"><span class="linenos">195</span></a>
 </span><span id="apply_scaling-196"><a href="#apply_scaling-196"><span class="linenos">196</span></a><span class="sd">    Args:</span>
@@ -814,7 +814,7 @@
 
     </div>
     <a class="headerlink" href="#is_float_dtype"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="is_float_dtype-208"><a href="#is_float_dtype-208"><span class="linenos">208</span></a><span class="k">def</span> <span class="nf">is_float_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="is_float_dtype-208"><a href="#is_float_dtype-208"><span class="linenos">208</span></a><span class="k">def</span><span class="w"> </span><span class="nf">is_float_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 </span><span id="is_float_dtype-209"><a href="#is_float_dtype-209"><span class="linenos">209</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if dtype is floating-point.</span>
 </span><span id="is_float_dtype-210"><a href="#is_float_dtype-210"><span class="linenos">210</span></a>
 </span><span id="is_float_dtype-211"><a href="#is_float_dtype-211"><span class="linenos">211</span></a><span class="sd">    Args:</span>
@@ -855,7 +855,7 @@
 
     </div>
     <a class="headerlink" href="#print_indexed"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="print_indexed-220"><a href="#print_indexed-220"><span class="linenos">220</span></a><span class="k">def</span> <span class="nf">print_indexed</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="print_indexed-220"><a href="#print_indexed-220"><span class="linenos">220</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_indexed</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="print_indexed-221"><a href="#print_indexed-221"><span class="linenos">221</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print each value with its index. Masked values are shown as &#39;--FV--&#39;.</span>
 </span><span id="print_indexed-222"><a href="#print_indexed-222"><span class="linenos">222</span></a>
 </span><span id="print_indexed-223"><a href="#print_indexed-223"><span class="linenos">223</span></a><span class="sd">    Args:</span>
@@ -897,7 +897,7 @@
 
     </div>
     <a class="headerlink" href="#print_global_attributes"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="print_global_attributes-238"><a href="#print_global_attributes-238"><span class="linenos">238</span></a><span class="k">def</span> <span class="nf">print_global_attributes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="print_global_attributes-238"><a href="#print_global_attributes-238"><span class="linenos">238</span></a><span class="k">def</span><span class="w"> </span><span class="nf">print_global_attributes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="print_global_attributes-239"><a href="#print_global_attributes-239"><span class="linenos">239</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print global attributes of the dataset.</span>
 </span><span id="print_global_attributes-240"><a href="#print_global_attributes-240"><span class="linenos">240</span></a>
 </span><span id="print_global_attributes-241"><a href="#print_global_attributes-241"><span class="linenos">241</span></a><span class="sd">    Args:</span>
@@ -942,7 +942,7 @@
 
     </div>
     <a class="headerlink" href="#plot_var"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="plot_var-260"><a href="#plot_var-260"><span class="linenos">260</span></a><span class="k">def</span> <span class="nf">plot_var</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">units</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="plot_var-260"><a href="#plot_var-260"><span class="linenos">260</span></a><span class="k">def</span><span class="w"> </span><span class="nf">plot_var</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">units</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="plot_var-261"><a href="#plot_var-261"><span class="linenos">261</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;plot netcdf parameter array</span>
 </span><span id="plot_var-262"><a href="#plot_var-262"><span class="linenos">262</span></a>
 </span><span id="plot_var-263"><a href="#plot_var-263"><span class="linenos">263</span></a><span class="sd">    Args:</span>
@@ -999,7 +999,7 @@
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-286"><a href="#main-286"><span class="linenos">286</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-286"><a href="#main-286"><span class="linenos">286</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="main-287"><a href="#main-287"><span class="linenos">287</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Main function to drive CLI behavior.&quot;&quot;&quot;</span>
 </span><span id="main-288"><a href="#main-288"><span class="linenos">288</span></a>    <span class="n">args</span> <span class="o">=</span> <span class="n">parse_args</span><span class="p">()</span>
 </span><span id="main-289"><a href="#main-289"><span class="linenos">289</span></a>

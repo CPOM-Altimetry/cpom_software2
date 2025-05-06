@@ -159,17 +159,17 @@
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="sd">&quot;&quot;&quot;Class for area masking&quot;&quot;&quot;</span>
 </span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="kn">import</span> <span class="nn">hashlib</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="kn">import</span> <span class="nn">logging</span>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="kn">from</span> <span class="nn">multiprocessing.shared_memory</span> <span class="kn">import</span> <span class="n">SharedMemory</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">environ</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">isfile</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.shared_memory</span><span class="w"> </span><span class="kn">import</span> <span class="n">SharedMemory</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">os</span><span class="w"> </span><span class="kn">import</span> <span class="n">environ</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">os.path</span><span class="w"> </span><span class="kn">import</span> <span class="n">isfile</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a>
-</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint: disable=E0611</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="kn">from</span> <span class="nn">pyproj</span> <span class="kn">import</span> <span class="n">CRS</span>  <span class="c1"># CRS definitions</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="kn">from</span> <span class="nn">pyproj</span> <span class="kn">import</span> <span class="n">Transformer</span>  <span class="c1"># for transforming between projections</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint: disable=E0611</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyproj</span><span class="w"> </span><span class="kn">import</span> <span class="n">CRS</span>  <span class="c1"># CRS definitions</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyproj</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transformer</span>  <span class="c1"># for transforming between projections</span>
 </span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a>
 </span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a><span class="c1"># pylint: disable=R0801</span>
 </span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
@@ -206,10 +206,10 @@
 </span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="c1"># pylint: disable=too-many-arguments</span>
 </span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a>
 </span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>
-</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="k">class</span> <span class="nc">Mask</span><span class="p">:</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="k">class</span><span class="w"> </span><span class="nc">Mask</span><span class="p">:</span>
 </span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;class to handle area masking&quot;&quot;&quot;</span>
 </span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>
-</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>        <span class="n">mask_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>        <span class="n">basin_numbers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -756,7 +756,7 @@
 </span><span id="L-597"><a href="#L-597"><span class="linenos">597</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">crs_wgs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crs_bng</span><span class="p">,</span> <span class="n">always_xy</span><span class="o">=</span><span class="kc">True</span>
 </span><span id="L-598"><a href="#L-598"><span class="linenos">598</span></a>        <span class="p">)</span>
 </span><span id="L-599"><a href="#L-599"><span class="linenos">599</span></a>
-</span><span id="L-600"><a href="#L-600"><span class="linenos">600</span></a>    <span class="k">def</span> <span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
+</span><span id="L-600"><a href="#L-600"><span class="linenos">600</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
 </span><span id="L-601"><a href="#L-601"><span class="linenos">601</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from netcdf grid masks</span>
 </span><span id="L-602"><a href="#L-602"><span class="linenos">602</span></a>
 </span><span id="L-603"><a href="#L-603"><span class="linenos">603</span></a><span class="sd">        Args:</span>
@@ -811,7 +811,7 @@
 </span><span id="L-652"><a href="#L-652"><span class="linenos">652</span></a>                <span class="k">if</span> <span class="n">flip</span><span class="p">:</span>
 </span><span id="L-653"><a href="#L-653"><span class="linenos">653</span></a>                    <span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flipud</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span><span class="p">)</span>
 </span><span id="L-654"><a href="#L-654"><span class="linenos">654</span></a>
-</span><span id="L-655"><a href="#L-655"><span class="linenos">655</span></a>    <span class="k">def</span> <span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="L-655"><a href="#L-655"><span class="linenos">655</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="L-656"><a href="#L-656"><span class="linenos">656</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from npz grid masks</span>
 </span><span id="L-657"><a href="#L-657"><span class="linenos">657</span></a>
 </span><span id="L-658"><a href="#L-658"><span class="linenos">658</span></a><span class="sd">        Args:</span>
@@ -863,7 +863,7 @@
 </span><span id="L-704"><a href="#L-704"><span class="linenos">704</span></a>                <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">mask_file</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mask_grid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
 </span><span id="L-705"><a href="#L-705"><span class="linenos">705</span></a>            <span class="p">)</span>
 </span><span id="L-706"><a href="#L-706"><span class="linenos">706</span></a>
-</span><span id="L-707"><a href="#L-707"><span class="linenos">707</span></a>    <span class="k">def</span> <span class="nf">points_inside</span><span class="p">(</span>
+</span><span id="L-707"><a href="#L-707"><span class="linenos">707</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">points_inside</span><span class="p">(</span>
 </span><span id="L-708"><a href="#L-708"><span class="linenos">708</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-709"><a href="#L-709"><span class="linenos">709</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
 </span><span id="L-710"><a href="#L-710"><span class="linenos">710</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
@@ -956,7 +956,7 @@
 </span><span id="L-797"><a href="#L-797"><span class="linenos">797</span></a>
 </span><span id="L-798"><a href="#L-798"><span class="linenos">798</span></a>        <span class="k">return</span> <span class="n">inmask</span><span class="p">,</span> <span class="n">n_inside</span>
 </span><span id="L-799"><a href="#L-799"><span class="linenos">799</span></a>
-</span><span id="L-800"><a href="#L-800"><span class="linenos">800</span></a>    <span class="k">def</span> <span class="nf">grid_mask_values</span><span class="p">(</span>
+</span><span id="L-800"><a href="#L-800"><span class="linenos">800</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">grid_mask_values</span><span class="p">(</span>
 </span><span id="L-801"><a href="#L-801"><span class="linenos">801</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-802"><a href="#L-802"><span class="linenos">802</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="L-803"><a href="#L-803"><span class="linenos">803</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -1019,7 +1019,7 @@
 </span><span id="L-860"><a href="#L-860"><span class="linenos">860</span></a>            <span class="n">mask_values</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span><span class="p">[</span><span class="n">jj</span><span class="p">,</span> <span class="n">ii</span><span class="p">]</span>
 </span><span id="L-861"><a href="#L-861"><span class="linenos">861</span></a>        <span class="k">return</span> <span class="n">mask_values</span>
 </span><span id="L-862"><a href="#L-862"><span class="linenos">862</span></a>
-</span><span id="L-863"><a href="#L-863"><span class="linenos">863</span></a>    <span class="k">def</span> <span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="L-863"><a href="#L-863"><span class="linenos">863</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 </span><span id="L-864"><a href="#L-864"><span class="linenos">864</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-865"><a href="#L-865"><span class="linenos">865</span></a><span class="sd">        :param lats: latitude points in degs</span>
 </span><span id="L-866"><a href="#L-866"><span class="linenos">866</span></a><span class="sd">        :param lons: longitude points in degrees E</span>
@@ -1027,7 +1027,7 @@
 </span><span id="L-868"><a href="#L-868"><span class="linenos">868</span></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="L-869"><a href="#L-869"><span class="linenos">869</span></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lonlat_to_xy_transformer</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">lons</span><span class="p">,</span> <span class="n">lats</span><span class="p">)</span>
 </span><span id="L-870"><a href="#L-870"><span class="linenos">870</span></a>
-</span><span id="L-871"><a href="#L-871"><span class="linenos">871</span></a>    <span class="k">def</span> <span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="L-871"><a href="#L-871"><span class="linenos">871</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 </span><span id="L-872"><a href="#L-872"><span class="linenos">872</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Free up, close or release any shared memory or other resources associated</span>
 </span><span id="L-873"><a href="#L-873"><span class="linenos">873</span></a><span class="sd">        with mask</span>
 </span><span id="L-874"><a href="#L-874"><span class="linenos">874</span></a><span class="sd">        &quot;&quot;&quot;</span>
@@ -1053,7 +1053,7 @@
 </span><span id="L-894"><a href="#L-894"><span class="linenos">894</span></a>                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Shared memory for </span><span class="si">%s</span><span class="s2"> could not be closed </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
 </span><span id="L-895"><a href="#L-895"><span class="linenos">895</span></a>                <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span>
 </span><span id="L-896"><a href="#L-896"><span class="linenos">896</span></a>                    <span class="sa">f</span><span class="s1">&#39;Shared memory for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="si">}</span><span class="s1"> could not be closed </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&quot;&#39;</span>
-</span><span id="L-897"><a href="#L-897"><span class="linenos">897</span></a>                <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="L-897"><a href="#L-897"><span class="linenos">897</span></a>                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span></pre></div>
 
 
@@ -1094,10 +1094,10 @@
 
     </div>
     <a class="headerlink" href="#Mask"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask-51"><a href="#Mask-51"><span class="linenos"> 51</span></a><span class="k">class</span> <span class="nc">Mask</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask-51"><a href="#Mask-51"><span class="linenos"> 51</span></a><span class="k">class</span><span class="w"> </span><span class="nc">Mask</span><span class="p">:</span>
 </span><span id="Mask-52"><a href="#Mask-52"><span class="linenos"> 52</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;class to handle area masking&quot;&quot;&quot;</span>
 </span><span id="Mask-53"><a href="#Mask-53"><span class="linenos"> 53</span></a>
-</span><span id="Mask-54"><a href="#Mask-54"><span class="linenos"> 54</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+</span><span id="Mask-54"><a href="#Mask-54"><span class="linenos"> 54</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="Mask-55"><a href="#Mask-55"><span class="linenos"> 55</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask-56"><a href="#Mask-56"><span class="linenos"> 56</span></a>        <span class="n">mask_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="Mask-57"><a href="#Mask-57"><span class="linenos"> 57</span></a>        <span class="n">basin_numbers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1644,7 +1644,7 @@
 </span><span id="Mask-598"><a href="#Mask-598"><span class="linenos">598</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">crs_wgs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crs_bng</span><span class="p">,</span> <span class="n">always_xy</span><span class="o">=</span><span class="kc">True</span>
 </span><span id="Mask-599"><a href="#Mask-599"><span class="linenos">599</span></a>        <span class="p">)</span>
 </span><span id="Mask-600"><a href="#Mask-600"><span class="linenos">600</span></a>
-</span><span id="Mask-601"><a href="#Mask-601"><span class="linenos">601</span></a>    <span class="k">def</span> <span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
+</span><span id="Mask-601"><a href="#Mask-601"><span class="linenos">601</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
 </span><span id="Mask-602"><a href="#Mask-602"><span class="linenos">602</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from netcdf grid masks</span>
 </span><span id="Mask-603"><a href="#Mask-603"><span class="linenos">603</span></a>
 </span><span id="Mask-604"><a href="#Mask-604"><span class="linenos">604</span></a><span class="sd">        Args:</span>
@@ -1699,7 +1699,7 @@
 </span><span id="Mask-653"><a href="#Mask-653"><span class="linenos">653</span></a>                <span class="k">if</span> <span class="n">flip</span><span class="p">:</span>
 </span><span id="Mask-654"><a href="#Mask-654"><span class="linenos">654</span></a>                    <span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flipud</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span><span class="p">)</span>
 </span><span id="Mask-655"><a href="#Mask-655"><span class="linenos">655</span></a>
-</span><span id="Mask-656"><a href="#Mask-656"><span class="linenos">656</span></a>    <span class="k">def</span> <span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="Mask-656"><a href="#Mask-656"><span class="linenos">656</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="Mask-657"><a href="#Mask-657"><span class="linenos">657</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from npz grid masks</span>
 </span><span id="Mask-658"><a href="#Mask-658"><span class="linenos">658</span></a>
 </span><span id="Mask-659"><a href="#Mask-659"><span class="linenos">659</span></a><span class="sd">        Args:</span>
@@ -1751,7 +1751,7 @@
 </span><span id="Mask-705"><a href="#Mask-705"><span class="linenos">705</span></a>                <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">mask_file</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mask_grid&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
 </span><span id="Mask-706"><a href="#Mask-706"><span class="linenos">706</span></a>            <span class="p">)</span>
 </span><span id="Mask-707"><a href="#Mask-707"><span class="linenos">707</span></a>
-</span><span id="Mask-708"><a href="#Mask-708"><span class="linenos">708</span></a>    <span class="k">def</span> <span class="nf">points_inside</span><span class="p">(</span>
+</span><span id="Mask-708"><a href="#Mask-708"><span class="linenos">708</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">points_inside</span><span class="p">(</span>
 </span><span id="Mask-709"><a href="#Mask-709"><span class="linenos">709</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask-710"><a href="#Mask-710"><span class="linenos">710</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
 </span><span id="Mask-711"><a href="#Mask-711"><span class="linenos">711</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
@@ -1844,7 +1844,7 @@
 </span><span id="Mask-798"><a href="#Mask-798"><span class="linenos">798</span></a>
 </span><span id="Mask-799"><a href="#Mask-799"><span class="linenos">799</span></a>        <span class="k">return</span> <span class="n">inmask</span><span class="p">,</span> <span class="n">n_inside</span>
 </span><span id="Mask-800"><a href="#Mask-800"><span class="linenos">800</span></a>
-</span><span id="Mask-801"><a href="#Mask-801"><span class="linenos">801</span></a>    <span class="k">def</span> <span class="nf">grid_mask_values</span><span class="p">(</span>
+</span><span id="Mask-801"><a href="#Mask-801"><span class="linenos">801</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">grid_mask_values</span><span class="p">(</span>
 </span><span id="Mask-802"><a href="#Mask-802"><span class="linenos">802</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask-803"><a href="#Mask-803"><span class="linenos">803</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="Mask-804"><a href="#Mask-804"><span class="linenos">804</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -1907,7 +1907,7 @@
 </span><span id="Mask-861"><a href="#Mask-861"><span class="linenos">861</span></a>            <span class="n">mask_values</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_grid</span><span class="p">[</span><span class="n">jj</span><span class="p">,</span> <span class="n">ii</span><span class="p">]</span>
 </span><span id="Mask-862"><a href="#Mask-862"><span class="linenos">862</span></a>        <span class="k">return</span> <span class="n">mask_values</span>
 </span><span id="Mask-863"><a href="#Mask-863"><span class="linenos">863</span></a>
-</span><span id="Mask-864"><a href="#Mask-864"><span class="linenos">864</span></a>    <span class="k">def</span> <span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="Mask-864"><a href="#Mask-864"><span class="linenos">864</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 </span><span id="Mask-865"><a href="#Mask-865"><span class="linenos">865</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="Mask-866"><a href="#Mask-866"><span class="linenos">866</span></a><span class="sd">        :param lats: latitude points in degs</span>
 </span><span id="Mask-867"><a href="#Mask-867"><span class="linenos">867</span></a><span class="sd">        :param lons: longitude points in degrees E</span>
@@ -1915,7 +1915,7 @@
 </span><span id="Mask-869"><a href="#Mask-869"><span class="linenos">869</span></a><span class="sd">        &quot;&quot;&quot;</span>
 </span><span id="Mask-870"><a href="#Mask-870"><span class="linenos">870</span></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lonlat_to_xy_transformer</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">lons</span><span class="p">,</span> <span class="n">lats</span><span class="p">)</span>
 </span><span id="Mask-871"><a href="#Mask-871"><span class="linenos">871</span></a>
-</span><span id="Mask-872"><a href="#Mask-872"><span class="linenos">872</span></a>    <span class="k">def</span> <span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="Mask-872"><a href="#Mask-872"><span class="linenos">872</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 </span><span id="Mask-873"><a href="#Mask-873"><span class="linenos">873</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Free up, close or release any shared memory or other resources associated</span>
 </span><span id="Mask-874"><a href="#Mask-874"><span class="linenos">874</span></a><span class="sd">        with mask</span>
 </span><span id="Mask-875"><a href="#Mask-875"><span class="linenos">875</span></a><span class="sd">        &quot;&quot;&quot;</span>
@@ -1941,7 +1941,7 @@
 </span><span id="Mask-895"><a href="#Mask-895"><span class="linenos">895</span></a>                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Shared memory for </span><span class="si">%s</span><span class="s2"> could not be closed </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
 </span><span id="Mask-896"><a href="#Mask-896"><span class="linenos">896</span></a>                <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span>
 </span><span id="Mask-897"><a href="#Mask-897"><span class="linenos">897</span></a>                    <span class="sa">f</span><span class="s1">&#39;Shared memory for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="si">}</span><span class="s1"> could not be closed </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&quot;&#39;</span>
-</span><span id="Mask-898"><a href="#Mask-898"><span class="linenos">898</span></a>                <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="Mask-898"><a href="#Mask-898"><span class="linenos">898</span></a>                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span></pre></div>
 
 
@@ -1959,7 +1959,7 @@
 
     </div>
     <a class="headerlink" href="#Mask.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.__init__-54"><a href="#Mask.__init__-54"><span class="linenos"> 54</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.__init__-54"><a href="#Mask.__init__-54"><span class="linenos"> 54</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="Mask.__init__-55"><a href="#Mask.__init__-55"><span class="linenos"> 55</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask.__init__-56"><a href="#Mask.__init__-56"><span class="linenos"> 56</span></a>        <span class="n">mask_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="Mask.__init__-57"><a href="#Mask.__init__-57"><span class="linenos"> 57</span></a>        <span class="n">basin_numbers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2733,7 +2733,7 @@ def=None</li>
 
     </div>
     <a class="headerlink" href="#Mask.load_netcdf_mask"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.load_netcdf_mask-601"><a href="#Mask.load_netcdf_mask-601"><span class="linenos">601</span></a>    <span class="k">def</span> <span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.load_netcdf_mask-601"><a href="#Mask.load_netcdf_mask-601"><span class="linenos">601</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_netcdf_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nc_mask_var</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span><span class="p">):</span>
 </span><span id="Mask.load_netcdf_mask-602"><a href="#Mask.load_netcdf_mask-602"><span class="linenos">602</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from netcdf grid masks</span>
 </span><span id="Mask.load_netcdf_mask-603"><a href="#Mask.load_netcdf_mask-603"><span class="linenos">603</span></a>
 </span><span id="Mask.load_netcdf_mask-604"><a href="#Mask.load_netcdf_mask-604"><span class="linenos">604</span></a><span class="sd">        Args:</span>
@@ -2814,7 +2814,7 @@ def=None</li>
 
     </div>
     <a class="headerlink" href="#Mask.load_npz_mask"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.load_npz_mask-656"><a href="#Mask.load_npz_mask-656"><span class="linenos">656</span></a>    <span class="k">def</span> <span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.load_npz_mask-656"><a href="#Mask.load_npz_mask-656"><span class="linenos">656</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_npz_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="Mask.load_npz_mask-657"><a href="#Mask.load_npz_mask-657"><span class="linenos">657</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;load mask array from npz grid masks</span>
 </span><span id="Mask.load_npz_mask-658"><a href="#Mask.load_npz_mask-658"><span class="linenos">658</span></a>
 </span><span id="Mask.load_npz_mask-659"><a href="#Mask.load_npz_mask-659"><span class="linenos">659</span></a><span class="sd">        Args:</span>
@@ -2890,7 +2890,7 @@ def=None</li>
 
     </div>
     <a class="headerlink" href="#Mask.points_inside"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.points_inside-708"><a href="#Mask.points_inside-708"><span class="linenos">708</span></a>    <span class="k">def</span> <span class="nf">points_inside</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.points_inside-708"><a href="#Mask.points_inside-708"><span class="linenos">708</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">points_inside</span><span class="p">(</span>
 </span><span id="Mask.points_inside-709"><a href="#Mask.points_inside-709"><span class="linenos">709</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask.points_inside-710"><a href="#Mask.points_inside-710"><span class="linenos">710</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
 </span><span id="Mask.points_inside-711"><a href="#Mask.points_inside-711"><span class="linenos">711</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">,</span>
@@ -3019,7 +3019,7 @@ Defaults to False.</li>
 
     </div>
     <a class="headerlink" href="#Mask.grid_mask_values"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.grid_mask_values-801"><a href="#Mask.grid_mask_values-801"><span class="linenos">801</span></a>    <span class="k">def</span> <span class="nf">grid_mask_values</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.grid_mask_values-801"><a href="#Mask.grid_mask_values-801"><span class="linenos">801</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">grid_mask_values</span><span class="p">(</span>
 </span><span id="Mask.grid_mask_values-802"><a href="#Mask.grid_mask_values-802"><span class="linenos">802</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Mask.grid_mask_values-803"><a href="#Mask.grid_mask_values-803"><span class="linenos">803</span></a>        <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="Mask.grid_mask_values-804"><a href="#Mask.grid_mask_values-804"><span class="linenos">804</span></a>        <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -3118,7 +3118,7 @@ substituted)</li>
 
     </div>
     <a class="headerlink" href="#Mask.latlon_to_xy"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.latlon_to_xy-864"><a href="#Mask.latlon_to_xy-864"><span class="linenos">864</span></a>    <span class="k">def</span> <span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.latlon_to_xy-864"><a href="#Mask.latlon_to_xy-864"><span class="linenos">864</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">latlon_to_xy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lats</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lons</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 </span><span id="Mask.latlon_to_xy-865"><a href="#Mask.latlon_to_xy-865"><span class="linenos">865</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="Mask.latlon_to_xy-866"><a href="#Mask.latlon_to_xy-866"><span class="linenos">866</span></a><span class="sd">        :param lats: latitude points in degs</span>
 </span><span id="Mask.latlon_to_xy-867"><a href="#Mask.latlon_to_xy-867"><span class="linenos">867</span></a><span class="sd">        :param lons: longitude points in degrees E</span>
@@ -3155,7 +3155,7 @@ substituted)</li>
 
     </div>
     <a class="headerlink" href="#Mask.clean_up"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.clean_up-872"><a href="#Mask.clean_up-872"><span class="linenos">872</span></a>    <span class="k">def</span> <span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Mask.clean_up-872"><a href="#Mask.clean_up-872"><span class="linenos">872</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">clean_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 </span><span id="Mask.clean_up-873"><a href="#Mask.clean_up-873"><span class="linenos">873</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Free up, close or release any shared memory or other resources associated</span>
 </span><span id="Mask.clean_up-874"><a href="#Mask.clean_up-874"><span class="linenos">874</span></a><span class="sd">        with mask</span>
 </span><span id="Mask.clean_up-875"><a href="#Mask.clean_up-875"><span class="linenos">875</span></a><span class="sd">        &quot;&quot;&quot;</span>
@@ -3181,7 +3181,7 @@ substituted)</li>
 </span><span id="Mask.clean_up-895"><a href="#Mask.clean_up-895"><span class="linenos">895</span></a>                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Shared memory for </span><span class="si">%s</span><span class="s2"> could not be closed </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
 </span><span id="Mask.clean_up-896"><a href="#Mask.clean_up-896"><span class="linenos">896</span></a>                <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span>
 </span><span id="Mask.clean_up-897"><a href="#Mask.clean_up-897"><span class="linenos">897</span></a>                    <span class="sa">f</span><span class="s1">&#39;Shared memory for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_name</span><span class="si">}</span><span class="s1"> could not be closed </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s1">&quot;&#39;</span>
-</span><span id="Mask.clean_up-898"><a href="#Mask.clean_up-898"><span class="linenos">898</span></a>                <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="Mask.clean_up-898"><a href="#Mask.clean_up-898"><span class="linenos">898</span></a>                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span></pre></div>
 
 
