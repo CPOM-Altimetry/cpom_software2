@@ -17,6 +17,47 @@ For full list of command line options:
 find_files_in_area.py -h
 ```
 
+```
+options:
+  -h, --help            show this help message and exit
+  --area AREA, -a AREA  CPOM area definition name. See --list_areas for a full list
+  --dir DIR, -d DIR     [Optional] path of a directory containing netcdf files to search.
+  --extent_only, -e     [Optional] test area's approx. rectangular extent only. 
+                         This is quicker than testing the polygon mask(s),
+                        but may result in occasional files that are inside the rectangular extent 
+                        but not inside the exact mask
+  --filename_only, -fo  [Optional] print only selected file name paths and not any other 
+                        information. Useful if creating a list
+  --include INCLUDE, -i INCLUDE
+                        [optional] include only files with this string in their filename
+  --latname LATNAME, -lat LATNAME
+                        name of netcdf latitude parameters with optional group path. 
+                        Group paths are separated by / Example:
+                        --latname latitude , --latname data/ku/latitude , --latname lats1
+                        If not used, default values for file
+                        type will be used if possible.
+  --list_areas, -ls     [optional] list allowed area names and exit
+  --lonname LONNAME, -lon LONNAME
+                        name of netcdf longitude parameter with optional group path. 
+                        Group paths are separated by / . Example:
+                        --lonname longitude , --lonname data/ku/longitude , --lonname lons1
+                        If not used, default values for file
+                        type will be used if possible.
+  --max_files MAX_FILES, -mf MAX_FILES
+                        [optional] only read the first N input netcdf files 
+                        (if multiple files input)
+  --plot, -p            [optional] plot tracks on map of selected area
+  --plot_file PLOT_FILE, -pf PLOT_FILE
+                        [optional] save plot file to this filename as a png instead of displaying
+  --radius_search LAT LON RADIUS, -rs LAT LON RADIUS
+                        [optional] search for files within a radius (km) of a target 
+                        latitude and longitude. 
+                        Enter
+                        --radius_search latitude longitude radius_km
+  --not_recursive, -nr  [optional] flat directory search (not recursive, which is the default) 
+                        for input files
+```
+
 example of finding a list of files in /some_dir and its sub-directories that
 pass over the Greenland ice sheet, printing just the list of files: 
 
