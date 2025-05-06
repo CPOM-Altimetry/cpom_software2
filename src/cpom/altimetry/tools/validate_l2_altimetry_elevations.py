@@ -1,7 +1,7 @@
 """cpom.altimetry.tools.validate_l2_altimetry_elevations.py
 
 This tool compares a selected month of radar altimetry mission elevation data against laser
-atimetry reference elevations.
+altimetry reference elevations.
 It also allows comparing a reference mission to itself.
 
 ### **Supported Missions**
