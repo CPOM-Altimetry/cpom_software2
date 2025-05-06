@@ -454,23 +454,32 @@ def test_get_altimetry_data_array_unsupported_file(mock_process_data):
 
 
 def test_get_altimetry_data_array_empty_inside_mask(mock_process_data, mock_config):
-    """Test get_altimetry_data array : Returns None when no valid points found in masked
-    object"""
-    dummy_filename = "dummy.nc"
+    """Test get_altimetry_data_array: Returns None when no valid points found in masked area."""
 
+    dummy_filename = "dummy.nc"
+    mock_nc = MagicMock()
+    mock_nc.__enter__.return_value = mock_nc  # For context manager
+    mock_nc.variables = {}
     with (
         patch(
             "cpom.altimetry.tools.validate_l2_altimetry_elevations.get_default_variables",
             return_value=mock_config,
         ),
-        patch("cpom.altimetry.tools.validate_l2_altimetry_elevations.Dataset"),
+        patch(
+            "cpom.altimetry.tools.validate_l2_altimetry_elevations.Dataset", return_value=mock_nc
+        ),
         patch(
             "cpom.altimetry.tools.validate_l2_altimetry_elevations.get_variable",
             return_value=np.array([1, 2, 3, 4]),
         ),
     ):
+        # Simulate empty masked region
         mock_process_data.area.inside_mask = MagicMock(return_value=(np.array([]), None))
-        result = mock_process_data.get_altimetry_data_array(dummy_filename)
+        # Ensure no cryotempo modes requested and no additional variables
+        mock_process_data.args.add_vars = []
+        mock_process_data.args.cryotempo_modes = False
+
+        result = mock_process_data.get_altimetry_data_array(Path(dummy_filename))
         assert result is None
 
 
@@ -498,7 +507,7 @@ def test_get_altimetry_data_array_mismatch_lengths(mock_process_data, mock_confi
             "cpom.altimetry.tools.validate_l2_altimetry_elevations.get_variable",
             side_effect=side_effect,
         ):
-            with pytest.raises(ValueError, match="Mismatch in variable lengths for x,y,h"):
+            with pytest.raises(ValueError, match="Mismatch in variable lengths"):
                 mock_process_data.get_altimetry_data_array(dummy_filename)
 
 
@@ -527,7 +536,7 @@ def test_get_altimetry_data_array_additional_var_length_mismatch(mock_process_da
             "cpom.altimetry.tools.validate_l2_altimetry_elevations.get_variable",
             side_effect=side_effect,
         ):
-            with pytest.raises(ValueError, match="Mismatch in additional variable lengths."):
+            with pytest.raises(ValueError, match="Mismatch in variable lengths"):
                 mock_process_data.get_altimetry_data_array("example.nc")
 
 

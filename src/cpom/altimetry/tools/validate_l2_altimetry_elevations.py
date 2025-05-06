@@ -446,7 +446,7 @@ class ProcessData:
                             set(add_vars) - set(additional_data.keys()),
                         )
                 except Exception as err:
-                    raise ValueError("Mismatch in additional variable lengths.") from err
+                    raise ValueError("Failed to load additional data") from err
 
                 if self.args.cryotempo_modes:
                     mask = self.get_cryotempo_filters(nc, self.args)
@@ -473,7 +473,7 @@ class ProcessData:
                         additional_data[k] = additional_data[k][idx]
 
                 except Exception as err:
-                    raise ValueError("Mismatch in variable lengths for x,y,h") from err
+                    raise ValueError("Mismatch in variable lengths") from err
 
             # Structured NumPy array containing x, y, elevation, and any additional variables
             return np.array(
