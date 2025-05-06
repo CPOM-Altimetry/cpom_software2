@@ -534,8 +534,8 @@ class ProcessData:
                             continue
 
                         # Transform lat, lon to x,y in appropriate polar stereo projections
-                        x, y = self.area.latlon_to_xy(lats, lons)
                         elevation = elevation[bounded_indices]
+                        x, y = self.area.latlon_to_xy(lats, lons)
 
                         if not len(x) == len(y) == len(elevation):
                             raise ValueError("Mismatch in variable lengths for x,y,h")
@@ -894,9 +894,8 @@ if __name__ == "__main__":
     reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
     processor = ProcessData(params, AREA_OBJ, logger)
     reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "h5")  # is1 & is2
-    if reference_files is None:
+    if reference_files == []:  # icebridge/pre-icebridge
         reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
-    # icebridge/pre-icebridge
 
     logger.info("Loaded %d reference data files", len(reference_files))
 
