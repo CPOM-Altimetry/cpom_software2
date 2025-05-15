@@ -23,30 +23,37 @@ Additionally:
 
 Example usage:
   1) Full regrid (5km grid):
-     python grid_altimetry_data.py --regrid --binsize 5e3 --area greenland_is \
-         -o /cpnet/altimetry/landice/gridded_altimetry -g greenland \
-         -mi cs2 -da cryotempo_c001 \
-         -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
-         -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
-         --yyyymm_str_fname_indices -48 -44 \
-         --lat latitude \
-         --lon longitude \
-         --elev elevation \
-         --power backscatter \
-         --time time
+     python grid_altimetry_data.py --regrid \
+        --binsize 5e3 \
+        --area greenland_is \
+        -o /cpnet/altimetry/landice/gridded_altimetry \
+        -g greenland  \
+        --mission cs2 \
+        --dataset cryotempo_li \
+        -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
+        -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
+        --yyyymm_str_fname_indices -48 -42 \
+        --lat_param latitude  --lon_param longitude \
+        --elevation_param elevation \
+        --power_param backscatter \
+        --time_param time
 
   2) Update year 2015 only:
-     python grid_altimetry_data.py --update_year 2015 --binsize 5e3 --area greenland_is \
-         -o /cpnet/altimetry/landice/gridded_altimetry -g greenland \
-         -mi cs2 -da cryotempo_c001 \
-         -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
-         -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
-         --yyyymm_str_fname_indices -48 -44 \
-         --lat latitude \
-         --lon longitude \
-         --elev elevation \
-         --power backscatter \
-         --time time
+
+  python grid_altimetry_data.py --update_year 2015 \
+        --binsize 5e3 \
+        --area greenland_is \
+        -o /cpnet/altimetry/landice/gridded_altimetry \
+        -g greenland  \
+        --mission cs2 \
+        --dataset cryotempo_li \
+        -dir /cpdata/SATS/RA/CRY/Cryo-TEMPO/BASELINE-C/001/LAND_ICE/GREENL \
+        -pat '**/CS_OFFL_SIR_TDP_LI*C001*.nc' \
+        --yyyymm_str_fname_indices -48 -42 \
+        --lat_param latitude  --lon_param longitude \
+        --elevation_param elevation \
+        --power_param backscatter \
+        --time_param time
 
 
 Notes / Changes:
@@ -290,17 +297,25 @@ def grid_dataset(
         log.error("No matching L2 files found in %s/%s", search_dir, pattern)
         sys.exit()
 
-    start_idx, end_idx = data_set["yyyymm_str_fname_indices"]
+    start_idx = int(data_set["yyyymm_str_fname_indices"][0])
+    end_idx = int(data_set["yyyymm_str_fname_indices"][1])
+    log.info("end_idx %d", end_idx)
+
     yr_start_idx = start_idx
     yr_end_idx = end_idx - 2
     month_start_idx = start_idx + 4
     month_end_idx = end_idx
 
+    log.info(
+        "YYYYMM indices: %d %d %d %d", yr_start_idx, yr_end_idx, month_start_idx, month_end_idx
+    )
+
     unique_years = set()
-    log.info("finding unique years...")
+    log.info("finding unique years....")
 
     for file_path in matching_files:
         year_val = int(file_path[yr_start_idx:yr_end_idx])
+        log.info("file_path %s %d %d", file_path, month_start_idx, month_end_idx)
         month_val = int(file_path[month_start_idx:month_end_idx])
 
         if not 1900 <= year_val <= 2100:
@@ -861,7 +876,7 @@ def main(args):
         "search_pattern": args.search_pattern,
         "latitude_param": args.lat_param,
         "longitude_param": args.lon_param,
-        "elevation_param": args.elev_param,
+        "elevation_param": args.elevation_param,
         "power_param": args.power_param,
         "time_param": args.time_param,
         "max_files": args.max_files,
