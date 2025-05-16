@@ -24,25 +24,47 @@ from netCDF4 import Dataset  # pylint: disable=no-name-in-module
 def get_variable(ncfile, param_path):
     """
     Open ncfile, navigate to nested groups per param_path (e.g. 'data/ku/elevation'),
-    and return the variable's data as a NumPy array.
+    and return the variable's data as a NumPy array, with all FillValue (and/or missing_value)
+    replaced by np.nan.
     """
     ds = Dataset(ncfile, "r")
     parts = param_path.strip("/").split("/")
     *groups, varname = parts
+
+    # Drill into nested groups
     grp = ds
     for g in groups:
         if g in grp.groups:
             grp = grp.groups[g]
         else:
+            ds.close()
             sys.exit(f"Error: group '{g}' not found in '{ncfile}'")
+
+    # Find the variable
     if varname not in grp.variables:
+        ds.close()
         sys.exit(
             f"Error: variable '{varname}' not found in "
             f"'{ncfile}' (inside group '{'/'.join(groups)}')"
         )
-    var = grp.variables[varname][:]
+    varobj = grp.variables[varname]
+
+    # Read data as float so we can assign np.nan
+    data = varobj[:].astype(float)
+
+    # Try to get the FillValue or missing_value attribute
+    fill_value = None
+    if "_FillValue" in varobj.ncattrs():
+        fill_value = varobj.getncattr("_FillValue")
+    elif "missing_value" in varobj.ncattrs():
+        fill_value = varobj.getncattr("missing_value")
+
+    # Replace all occurrences of fill_value with np.nan
+    if fill_value is not None:
+        data[data == fill_value] = np.nan
+
     ds.close()
-    return np.array(var)
+    return data
 
 
 def main():
@@ -51,6 +73,14 @@ def main():
         description="Plot two NetCDF variables and their difference "
         "with ranges, units, stats, and histograms"
     )
+    p.add_argument(
+        "-l",
+        "--list",
+        required=False,
+        help="List differences line by line to stdout",
+        action="store_true",
+    )
+
     p.add_argument("-f1", "--file1", required=True, help="First NetCDF file")
     p.add_argument("-f2", "--file2", required=True, help="Second NetCDF file")
     p.add_argument(
@@ -71,6 +101,16 @@ def main():
         metavar=("MIN", "MAX"),
         help="Value range [min max] for the difference plot and histograms",
     )
+
+    p.add_argument(
+        "--subset",
+        nargs=2,
+        type=int,
+        metavar=("MIN", "MAX"),
+        help="subset indices of input [min max] to plot data",
+        required=False,
+    )
+
     p.add_argument("-u", "--units", type=str, default="", help="Units string to append to labels")
     args = p.parse_args()
 
@@ -79,10 +119,23 @@ def main():
     v1 = get_variable(args.file1, args.param1)
     v2 = get_variable(args.file2, args.param2)
 
+    if args.subset:
+        index1, index2 = args.subset
+        v1 = np.array(v1)[index1:index2]
+        v2 = np.array(v2)[index1:index2]
+    else:
+        v1 = np.array(v1)
+        v2 = np.array(v2)
+
     if v1.shape != v2.shape:
         sys.exit(f"Error: shapes do not match: {v1.shape} vs {v2.shape}")
 
     diff = v1 - v2
+
+    if args.list:
+        for index, idiff in enumerate(diff):
+            if np.abs(idiff) > 1.0:
+                print(f"{index} : diff {idiff} : {v1[index]} {v2[index]}")
     diff_min = np.nanmin(diff)
     diff_max = np.nanmax(diff)
 
@@ -111,8 +164,11 @@ def main():
     # Top: original variables
     if ndim == 1:
         ax1 = fig.add_subplot(gs[0, :])
-        ax1.plot(v1, label=args.param1)
-        ax1.plot(v2, label=args.param2)
+        x_vals = np.array(range(len(v1)))
+        if args.subset:
+            x_vals += index1
+        ax1.plot(x_vals, v1, label=args.param1)
+        ax1.plot(x_vals, v2, label=args.param2)
         ax1.set_ylabel(f"Value{units_label}")
         ax1.set_title("Variables")
         ax1.legend()
@@ -146,7 +202,7 @@ def main():
     # Middle: difference plot
     axdiff = fig.add_subplot(gs[1, :])
     if ndim == 1:
-        axdiff.plot(diff, color="k")
+        axdiff.plot(x_vals, diff, color="k")
         axdiff.set_ylabel(f"Difference{units_label}")
         axdiff.set_xlabel("Index")
         axdiff.set_title(f"{args.param1} - {args.param2}")

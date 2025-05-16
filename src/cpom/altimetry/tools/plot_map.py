@@ -919,12 +919,14 @@ def main(args):
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
                             )._FillValue
-                            if np.isinstance(vals[0], np.float):
+                            if isinstance(vals[0], np.floating):
                                 vals[vals == fill_value] = np.nan
-                            elif np.isinstance(vals[0], int):
+                            elif isinstance(vals[0], int):
                                 vals[vals == fill_value] = None
-                        except AttributeError:
-                            pass
+                            log.info("FillValue found: %s", fill_value)
+                        except AttributeError as exc:
+                            log.info("No FillValue found for %s : %s", params[i], exc)
+
                         lats = get_variable(nc, latnames[i])[:].data
                         if lats.ndim == 2:
                             lats = lats.flatten()
