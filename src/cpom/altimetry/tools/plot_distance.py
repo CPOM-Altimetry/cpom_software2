@@ -68,6 +68,25 @@ def main():
     parser.add_argument("--lat2", required=True, help="Latitude variable path in second file")
     parser.add_argument("--lon2", required=True, help="Longitude variable path in second file")
     parser.add_argument(
+        "--list", required=False, help="print differences to stdout", action="store_true"
+    )
+
+    parser.add_argument(
+        "--elev1",
+        required=True,
+        help=(
+            "Elevation parameter, " "which must be not nan/FV for an difference to be calculated"
+        ),
+    )
+    parser.add_argument(
+        "--elev2",
+        required=True,
+        help=(
+            "Elevation parameter, " "which must be not nan/FV for an difference to be calculated"
+        ),
+    )
+
+    parser.add_argument(
         "--plot-range",
         nargs=2,
         type=float,
@@ -83,6 +102,11 @@ def main():
     lon1 = get_variable(ds1, args.lon1)
     lat2 = get_variable(ds2, args.lat2)
     lon2 = get_variable(ds2, args.lon2)
+    elev1 = get_variable(ds1, args.elev1)
+    elev2 = get_variable(ds2, args.elev2)
+
+    bad_elevs = np.where(np.abs(elev1) > 5000.0)[0]
+    print(f"bad_elevs={bad_elevs}")
     ds1.close()
     ds2.close()
 
@@ -90,6 +114,19 @@ def main():
         raise ValueError("Latitude/longitude arrays must have the same shape in both files.")
 
     distances = haversine(lat1, lon1, lat2, lon2)
+    bad_elevs = np.where(np.abs(elev1) > 5000.0)[0]
+    distances[bad_elevs] = np.nan
+    bad_elevs = np.where(np.abs(elev2) > 5000.0)[0]
+    distances[bad_elevs] = np.nan
+    bad_elevs = ~np.isfinite(elev2)
+    distances[bad_elevs] = np.nan
+
+    if args.list:
+        for index, dist in enumerate(distances):
+            print(
+                f"{index}: dist={dist} elev1 {elev1[index]} elev2"
+                f" {elev2[index]} elev_diff {elev2[index]-elev1[index]}"
+            )
 
     # Compute basic stats
     min_dist = distances.min()
