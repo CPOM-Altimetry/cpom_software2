@@ -1,0 +1,11 @@
+algorithm_list: 
+  - process_grid_altimetry_data
+  - process_compute_stats_per_grid_cell
+
+
+process_grid_altimetry_data: 
+ - area : 'greenland'
+ - binsize : 5000
+ - dataset : cryotempo_c001
+ 
+ - grid_area
