@@ -490,11 +490,13 @@ class Polarplot:
 
                 if n_vals != len(lats):
                     raise ValueError(
-                        f"length of vals array must equal lats array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lats array {len(lats)} in "
+                        f"data set {ds_num}"
                     )
                 if n_vals != len(lons):
                     raise ValueError(
-                        f"length of vals array must equal lons array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lons array {len(lons)} "
+                        f"in data set {ds_num}"
                     )
 
                 # convert to ndarray if a list

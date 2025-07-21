@@ -116,6 +116,7 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
             var = var[part]
         except (KeyError, IndexError):
             sys.exit(f"{RED}NetCDF parameter '{nc_var_path}' not found{NC}")
+
     return var
 
 
@@ -915,6 +916,8 @@ def main(args):
                         vals = get_variable(nc, params[i])[:].data
                         if vals.ndim == 3:
                             vals = vals[0].flatten()
+                        elif vals.ndim == 2:
+                            vals = vals.flatten()
                         try:
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
