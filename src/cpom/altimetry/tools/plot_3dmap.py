@@ -56,6 +56,10 @@ fine. Needs further investigation.
 
 """
 
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-return-statements
+# pylint: disable=too-many-lines
+
 import argparse
 import glob
 import logging
@@ -69,11 +73,6 @@ from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
 from cpom.areas.area_plot3d import plot_3d_area
 from cpom.areas.areas3d import Area3d, list_all_3d_area_definition_names
-
-# pylint: disable=too-many-branches
-# pylint: disable=too-many-return-statements
-# pylint: disable=too-many-lines
-
 
 # Colour constants for highlighting terminal output text
 RED = "\033[0;31m"  # pylint: disable=invalid-name
