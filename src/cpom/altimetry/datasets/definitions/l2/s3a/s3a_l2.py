@@ -6,11 +6,9 @@ dataset_definition = {
     "l2_dir": os.environ["CPDATA_DIR"] + "/SATS/RA/S3A/L2/SR_2_LAN_NT",
     "search_pattern": "S3A_SR_2_LAN____*.SEN3/standard_measurement.nc",  # Search pattern for L2 file discovery."
     "yyyymm_str_fname_indices": [-83, -75],  # Comes from dir not filename for sentinel
-    
     "data_packed_in_blocks": False,
     "time_epoch": "2000-01-01T00:00:00",
     "latency": "NTC",
-
     "latitude_param": "lat_20_ku",
     "longitude_param": "lon_20_ku",
     "latitude_nadir_param": "lat_cor_20_ku",

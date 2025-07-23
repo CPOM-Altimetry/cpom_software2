@@ -6,10 +6,8 @@ dataset_definition = {
     "l2_dir": os.environ["CPDATA_DIR"] + "/SATS/RA/ENV/L2/GDR_v3",
     "search_pattern": "**/ENV_RA_2_GDR____*.nc",  # Search pattern for L2 file discovery."
     "yyyymm_str_fname_indices": [-80, -72],
-
     "time_epoch": "2000-01-01T00:00:00",
     "latency": "NTC",
-    
     "data_packed_in_blocks": False,
     "latitude_param": "lat_cor_20",
     "longitude_param": "lon_cor_20",

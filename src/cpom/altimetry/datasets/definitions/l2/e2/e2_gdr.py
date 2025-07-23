@@ -7,7 +7,6 @@ dataset_definition = {
     "search_pattern": "**/E2_REAP_ERS_ALT_2__*.NC",
     "yyyymm_str_fname_indices": [-39, -31],
     "time_epoch": "1990-01-01T00:00:00",
-
     "latency": "NTC",
     "data_packed_in_blocks": True,
     "latitude_param": "offset_lat_20hz",

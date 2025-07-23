@@ -23,7 +23,7 @@ To add a dataset :
 """
 
 # pylint: disable=too-many-arguments
-# pylint 
+# pylint
 # pylint: disable=no-member
 
 import importlib
@@ -45,6 +45,7 @@ dataset_list = [
     "e2_fdr4alt",
     "ev_fdr4alt",
 ]
+
 
 class AltDataset:
     """Class to support Altimetry data sets."""
@@ -102,13 +103,13 @@ class AltDataset:
                 if k not in dataset_params:
                     setattr(self, k, v)
 
-    #------------------------------------------# 
+    # ------------------------------------------#
     # Getters for L1 dirs, files and variables #
-    #------------------------------------------#           
+    # ------------------------------------------#
 
-    #------------------------------------------# 
+    # ------------------------------------------#
     # Getters for L2 dirs, files and variables #
-    #------------------------------------------#
+    # ------------------------------------------#
     def get_files_dir(
         self, cyclenum: int | None = None, hemisphere: str | None = None, theme: str = "land_ice"
     ) -> str:
@@ -147,7 +148,7 @@ class AltDataset:
         modes: List = ["lrm", "sin"],
         hemisphere: str | None = None,  # Optional hemisphere filter for fdr4alt
         theme: str = "land_ice",  # Optional theme filter for fdr4alt
-    ) -> List[Path]: # pylint: disable=R0917
+    ) -> List[Path]:  # pylint: disable=R0917
         """
         Returns an array of files for dataset <self.name>.
         Options:
@@ -170,7 +171,9 @@ class AltDataset:
         ):
             valid_files = []
             for file in Path(search_dir).rglob(search_pattern):
-                date_obj, _, _, _ = self.get_product_startdate_from_filename(file, yyyymm_str_fname_indices)
+                date_obj, _, _, _ = self.get_product_startdate_from_filename(
+                    file, yyyymm_str_fname_indices
+                )
                 if date_obj is not None and min_dt_time <= date_obj <= max_dt_time:
                     valid_files.append(file)
             return valid_files
@@ -178,11 +181,11 @@ class AltDataset:
         base_dir = self.get_l2_dir(cyclenum, hemisphere, theme)
         if cyclenum is not None:
             return List[Path(search_dir).rglob(self.search_pattern)]
-        
+
         if isinstance(min_dt_time, str):
             min_dt_time = datetime.strptime(min_dt_time, "%Y%m%d")
             max_dt_time = datetime.strptime(max_dt_time, "%Y%m%d")
-        
+
         if min_dt_time.year == max_dt_time.year and min_dt_time.month == max_dt_time.month:
             search_dir = base_dir / f"{min_dt_time.year:04d}" / f"{min_dt_time.month:02d}"
         elif min_dt_time.year == max_dt_time.year:
@@ -216,7 +219,9 @@ class AltDataset:
 
         return valid_files
 
-    def get_product_startdate_from_filename(self, filename: str, yyyymm_str_fname_indices: list[int]) -> tuple:
+    def get_product_startdate_from_filename(
+        self, filename: str, yyyymm_str_fname_indices: list[int]
+    ) -> tuple:
         """
         Extract L2 product start date from the filename
         filename is the full path of a L2 file
@@ -227,7 +232,9 @@ class AltDataset:
         else:
             fname = filename.name
 
-        date_obj = datetime.strptime(fname[yyyymm_str_fname_indices[0]:yyyymm_str_fname_indices[1]],"%Y%m%d")
+        date_obj = datetime.strptime(
+            fname[yyyymm_str_fname_indices[0] : yyyymm_str_fname_indices[1]], "%Y%m%d"
+        )
 
         if date_obj is None:
             raise ValueError(f"Could not extract date from filename {filename}")
@@ -248,6 +255,7 @@ class AltDataset:
         Returns:
             np.array|List[np.array]: The retrieved variable(s) as array(s).
         """
+
         def get_single_var(nc, nc_var_path):
             parts = nc_var_path.split("/")
             var = nc
@@ -264,8 +272,9 @@ class AltDataset:
         else:
             raise TypeError("nc_var_paths must be a string or a list/tuple of strings.")
 
-
-    def get_unified_time_epoch_offset(self, goal_epoch_str: str = "1991-01-01", this_epoch_str: str = None) -> float:
+    def get_unified_time_epoch_offset(
+        self, goal_epoch_str: str = "1991-01-01", this_epoch_str: str = None
+    ) -> float:
         """
         Convert a timestamp from one custom epoch to another.
 
@@ -277,7 +286,7 @@ class AltDataset:
         - float: the timestamp relative to `goal_epoch_str`
         """
         if this_epoch_str is None:
-            this_epoch_str = self.time_epoch        
+            this_epoch_str = self.time_epoch
 
         this_epoch = datetime.fromisoformat(this_epoch_str)  # + timedelta(days=1)
         goal_epoch = datetime.fromisoformat(goal_epoch_str)

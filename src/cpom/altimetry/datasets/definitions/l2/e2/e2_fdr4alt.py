@@ -6,10 +6,8 @@ dataset_definition = {
     "l2_dir": os.environ["CPDATA_DIR"] + "/SATS/RA/ERS2/L2/FDR4ALT/TDP",
     "search_pattern": "**/ER2_F4A_ALT_TDP_LI_GREENL*.nc",  # Search pattern for L2 file discovery."
     "yyyymm_str_fname_indices": [-23, -31],
-        
     "time_epoch": "1950-01-01T00:00:00",
     "latency": "NTC",
-    
     "latitude_param": "ice_sheet_lat_poca",
     "longitude_param": "ice_sheet_lon_poca",
     "latitude_nadir_param": "latitude",
