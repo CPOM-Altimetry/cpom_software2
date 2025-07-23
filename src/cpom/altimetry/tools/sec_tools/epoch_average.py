@@ -60,54 +60,57 @@ Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of
 #   all use os, so import here
 # -------------------------------------------------------------------------------------------------------------
 
-import os
-import sys
 import logging
+import os
 import resource
+import sys
 
-log=logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
-def epoch_average(griddir=None,
-                  dhfile=None,
-                  timefile=None,
-                  outdir=None,
-                  epoch_length=None,
-                  epoch_start=None,
-                  epoch_end=None,
-                  gia_model=None):
+def epoch_average(
+    griddir=None,
+    dhfile=None,
+    timefile=None,
+    outdir=None,
+    epoch_length=None,
+    epoch_start=None,
+    epoch_end=None,
+    gia_model=None,
+):
     # ----------------------------------------------------------------------
     #  Import python modules
     # ----------------------------------------------------------------------
 
-    import sys
+    import array as array
     import glob
     import math
+    import sys
     import time
+    from calendar import isleap
+    from datetime import datetime, timedelta
+    from timeit import default_timer as timer
+
+    import git
     import numpy as np
     import numpy.ma as ma
-    from timeit import default_timer as timer
-    from datetime import datetime, timedelta
-    from calendar import isleap
-    import array as array
-    import git
     from astropy.stats import sigma_clipped_stats  # Robust stats
+
+    from cpom.altimetry.tools.surfacefit import SurfacefitInfo
 
     # ----------------------------------------------------------------------
     #  Import CPOM python modules
     # ----------------------------------------------------------------------
-
     from cpom.gia_models.gia_models import GIAs
     from cpom.gridding.gridareas import GridArea
-    from cpom.altimetry.tools.surfacefit import SurfacefitInfo
 
     # -------------------------------------------------------------------------------------------------------------
     # Start processing
     # -------------------------------------------------------------------------------------------------------------
 
-    print('------------------------------------------------')
-    print('Epoch averaging')
-    print('------------------------------------------------')
+    print("------------------------------------------------")
+    print("Epoch averaging")
+    print("------------------------------------------------")
 
     start_time = datetime.now()
 
@@ -116,33 +119,35 @@ def epoch_average(griddir=None,
     # -------------------------------------------------------------------------------------------------------------
 
     if griddir is not None and (dhfile is not None or timefile is not None):
-        print('If --griddir is specified, do not specify --dhfile and --timefile, or vv.')
-        print('Note --griddir is for specifying a directory containing input files')
-        print('Note --dhfile and --timefile are for specifying input files themselves')
+        print("If --griddir is specified, do not specify --dhfile and --timefile, or vv.")
+        print("Note --griddir is for specifying a directory containing input files")
+        print("Note --dhfile and --timefile are for specifying input files themselves")
         sys.exit()
 
     if (dhfile is None or timefile is None) and griddir is None:
-        sys.exit('missing command line argument(s) : either --griddir or --dhfile and --timefile must be included')
+        sys.exit(
+            "missing command line argument(s) : either --griddir or --dhfile and --timefile must be included"
+        )
 
     if griddir:
         if not os.path.exists(griddir):
-            sys.exit('--griddir path ({}) does not exist'.format(griddir))
+            sys.exit("--griddir path ({}) does not exist".format(griddir))
 
     if outdir is None:
-        print('No separate output directory specified')
+        print("No separate output directory specified")
         if dhfile:
             outdir = os.path.split(dhfile)[0]
         else:
             outdir = griddir
-        print('Output directory set to same as input grid files: ', outdir)
+        print("Output directory set to same as input grid files: ", outdir)
 
     # Set default 30 day epoch length
     if epoch_length is None:
-        epoch_length = '30'
+        epoch_length = "30"
 
     # Set default epoch start time to 1991.0
     if epoch_start is None:
-        epoch_start = '1991.0'
+        epoch_start = "1991.0"
 
     # -------------------------------------------------------------------------------------------------------------
     # Check output directory
@@ -152,38 +157,38 @@ def epoch_average(griddir=None,
         try:
             os.makedirs(outdir)
         except:
-            log.error('Can not create output directory {}'.format(outdir))
+            log.error("Can not create output directory {}".format(outdir))
             raise OSError("Can't create output directory (%s)!" % (outdir))
 
     # -------------------------------------------------------------------------------------------------------------
     # Report on settings used
     # -------------------------------------------------------------------------------------------------------------
 
-    print('epoch_length=', epoch_length)
-    print('epoch_start=', epoch_start)
+    print("epoch_length=", epoch_length)
+    print("epoch_start=", epoch_start)
     if epoch_end is not None:
-        print('epoch_end=', epoch_end)
+        print("epoch_end=", epoch_end)
     else:
-        print('epochs will end at time of last datapoint, rounded up to a full epoch')
+        print("epochs will end at time of last datapoint, rounded up to a full epoch")
     if gia_model is not None:
-        print('GIA correction will be applied, using model ', gia_model)
+        print("GIA correction will be applied, using model ", gia_model)
     else:
-        print('No GIA correction will be applied')
+        print("No GIA correction will be applied")
 
     # -------------------------------------------------------------------------------------------------------------
     # Retrieve GIT commit hash code (uniquely identifies software commit version)
     # This commit version can be retrieved at a later date using 'git checkout commit_hash'
     # -------------------------------------------------------------------------------------------------------------
 
-    repo = git.Repo(os.environ['CPOM_SOFTWARE_DIR'])
+    repo = git.Repo(os.environ["CPOM_SOFTWARE_DIR"])
     git_commit_sha = repo.head.object.hexsha
     git_time_of_commit = time.gmtime(repo.head.commit.committed_date)
     git_day = git_time_of_commit.tm_mday
     git_month = git_time_of_commit.tm_mon
     git_year = git_time_of_commit.tm_year
 
-    print('GIT commit software version :', git_commit_sha)
-    print('GIT commit date : {}/{}/{}'.format(git_day, git_month, git_year))
+    print("GIT commit software version :", git_commit_sha)
+    print("GIT commit date : {}/{}/{}".format(git_day, git_month, git_year))
 
     # -------------------------------------------------------------------------------------------------------------
     # Find the dh and time files (.npz format) to use.
@@ -191,61 +196,69 @@ def epoch_average(griddir=None,
 
     if griddir:
 
-        dhfiles = glob.glob(griddir + '/*.dh.npz')
+        dhfiles = glob.glob(griddir + "/*.dh.npz")
         n_dhfiles = len(dhfiles)
         if n_dhfiles == 1:
             dhfile = dhfiles[0]
         elif n_dhfiles == 0:
-            log.error('No *.dh.npz files found in {}'.format(griddir))
-            sys.exit('No *.dh.npz files found in {}'.format(griddir))
+            log.error("No *.dh.npz files found in {}".format(griddir))
+            sys.exit("No *.dh.npz files found in {}".format(griddir))
         else:
-            log.error('More than one *.dh.npz file found in {}'.format(griddir))
-            sys.exit('More than one *.dh.npz file found in {}. Use --dhfile argument instead.'.format(griddir))
+            log.error("More than one *.dh.npz file found in {}".format(griddir))
+            sys.exit(
+                "More than one *.dh.npz file found in {}. Use --dhfile argument instead.".format(
+                    griddir
+                )
+            )
 
-        timefiles = glob.glob(griddir + '/*.time.npz')
+        timefiles = glob.glob(griddir + "/*.time.npz")
         n_timefiles = len(timefiles)
         if n_timefiles == 1:
             timefile = timefiles[0]
         elif n_gridfiles == 0:
-            log.error('No *.time.npz files found in {}'.format(griddir))
-            sys.exit('No *.time.npz files found in {}'.format(griddir))
+            log.error("No *.time.npz files found in {}".format(griddir))
+            sys.exit("No *.time.npz files found in {}".format(griddir))
         else:
-            log.error('More than one *.time.npz file found in {}'.format(griddir))
-            sys.exit('More than one *.time.npz file found in {}. Use --timefile argument instead.'.format(griddir))
+            log.error("More than one *.time.npz file found in {}".format(griddir))
+            sys.exit(
+                "More than one *.time.npz file found in {}. Use --timefile argument instead.".format(
+                    griddir
+                )
+            )
 
     # -------------------------------------------------------------------------------------------------------------
     # Load dh and time grids from file.
     # -------------------------------------------------------------------------------------------------------------
 
-    if os.path.splitext(dhfile)[1] != '.npz':
-        log.error(dhfile + ' must have .npz extension')
-        sys.exit(dhfile + ' must have .npz extension')
+    if os.path.splitext(dhfile)[1] != ".npz":
+        log.error(dhfile + " must have .npz extension")
+        sys.exit(dhfile + " must have .npz extension")
 
     if not os.path.exists(dhfile):
-        log.error(dhfile + ' does not exist')
-        sys.exit(dhfile + ' does not exist')
+        log.error(dhfile + " does not exist")
+        sys.exit(dhfile + " does not exist")
 
-    log.info('Loading dh grid from {}...'.format(dhfile))
-    print('Loading dh grid from {}...'.format(dhfile))
+    log.info("Loading dh grid from {}...".format(dhfile))
+    print("Loading dh grid from {}...".format(dhfile))
 
     this_dh = np.load(dhfile, allow_pickle=True)
 
-    dh_grid = this_dh.get('dh_grid')
+    dh_grid = this_dh.get("dh_grid")
 
-    if os.path.splitext(timefile)[1] != '.npz':
-        log.error(timefile + ' must have .npz extension')
-        sys.exit(timefile + ' must have .npz extension')
+    if os.path.splitext(timefile)[1] != ".npz":
+        log.error(timefile + " must have .npz extension")
+        sys.exit(timefile + " must have .npz extension")
 
     if not os.path.exists(timefile):
-        log.error(timefile + ' does not exist')
-        sys.exit(timefile + ' does not exist')
+        log.error(timefile + " does not exist")
+        sys.exit(timefile + " does not exist")
 
-    log.info('Loading time grid from {}...'.format(timefile))
-    print('Loading time grid from {}...'.format(timefile))
+    log.info("Loading time grid from {}...".format(timefile))
+    print("Loading time grid from {}...".format(timefile))
 
     this_time = np.load(timefile, allow_pickle=True)
 
-    time_grid = this_time.get('time_grid')
+    time_grid = this_time.get("time_grid")
 
     # -------------------------------------------------------------------------------------------------------------
     # Read grid info from the data files, to pass into info files for this dataset
@@ -253,11 +266,11 @@ def epoch_average(griddir=None,
 
     filename, file_extension = os.path.splitext(dhfile)
     filename, file_extension = os.path.splitext(filename)
-    info_filename = filename + '.info'
+    info_filename = filename + ".info"
     sinfo = SurfacefitInfo(info_filename)
     if sinfo.key_error:
-        log.error('.info file error : {}'.format(sinfo.key_error))
-        sys.exit('.info file error : {}'.format(sinfo.key_error))
+        log.error(".info file error : {}".format(sinfo.key_error))
+        sys.exit(".info file error : {}".format(sinfo.key_error))
 
     # -------------------------------------------------------------------------------------------------------------
     # If a GIA model is given, read it in. Set up grid (only needed to calculate GIA)
@@ -286,55 +299,65 @@ def epoch_average(griddir=None,
 
     min_start_year = int(data_mintime) + epoch_year
     if isleap(min_start_year):
-        days_of_year = 366. * math.modf(float(data_mintime))[0]
+        days_of_year = 366.0 * math.modf(float(data_mintime))[0]
     else:
-        days_of_year = 365. * math.modf(float(data_mintime))[0]
+        days_of_year = 365.0 * math.modf(float(data_mintime))[0]
     dtstart = datetime(min_start_year, 1, 1, 0, 0, 0) + timedelta(days=days_of_year)
 
     max_start_year = int(data_maxtime) + epoch_year
     if isleap(max_start_year):
-        days_of_year = 366. * math.modf(float(data_maxtime))[0]
+        days_of_year = 366.0 * math.modf(float(data_maxtime))[0]
     else:
-        days_of_year = 365. * math.modf(float(data_maxtime))[0]
+        days_of_year = 365.0 * math.modf(float(data_maxtime))[0]
     dtend = datetime(max_start_year, 1, 1, 0, 0, 0) + timedelta(days=days_of_year)
 
-    log.info('Data start time: {}'.format(dtstart))
-    log.info('Data end time: {}'.format(dtend))
-    print('Data start time: ', dtstart)
-    print('Data end time: ', dtend)
+    log.info("Data start time: {}".format(dtstart))
+    log.info("Data end time: {}".format(dtend))
+    print("Data start time: ", dtstart)
+    print("Data end time: ", dtend)
 
     # if user has supplied their own start time, read in and round it, otherwise use the default
 
     # Check if epoch_start is given in DD/MM/YYYY format
-    if '/' in epoch_start:
-        epoch_start_list = epoch_start.split('/')
+    if "/" in epoch_start:
+        epoch_start_list = epoch_start.split("/")
         if len(epoch_start_list) != 3:
-            log.error('--epoch_start must be either decimal year YYYY.yy or dd/mm/yyyy')
-            sys.exit('--epoch_start must be either decimal year YYYY.yy or dd/mm/yyyy')
+            log.error("--epoch_start must be either decimal year YYYY.yy or dd/mm/yyyy")
+            sys.exit("--epoch_start must be either decimal year YYYY.yy or dd/mm/yyyy")
         epoch_start_day = int(epoch_start_list[0])
         epoch_start_month = int(epoch_start_list[1])
         epoch_start_year = int(epoch_start_list[2])
         if epoch_start_day not in range(1, 32):
-            log.error('--epoch_start dd/mm/yyyy, dd must be in range 1-31')
-            sys.exit('--epoch_start dd/mm/yyyy, dd must be in range 1-31')
+            log.error("--epoch_start dd/mm/yyyy, dd must be in range 1-31")
+            sys.exit("--epoch_start dd/mm/yyyy, dd must be in range 1-31")
         if epoch_start_month not in range(1, 13):
-            log.error('--epoch_start dd/mm/yyyy, mm must be in range 1-12')
-            sys.exit('--epoch_start dd/mm/yyyy, mm must be in range 1-12')
+            log.error("--epoch_start dd/mm/yyyy, mm must be in range 1-12")
+            sys.exit("--epoch_start dd/mm/yyyy, mm must be in range 1-12")
         if epoch_start_year < 1991 or epoch_start_year > datetime.today().year:
-            log.error('--epoch_start dd/mm/yyyy, yyyy must be in range 1990-{}'.format(datetime.today().year))
-            sys.exit('--epoch_start dd/mm/yyyy, yyyy must be in range 1990-{}'.format(datetime.today().year))
+            log.error(
+                "--epoch_start dd/mm/yyyy, yyyy must be in range 1990-{}".format(
+                    datetime.today().year
+                )
+            )
+            sys.exit(
+                "--epoch_start dd/mm/yyyy, yyyy must be in range 1990-{}".format(
+                    datetime.today().year
+                )
+            )
         epoch_start_dt = datetime(epoch_start_year, epoch_start_month, epoch_start_day, 0, 0, 0)
     else:
         # epoch_start is given in decimal years
         epoch_start_decimal_years = float(epoch_start)
         epoch_start_year = int(epoch_start_decimal_years)
         if isleap(epoch_start_year):
-            days_of_year = 366. * math.modf(float(epoch_start))[0]
+            days_of_year = 366.0 * math.modf(float(epoch_start))[0]
         else:
-            days_of_year = 365. * math.modf(float(epoch_start))[0]
+            days_of_year = 365.0 * math.modf(float(epoch_start))[0]
         this_start_dt = datetime(epoch_start_year, 1, 1, 0, 0, 0) + timedelta(days=days_of_year)
-        epoch_start_dt = this_start_dt.replace(microsecond=0, second=0, minute=0, hour=0)  # rounded down
-    epoch_start_days = (epoch_start_dt - datetime(epoch_start_dt.year, 1, 1))
+        epoch_start_dt = this_start_dt.replace(
+            microsecond=0, second=0, minute=0, hour=0
+        )  # rounded down
+    epoch_start_days = epoch_start_dt - datetime(epoch_start_dt.year, 1, 1)
     if isleap(epoch_start_dt.year):
         fractional_year = float(epoch_start_days.days) / 366.0
     else:
@@ -346,34 +369,42 @@ def epoch_average(griddir=None,
 
     if epoch_end:
         # Check if epoch_end is given in DD/MM/YYYY format
-        if '/' in epoch_end:
-            epoch_end_list = epoch_end.split('/')
+        if "/" in epoch_end:
+            epoch_end_list = epoch_end.split("/")
             if len(epoch_end_list) != 3:
-                log.error('--epoch_end must be either decimal year YYYY.yy or dd/mm/yyyy')
-                sys.exit('--epoch_end must be either decimal year YYYY.yy or dd/mm/yyyy')
+                log.error("--epoch_end must be either decimal year YYYY.yy or dd/mm/yyyy")
+                sys.exit("--epoch_end must be either decimal year YYYY.yy or dd/mm/yyyy")
             epoch_end_day = int(epoch_end_list[0])
             epoch_end_month = int(epoch_end_list[1])
             epoch_end_year = int(epoch_end_list[2])
             if epoch_end_day not in range(1, 32):
-                log.error('--epoch_end dd/mm/yyyy, dd must be in range 1-31')
-                sys.exit('--epoch_end dd/mm/yyyy, dd must be in range 1-31')
+                log.error("--epoch_end dd/mm/yyyy, dd must be in range 1-31")
+                sys.exit("--epoch_end dd/mm/yyyy, dd must be in range 1-31")
             if epoch_end_month not in range(1, 13):
-                log.error('--epoch_end dd/mm/yyyy, mm must be in range 1-12')
-                sys.exit('--epoch_end dd/mm/yyyy, mm must be in range 1-12')
+                log.error("--epoch_end dd/mm/yyyy, mm must be in range 1-12")
+                sys.exit("--epoch_end dd/mm/yyyy, mm must be in range 1-12")
             if epoch_end_year < 1991 or epoch_end_year > datetime.today().year:
-                log.error('--epoch_end dd/mm/yyyy, yyyy must be in range 1990-{}'.format(datetime.today().year))
-                sys.exit('--epoch_end dd/mm/yyyy, yyyy must be in range 1990-{}'.format(datetime.today().year))
+                log.error(
+                    "--epoch_end dd/mm/yyyy, yyyy must be in range 1990-{}".format(
+                        datetime.today().year
+                    )
+                )
+                sys.exit(
+                    "--epoch_end dd/mm/yyyy, yyyy must be in range 1990-{}".format(
+                        datetime.today().year
+                    )
+                )
             epoch_end_dt = datetime(epoch_end_year, epoch_end_month, epoch_end_day, 0, 0, 0)
         else:
             # epoch_end is given in decimal years
             epoch_end_decimal_years = float(epoch_end)
             epoch_end_year = int(epoch_end_decimal_years)
             if isleap(epoch_end_year):
-                days_of_year = 366. * math.modf(float(epoch_end))[0]
+                days_of_year = 366.0 * math.modf(float(epoch_end))[0]
             else:
-                days_of_year = 365. * math.modf(float(epoch_end))[0]
+                days_of_year = 365.0 * math.modf(float(epoch_end))[0]
             epoch_end_dt = datetime(epoch_end_year, 1, 1, 0, 0, 0) + timedelta(days=days_of_year)
-        epoch_end_days = (epoch_end_dt - datetime(epoch_end_dt.year, 1, 1))
+        epoch_end_days = epoch_end_dt - datetime(epoch_end_dt.year, 1, 1)
         if isleap(epoch_end_dt.year):
             fractional_year = float(epoch_end_days.days) / 366.0
         else:
@@ -383,10 +414,10 @@ def epoch_average(griddir=None,
         epoch_end = data_maxtime  # in fractional years since 1991.0
         epoch_end_dt = dtend
 
-    log.info('Requested start time: {}'.format(epoch_start_dt))
-    log.info('Requested end time: {}'.format(epoch_end_dt))
-    print('Requested start time: ', epoch_start_dt)
-    print('Requested end time: ', epoch_end_dt)
+    log.info("Requested start time: {}".format(epoch_start_dt))
+    log.info("Requested end time: {}".format(epoch_end_dt))
+    print("Requested start time: ", epoch_start_dt)
+    print("Requested end time: ", epoch_end_dt)
 
     # calculate epoch limits in seconds since CPOM system epoch (ie 1991.0), and extend end time
     # if necessary to avoid truncation
@@ -397,7 +428,9 @@ def epoch_average(griddir=None,
 
     num_epochs = math.ceil(num_days_in_period / epoch_length)
 
-    epoch_lo_dt = np.arange(epoch_start_dt, epoch_end_dt, timedelta(days=epoch_length)).astype(datetime)
+    epoch_lo_dt = np.arange(epoch_start_dt, epoch_end_dt, timedelta(days=epoch_length)).astype(
+        datetime
+    )
     epoch_hi_dt = epoch_lo_dt + timedelta(days=epoch_length)
 
     epoch_lo = np.full(num_epochs, np.nan)
@@ -422,8 +455,8 @@ def epoch_average(griddir=None,
         epoch_end = epoch_hi.max()
         epoch_end_dt = epoch_hi_dt.max()
 
-    log.info('End time after last epoch allowed to complete in full: {}'.format(epoch_end_dt))
-    print('End time after last epoch allowed to complete in full: ', epoch_end_dt)
+    log.info("End time after last epoch allowed to complete in full: {}".format(epoch_end_dt))
+    print("End time after last epoch allowed to complete in full: ", epoch_end_dt)
 
     # -------------------------------------------------------------------------------------------------------------
     # The default epoch start will make sure that all missions use the same, regular set of epochs where
@@ -441,17 +474,17 @@ def epoch_average(griddir=None,
         epoch_end_dt = epoch_hi_dt.max()
         num_epochs = len(usable_epochs[0])
     else:
-        log.error('No data found within epoch limits')
-        sys.exit('No data found within epoch limits')
+        log.error("No data found within epoch limits")
+        sys.exit("No data found within epoch limits")
 
-    log.info('After removal of empty epochs, final epoch summary: ')
-    log.info('  Number of epochs: {}'.format(num_epochs))
-    log.info('  Epoch start: {}'.format(epoch_start_dt))
-    log.info('  Epoch end: {}'.format(epoch_end_dt))
-    print('After removal of empty epochs, final epoch summary: ')
-    print('  Number of epochs: ', num_epochs)
-    print('  Epoch start: ', epoch_start_dt)
-    print('  Epoch end: ', epoch_end_dt)
+    log.info("After removal of empty epochs, final epoch summary: ")
+    log.info("  Number of epochs: {}".format(num_epochs))
+    log.info("  Epoch start: {}".format(epoch_start_dt))
+    log.info("  Epoch end: {}".format(epoch_end_dt))
+    print("After removal of empty epochs, final epoch summary: ")
+    print("  Number of epochs: ", num_epochs)
+    print("  Epoch start: ", epoch_start_dt)
+    print("  Epoch end: ", epoch_end_dt)
 
     # -------------------------------------------------------------------------------------------------------------
     # Get grid dimensions from the input dh array
@@ -490,15 +523,27 @@ def epoch_average(griddir=None,
     # Work out how many grid cells are used, irrespective of number of epochs used in the cell
     # -------------------------------------------------------------------------------------------------------------
 
-    total_cells=nrows*ncols
-    current_cell=0
+    total_cells = nrows * ncols
+    current_cell = 0
     start = timer()
     for col in range(ncols):
         for row in range(nrows):
             current_cell += 1
             if np.remainder(current_cell, 100000) == 0:
-                log.info('Processed {} of {} grid cells in {} '.format((100. * current_cell / total_cells), total_cells, timedelta(seconds=timer()-start)))
-                print('Processed {:.1f}% '.format(100. * current_cell / total_cells), ' of ', total_cells, ' grid cells in ', timedelta(seconds=timer()-start))
+                log.info(
+                    "Processed {} of {} grid cells in {} ".format(
+                        (100.0 * current_cell / total_cells),
+                        total_cells,
+                        timedelta(seconds=timer() - start),
+                    )
+                )
+                print(
+                    "Processed {:.1f}% ".format(100.0 * current_cell / total_cells),
+                    " of ",
+                    total_cells,
+                    " grid cells in ",
+                    timedelta(seconds=timer() - start),
+                )
             if dh_grid[row, col]:
                 dh = np.asarray(dh_grid[row, col].tolist())
                 time = np.asarray(time_grid[row, col].tolist())
@@ -508,7 +553,8 @@ def epoch_average(griddir=None,
                         if gia_model:
                             this_min_time = min(time[ok])
                             this_uplift = uplift_grid[row, col]
-                            for j in ok: dh[j] = dh[j] - ((time[j] - this_min_time) * this_uplift)
+                            for j in ok:
+                                dh[j] = dh[j] - ((time[j] - this_min_time) * this_uplift)
                         this_stats = sigma_clipped_stats(dh[ok])
                         dh_ave[i, row, col] = this_stats[0]
                         input_dh_dens[i, row, col] = len(ok[0])
@@ -522,137 +568,199 @@ def epoch_average(griddir=None,
     cell_count = len(ok[0])
 
     end_time = datetime.now()
-    log.info('Duration: {}'.format(end_time - start_time))
-    print('Duration: {}'.format(end_time - start_time))
+    log.info("Duration: {}".format(end_time - start_time))
+    print("Duration: {}".format(end_time - start_time))
 
     # ----------------------------------------------------------------------------------
     # Save output grid arrays to disk as npz file, using dh filename as guide to output filename
     # ----------------------------------------------------------------------------------
 
     f_head, f_tail = os.path.split(dhfile)
-    f_tail2 = f_tail.replace('surfacefit', 'epoch_average')
-    f_tail3 = f_tail2.replace('.dh', '')
-    output_filename = outdir + '/' + f_tail3
+    f_tail2 = f_tail.replace("surfacefit", "epoch_average")
+    f_tail3 = f_tail2.replace(".dh", "")
+    output_filename = outdir + "/" + f_tail3
 
-    log.info('Saving epoch averaged data as {}'.format(output_filename))
-    print('Saving epoch averaged data as ', output_filename)
-    np.savez(output_filename,
-             dh_ave=dh_ave,
-             input_dh_dens=input_dh_dens,
-             input_dh_stddev=input_dh_stddev,
-             input_dh_start_time=input_dh_start_time,
-             input_dh_end_time=input_dh_end_time,
-             epoch_lo=epoch_lo,
-             epoch_hi=epoch_hi,
-             epoch_lo_dt=epoch_lo_dt,
-             epoch_hi_dt=epoch_hi_dt)
+    log.info("Saving epoch averaged data as {}".format(output_filename))
+    print("Saving epoch averaged data as ", output_filename)
+    np.savez(
+        output_filename,
+        dh_ave=dh_ave,
+        input_dh_dens=input_dh_dens,
+        input_dh_stddev=input_dh_stddev,
+        input_dh_start_time=input_dh_start_time,
+        input_dh_end_time=input_dh_end_time,
+        epoch_lo=epoch_lo,
+        epoch_hi=epoch_hi,
+        epoch_lo_dt=epoch_lo_dt,
+        epoch_hi_dt=epoch_hi_dt,
+    )
 
     # ----------------------------------------------------------------------------------
     # Output info as text file, using dh filename as guide to output filename
     # ----------------------------------------------------------------------------------
 
-    f_tail4 = f_tail3.replace('.npz', '.info')
-    output_info_filename = outdir + '/' + f_tail4
+    f_tail4 = f_tail3.replace(".npz", ".info")
+    output_info_filename = outdir + "/" + f_tail4
 
-    log.info('Saving info as {}'.format(output_info_filename))
-    print('Saving info as ', output_info_filename)
+    log.info("Saving info as {}".format(output_info_filename))
+    print("Saving info as ", output_info_filename)
     with open(output_info_filename, "w") as file:
-        file.write('Plot area= {}\n'.format(sinfo.plot_area))
-        file.write('---------------------------------------------\n')
-        file.write('Grid Parameters\n')
-        file.write('---------------------------------------------\n')
-        file.write('Mission= {}\n'.format(sinfo.mission.upper()))
-        file.write('Grid name= {}\n'.format(sinfo.grid_name))
-        file.write('Grid scenario name= {}\n'.format(sinfo.grid_scenario))
-        file.write('Grid bin size= {}\n'.format(int(sinfo.grid_binsize)))
-        file.write('Grid projection crs= {}\n'.format(sinfo.grid_crs))
-        file.write('Grid width= {}\n'.format(int(sinfo.grid_width)))
-        file.write('Grid height= {}\n'.format(int(sinfo.grid_height)))
-        file.write('Grid x0= {}\n'.format(float(sinfo.grid_x0)))
-        file.write('Grid y0= {}\n'.format(float(sinfo.grid_y0)))
-        file.write('First cycle= {}\n'.format(int(sinfo.grid_cycle1)))
-        file.write('Last cycle= {}\n'.format(int(sinfo.grid_cycle2)))
-        file.write('First cycle start date= {}\n'.format(sinfo.grid_cycle1_start_date))
-        file.write('Last cycle start date= {}\n'.format(sinfo.grid_cycle2_start_date))
-        file.write('grid_for_surface_elevation_change git commit version= {}\n'.format(sinfo.grid_git_commit_version))
-        file.write('grid_for_surface_elevation_change git commit date= {}\n'.format(sinfo.grid_git_commit_date))
-        if sinfo.mission == 'cs2':
-            file.write('LRM Elevation parameter= {}\n'.format(sinfo.grid_elevation_param_lrm))
-            file.write('SIN Elevation parameter= {}\n'.format(sinfo.grid_elevation_param_sin))
-            file.write('LRM Power parameter= {}\n'.format(sinfo.grid_power_param_lrm))
-            file.write('SIN Power parameter= {}\n'.format(sinfo.grid_power_param_sin))
-        else:
-            file.write('Elevation parameter= {}\n'.format(sinfo.grid_elevation_param))
-            file.write('Power parameter= {}\n'.format(sinfo.grid_power_param))
-        file.write('Mask name= {}\n'.format(sinfo.grid_mask_name))
-
-        file.write('Number of cells with data in= {}\n'.format(sinfo.grid_num_cells_with_data_in))
-        file.write('Number of measurements gridded= {}\n'.format(sinfo.grid_num_measurements_gridded))
-        file.write('Number of measurements rejected due to height failure= {}\n'.format(
-            sinfo.grid_num_measurements_rejected_height_failure))
-        file.write('Number of measurements rejected due to height out of range= {}\n'.format(
-            sinfo.grid_num_measurements_rejected_height_out_of_range))
-        file.write('Grid git commit version= {}\n'.format(sinfo.grid_git_commit_version))
-        file.write('Grid git commit date= {}\n'.format(sinfo.grid_git_commit_date))
-
-        file.write('---------------------------------------------\n')
-        file.write('Surface fit tunable parameters used\n')
-        file.write('---------------------------------------------\n')
-        file.write('Sigma filter= {}\n'.format(sinfo.sf_sigma_filter))
-        file.write('Maximum number of surface fit iterations allowed= {}\n'.format(
-            sinfo.sf_max_surface_fit_iterations_allowed))
-        file.write('Maximum number of linear fit iterations allowed= {}\n'.format(
-            sinfo.sf_max_linear_fit_iterations_allowed))
-        file.write('Minimum number of measurements in cell for surface fit= {}\n'.format(
-            sinfo.sf_min_measurements_in_cell_for_surface_fit))
-        file.write('Power correction applied= {}\n'.format(sinfo.sf_power_correction_applied))
-        file.write('Power correction length in years= {:.2f}\n'.format(float(sinfo.sf_power_correction_length_years)))
-        file.write('Power correction start date= {}\n'.format(sinfo.sf_power_correction_start_date))
-        file.write('Power correction end date= {}\n'.format(sinfo.sf_power_correction_end_date))
-
-        file.write('surfacefit Git commit version= {}\n'.format(sinfo.sf_git_commit_version))
-        file.write('surfacefit Git commit date= {}\n'.format(sinfo.sf_git_commit_date))
-        file.write('---------------------------------------------\n')
-        file.write('Surface fit output statistics\n')
-        file.write('---------------------------------------------\n')
-        file.write('Duration of surfacefit processing= {}\n'.format(sinfo.sf_duration_surface_fit_processing))
-        file.write('Start date of surfacefit output= {}\n'.format(sinfo.sf_start_date_surface_fit_output))
-        file.write('End date of surfacefit output= {}\n'.format(sinfo.sf_end_date_surface_fit_output))
-        file.write('Number of cells fitted= {}\n'.format(sinfo.sf_number_cells_fitted))
-        file.write('Number of cells rejected due to time outside min/max= {}\n'.format(
-            sinfo.sf_number_cells_rejected_outside_time_minmax))
-        file.write('Number of cells rejected due to too few measurements= {}\n'.format(
-            sinfo.sf_number_cells_rejected_too_few_measurements))
-        file.write('Number of cells rejected due to too few measurements after sigma filter= {}\n'.format(
-            sinfo.sf_number_cells_rejected_too_few_measurements_after_sigma_filter))
-        file.write('Number of cells rejected due to timespan too short= {}\n'.format(
-            sinfo.sf_number_cells_rejected_timespan_too_short))
-        file.write('Number of cells rejected due to residual rms exceeded= {}\n'.format(
-            sinfo.sf_number_cells_rejected_residual_rms_exceeded))
-        file.write('Number of cells rejected due to fit not converging= {}\n'.format(
-            sinfo.sf_number_cells_rejected_fit_not_converging))
-        file.write('Number of cells rejected due to fit function failure= {}\n'.format(
-            sinfo.sf_number_cells_rejected_fit_failure))
+        file.write("Plot area= {}\n".format(sinfo.plot_area))
+        file.write("---------------------------------------------\n")
+        file.write("Grid Parameters\n")
+        file.write("---------------------------------------------\n")
+        file.write("Mission= {}\n".format(sinfo.mission.upper()))
+        file.write("Grid name= {}\n".format(sinfo.grid_name))
+        file.write("Grid scenario name= {}\n".format(sinfo.grid_scenario))
+        file.write("Grid bin size= {}\n".format(int(sinfo.grid_binsize)))
+        file.write("Grid projection crs= {}\n".format(sinfo.grid_crs))
+        file.write("Grid width= {}\n".format(int(sinfo.grid_width)))
+        file.write("Grid height= {}\n".format(int(sinfo.grid_height)))
+        file.write("Grid x0= {}\n".format(float(sinfo.grid_x0)))
+        file.write("Grid y0= {}\n".format(float(sinfo.grid_y0)))
+        file.write("First cycle= {}\n".format(int(sinfo.grid_cycle1)))
+        file.write("Last cycle= {}\n".format(int(sinfo.grid_cycle2)))
+        file.write("First cycle start date= {}\n".format(sinfo.grid_cycle1_start_date))
+        file.write("Last cycle start date= {}\n".format(sinfo.grid_cycle2_start_date))
         file.write(
-            'Less than 4 values left in linear fit= {}\n'.format(sinfo.sf_less_4_values_left_in_linear_fit))
-        file.write('Number of cells power corrected= {}\n'.format(sinfo.sf_ncells_power_corrected))
+            "grid_for_surface_elevation_change git commit version= {}\n".format(
+                sinfo.grid_git_commit_version
+            )
+        )
+        file.write(
+            "grid_for_surface_elevation_change git commit date= {}\n".format(
+                sinfo.grid_git_commit_date
+            )
+        )
+        if sinfo.mission == "cs2":
+            file.write("LRM Elevation parameter= {}\n".format(sinfo.grid_elevation_param_lrm))
+            file.write("SIN Elevation parameter= {}\n".format(sinfo.grid_elevation_param_sin))
+            file.write("LRM Power parameter= {}\n".format(sinfo.grid_power_param_lrm))
+            file.write("SIN Power parameter= {}\n".format(sinfo.grid_power_param_sin))
+        else:
+            file.write("Elevation parameter= {}\n".format(sinfo.grid_elevation_param))
+            file.write("Power parameter= {}\n".format(sinfo.grid_power_param))
+        file.write("Mask name= {}\n".format(sinfo.grid_mask_name))
 
-        file.write('---------------------------------------------\n')
-        file.write('Epoch averaging output statistics\n')
-        file.write('---------------------------------------------\n')
-        file.write('GIA model= {}\n'.format(gia_model))
-        file.write('Duration of epoch_average processing= {}\n'.format(end_time - start_time))
-        file.write('Epoch length in days= {}\n'.format(epoch_length))
-        file.write('Number of epochs= {}\n'.format(num_epochs))
-        file.write('Epoch averaging start time= {}\n'.format(epoch_start_dt))
-        file.write('Epoch averaging end time= {}\n'.format(epoch_end_dt))
-        file.write('Number of cells containing averaged data= {}\n'.format(cell_count))
-        file.write('---------------------------------------------\n')
-        file.write('Software version\n')
-        file.write('---------------------------------------------\n')
-        file.write('Git commit version= {}\n'.format(git_commit_sha))
-        file.write('Git commit date= {} {} {}\n'.format(git_day, git_month, git_year))
+        file.write("Number of cells with data in= {}\n".format(sinfo.grid_num_cells_with_data_in))
+        file.write(
+            "Number of measurements gridded= {}\n".format(sinfo.grid_num_measurements_gridded)
+        )
+        file.write(
+            "Number of measurements rejected due to height failure= {}\n".format(
+                sinfo.grid_num_measurements_rejected_height_failure
+            )
+        )
+        file.write(
+            "Number of measurements rejected due to height out of range= {}\n".format(
+                sinfo.grid_num_measurements_rejected_height_out_of_range
+            )
+        )
+        file.write("Grid git commit version= {}\n".format(sinfo.grid_git_commit_version))
+        file.write("Grid git commit date= {}\n".format(sinfo.grid_git_commit_date))
 
+        file.write("---------------------------------------------\n")
+        file.write("Surface fit tunable parameters used\n")
+        file.write("---------------------------------------------\n")
+        file.write("Sigma filter= {}\n".format(sinfo.sf_sigma_filter))
+        file.write(
+            "Maximum number of surface fit iterations allowed= {}\n".format(
+                sinfo.sf_max_surface_fit_iterations_allowed
+            )
+        )
+        file.write(
+            "Maximum number of linear fit iterations allowed= {}\n".format(
+                sinfo.sf_max_linear_fit_iterations_allowed
+            )
+        )
+        file.write(
+            "Minimum number of measurements in cell for surface fit= {}\n".format(
+                sinfo.sf_min_measurements_in_cell_for_surface_fit
+            )
+        )
+        file.write("Power correction applied= {}\n".format(sinfo.sf_power_correction_applied))
+        file.write(
+            "Power correction length in years= {:.2f}\n".format(
+                float(sinfo.sf_power_correction_length_years)
+            )
+        )
+        file.write("Power correction start date= {}\n".format(sinfo.sf_power_correction_start_date))
+        file.write("Power correction end date= {}\n".format(sinfo.sf_power_correction_end_date))
+
+        file.write("surfacefit Git commit version= {}\n".format(sinfo.sf_git_commit_version))
+        file.write("surfacefit Git commit date= {}\n".format(sinfo.sf_git_commit_date))
+        file.write("---------------------------------------------\n")
+        file.write("Surface fit output statistics\n")
+        file.write("---------------------------------------------\n")
+        file.write(
+            "Duration of surfacefit processing= {}\n".format(
+                sinfo.sf_duration_surface_fit_processing
+            )
+        )
+        file.write(
+            "Start date of surfacefit output= {}\n".format(sinfo.sf_start_date_surface_fit_output)
+        )
+        file.write(
+            "End date of surfacefit output= {}\n".format(sinfo.sf_end_date_surface_fit_output)
+        )
+        file.write("Number of cells fitted= {}\n".format(sinfo.sf_number_cells_fitted))
+        file.write(
+            "Number of cells rejected due to time outside min/max= {}\n".format(
+                sinfo.sf_number_cells_rejected_outside_time_minmax
+            )
+        )
+        file.write(
+            "Number of cells rejected due to too few measurements= {}\n".format(
+                sinfo.sf_number_cells_rejected_too_few_measurements
+            )
+        )
+        file.write(
+            "Number of cells rejected due to too few measurements after sigma filter= {}\n".format(
+                sinfo.sf_number_cells_rejected_too_few_measurements_after_sigma_filter
+            )
+        )
+        file.write(
+            "Number of cells rejected due to timespan too short= {}\n".format(
+                sinfo.sf_number_cells_rejected_timespan_too_short
+            )
+        )
+        file.write(
+            "Number of cells rejected due to residual rms exceeded= {}\n".format(
+                sinfo.sf_number_cells_rejected_residual_rms_exceeded
+            )
+        )
+        file.write(
+            "Number of cells rejected due to fit not converging= {}\n".format(
+                sinfo.sf_number_cells_rejected_fit_not_converging
+            )
+        )
+        file.write(
+            "Number of cells rejected due to fit function failure= {}\n".format(
+                sinfo.sf_number_cells_rejected_fit_failure
+            )
+        )
+        file.write(
+            "Less than 4 values left in linear fit= {}\n".format(
+                sinfo.sf_less_4_values_left_in_linear_fit
+            )
+        )
+        file.write("Number of cells power corrected= {}\n".format(sinfo.sf_ncells_power_corrected))
+
+        file.write("---------------------------------------------\n")
+        file.write("Epoch averaging output statistics\n")
+        file.write("---------------------------------------------\n")
+        file.write("GIA model= {}\n".format(gia_model))
+        file.write("Duration of epoch_average processing= {}\n".format(end_time - start_time))
+        file.write("Epoch length in days= {}\n".format(epoch_length))
+        file.write("Number of epochs= {}\n".format(num_epochs))
+        file.write("Epoch averaging start time= {}\n".format(epoch_start_dt))
+        file.write("Epoch averaging end time= {}\n".format(epoch_end_dt))
+        file.write("Number of cells containing averaged data= {}\n".format(cell_count))
+        file.write("---------------------------------------------\n")
+        file.write("Software version\n")
+        file.write("---------------------------------------------\n")
+        file.write("Git commit version= {}\n".format(git_commit_sha))
+        file.write("Git commit date= {} {} {}\n".format(git_day, git_month, git_year))
 
     # Test reading .info file
     einfo = EpochaverageInfo(output_info_filename)
@@ -674,114 +782,143 @@ class EpochaverageInfo:
     else:
                 print(einfo.mission)
                 ...
-        """
+    """
 
     def __init__(self, filename):
-        print('Loading ', filename)
+        print("Loading ", filename)
         self.filename = filename
         self.dict = {}
         if not self.read():
-            self.key_error = 'File not found : {}'.format(filename)
+            self.key_error = "File not found : {}".format(filename)
             return None
 
         self.key_error = None
 
         try:
             # Plot Parameters
-            self.plot_area = self.dict['Plot area'].strip()
+            self.plot_area = self.dict["Plot area"].strip()
 
             # Mission Parameters
-            self.mission = self.dict['Mission'].strip().lower()
+            self.mission = self.dict["Mission"].strip().lower()
 
             # Grid Parameters
-            self.grid_name = self.dict['Grid name'].strip()
-            self.grid_scenario = self.dict['Grid scenario name'].strip()
-            self.grid_binsize = int(self.dict['Grid bin size'].strip())
-            self.grid_crs = self.dict['Grid projection crs'].strip()
-            self.grid_width = float(self.dict['Grid width'].strip())
-            self.grid_height = float(self.dict['Grid height'].strip())
-            self.grid_x0 = float(self.dict['Grid x0'].strip())
-            self.grid_y0 = float(self.dict['Grid y0'].strip())
+            self.grid_name = self.dict["Grid name"].strip()
+            self.grid_scenario = self.dict["Grid scenario name"].strip()
+            self.grid_binsize = int(self.dict["Grid bin size"].strip())
+            self.grid_crs = self.dict["Grid projection crs"].strip()
+            self.grid_width = float(self.dict["Grid width"].strip())
+            self.grid_height = float(self.dict["Grid height"].strip())
+            self.grid_x0 = float(self.dict["Grid x0"].strip())
+            self.grid_y0 = float(self.dict["Grid y0"].strip())
 
-            if 'cs2' in self.mission:
-                self.grid_elevation_param_lrm = self.dict['LRM Elevation parameter'].strip()
-                self.grid_elevation_param_sin = self.dict['SIN Elevation parameter'].strip()
-                self.grid_power_param_lrm = self.dict['LRM Power parameter'].strip()
-                self.grid_power_param_sin = self.dict['SIN Power parameter'].strip()
+            if "cs2" in self.mission:
+                self.grid_elevation_param_lrm = self.dict["LRM Elevation parameter"].strip()
+                self.grid_elevation_param_sin = self.dict["SIN Elevation parameter"].strip()
+                self.grid_power_param_lrm = self.dict["LRM Power parameter"].strip()
+                self.grid_power_param_sin = self.dict["SIN Power parameter"].strip()
             else:
-                self.grid_elevation_param = self.dict['Elevation parameter'].strip()
-                self.grid_power_param = self.dict['Power parameter'].strip()
+                self.grid_elevation_param = self.dict["Elevation parameter"].strip()
+                self.grid_power_param = self.dict["Power parameter"].strip()
 
-            self.grid_num_cells_with_data_in = int(self.dict['Number of cells with data in'].strip())
-            self.grid_num_measurements_gridded = int(self.dict['Number of measurements gridded'])
+            self.grid_num_cells_with_data_in = int(
+                self.dict["Number of cells with data in"].strip()
+            )
+            self.grid_num_measurements_gridded = int(self.dict["Number of measurements gridded"])
             self.grid_num_measurements_rejected_height_failure = int(
-                self.dict['Number of measurements rejected due to height failure'])
+                self.dict["Number of measurements rejected due to height failure"]
+            )
             self.grid_num_measurements_rejected_height_out_of_range = int(
-                self.dict['Number of measurements rejected due to height out of range'])
+                self.dict["Number of measurements rejected due to height out of range"]
+            )
 
-            self.grid_cycle1 = int(self.dict['First cycle'].strip())
-            self.grid_cycle2 = int(self.dict['Last cycle'].strip())
-            self.grid_cycle1_start_date = self.dict['First cycle start date'].strip()
-            self.grid_cycle2_start_date = self.dict['Last cycle start date'].strip()
-            self.grid_mask_name = self.dict['Mask name'].strip()
-            self.grid_git_commit_version = self.dict['Grid git commit version'].strip()
-            self.grid_git_commit_date = self.dict['Grid git commit date'].strip()
+            self.grid_cycle1 = int(self.dict["First cycle"].strip())
+            self.grid_cycle2 = int(self.dict["Last cycle"].strip())
+            self.grid_cycle1_start_date = self.dict["First cycle start date"].strip()
+            self.grid_cycle2_start_date = self.dict["Last cycle start date"].strip()
+            self.grid_mask_name = self.dict["Mask name"].strip()
+            self.grid_git_commit_version = self.dict["Grid git commit version"].strip()
+            self.grid_git_commit_date = self.dict["Grid git commit date"].strip()
 
             # Surface Fit  Parameters
 
-            self.sf_sigma_filter = float(self.dict['Sigma filter'].strip())
+            self.sf_sigma_filter = float(self.dict["Sigma filter"].strip())
             self.sf_max_surface_fit_iterations_allowed = int(
-                self.dict['Maximum number of surface fit iterations allowed'].strip())
+                self.dict["Maximum number of surface fit iterations allowed"].strip()
+            )
             self.sf_max_linear_fit_iterations_allowed = int(
-                self.dict['Maximum number of linear fit iterations allowed'].strip())
+                self.dict["Maximum number of linear fit iterations allowed"].strip()
+            )
             self.sf_min_measurements_in_cell_for_surface_fit = int(
-                self.dict['Minimum number of measurements in cell for surface fit'].strip())
-            self.sf_power_correction_applied = self.dict['Power correction applied'].strip()
-            self.sf_power_correction_length_years = self.dict['Power correction length in years'].strip()
-            self.sf_power_correction_start_date = self.dict['Power correction start date'].strip()
-            self.sf_power_correction_end_date = self.dict['Power correction end date'].strip()
+                self.dict["Minimum number of measurements in cell for surface fit"].strip()
+            )
+            self.sf_power_correction_applied = self.dict["Power correction applied"].strip()
+            self.sf_power_correction_length_years = self.dict[
+                "Power correction length in years"
+            ].strip()
+            self.sf_power_correction_start_date = self.dict["Power correction start date"].strip()
+            self.sf_power_correction_end_date = self.dict["Power correction end date"].strip()
 
-            self.sf_duration_surface_fit_processing = self.dict['Duration of surfacefit processing'].strip()
-            self.sf_start_date_surface_fit_output = self.dict['Start date of surfacefit output'].strip()
-            self.sf_end_date_surface_fit_output = self.dict['End date of surfacefit output'].strip()
-            self.sf_number_cells_fitted = int(self.dict['Number of cells fitted'].strip())
+            self.sf_duration_surface_fit_processing = self.dict[
+                "Duration of surfacefit processing"
+            ].strip()
+            self.sf_start_date_surface_fit_output = self.dict[
+                "Start date of surfacefit output"
+            ].strip()
+            self.sf_end_date_surface_fit_output = self.dict["End date of surfacefit output"].strip()
+            self.sf_number_cells_fitted = int(self.dict["Number of cells fitted"].strip())
             self.sf_number_cells_rejected_outside_time_minmax = int(
-                self.dict['Number of cells rejected due to time outside min/max'].strip())
+                self.dict["Number of cells rejected due to time outside min/max"].strip()
+            )
             self.sf_number_cells_rejected_too_few_measurements = int(
-                self.dict['Number of cells rejected due to too few measurements'].strip())
+                self.dict["Number of cells rejected due to too few measurements"].strip()
+            )
             self.sf_number_cells_rejected_too_few_measurements_after_sigma_filter = int(
-                self.dict['Number of cells rejected due to too few measurements after sigma filter'].strip())
+                self.dict[
+                    "Number of cells rejected due to too few measurements after sigma filter"
+                ].strip()
+            )
             self.sf_number_cells_rejected_timespan_too_short = int(
-                self.dict['Number of cells rejected due to timespan too short'].strip())
+                self.dict["Number of cells rejected due to timespan too short"].strip()
+            )
             self.sf_number_cells_rejected_residual_rms_exceeded = int(
-                self.dict['Number of cells rejected due to residual rms exceeded'].strip())
+                self.dict["Number of cells rejected due to residual rms exceeded"].strip()
+            )
             self.sf_number_cells_rejected_fit_not_converging = int(
-                self.dict['Number of cells rejected due to fit not converging'].strip())
+                self.dict["Number of cells rejected due to fit not converging"].strip()
+            )
             self.sf_number_cells_rejected_fit_failure = int(
-                self.dict['Number of cells rejected due to fit function failure'].strip())
-            self.sf_less_4_values_left_in_linear_fit = int(self.dict['Less than 4 values left in linear fit'].strip())
-            self.sf_ncells_power_corrected = int(self.dict['Number of cells power corrected'].strip())
-            self.sf_git_commit_version = self.dict['Git commit version'].strip()
-            self.sf_git_commit_date = self.dict['Git commit date'].strip()
+                self.dict["Number of cells rejected due to fit function failure"].strip()
+            )
+            self.sf_less_4_values_left_in_linear_fit = int(
+                self.dict["Less than 4 values left in linear fit"].strip()
+            )
+            self.sf_ncells_power_corrected = int(
+                self.dict["Number of cells power corrected"].strip()
+            )
+            self.sf_git_commit_version = self.dict["Git commit version"].strip()
+            self.sf_git_commit_date = self.dict["Git commit date"].strip()
 
             # Epoch Average Parameters
 
-            self.ea_gia_model = self.dict['GIA model'].strip()
-            self.ea_duration_epoch_average_processing = self.dict['Duration of epoch_average processing'].strip()
-            self.ea_epoch_length_in_days = self.dict['Epoch length in days'].strip()
-            self.ea_number_of_epochs = self.dict['Number of epochs'].strip()
-            self.ea_epoch_averaging_start_time = self.dict['Epoch averaging start time'].strip()
-            self.ea_epoch_averaging_end_time = self.dict['Epoch averaging end time'].strip()
+            self.ea_gia_model = self.dict["GIA model"].strip()
+            self.ea_duration_epoch_average_processing = self.dict[
+                "Duration of epoch_average processing"
+            ].strip()
+            self.ea_epoch_length_in_days = self.dict["Epoch length in days"].strip()
+            self.ea_number_of_epochs = self.dict["Number of epochs"].strip()
+            self.ea_epoch_averaging_start_time = self.dict["Epoch averaging start time"].strip()
+            self.ea_epoch_averaging_end_time = self.dict["Epoch averaging end time"].strip()
             self.ea_number_of_cells_containing_averaged_data = self.dict[
-                'Number of cells containing averaged data'].strip()
+                "Number of cells containing averaged data"
+            ].strip()
 
             # This Software Version
-            self.git_commit_version = self.dict['Git commit version'].strip()
-            self.git_commit_date = self.dict['Git commit date'].strip()
+            self.git_commit_version = self.dict["Git commit version"].strip()
+            self.git_commit_date = self.dict["Git commit date"].strip()
 
         except KeyError as err:
-            log.error('KeyError: {}'.format(err))
-            sys.exit('KeyError: {}'.format(err))
+            log.error("KeyError: {}".format(err))
+            sys.exit("KeyError: {}".format(err))
             self.key_error = err
 
     def read(self):
@@ -792,18 +929,18 @@ class EpochaverageInfo:
         """
 
         if not os.path.isfile(self.filename):
-            print('Grid info file not found : ', self.filename)
+            print("Grid info file not found : ", self.filename)
             return False
 
-        with open(self.filename, 'r') as file:
+        with open(self.filename, "r") as file:
             info_txt = file.readlines()
 
             self.dict = {}
 
             # parse .info file text
             for line in info_txt:
-                if '=' in line:
-                    words = line.split('=')
+                if "=" in line:
+                    words = line.split("=")
                     self.dict[words[0]] = (words[1]).rstrip()
         return True
 
@@ -812,7 +949,7 @@ class EpochaverageInfo:
         Print self out neatly
         """
 
-        print('Filename :', self.filename)
+        print("Filename :", self.filename)
         for key in self.dict:
             print(key, self.dict[key])
 
@@ -822,12 +959,18 @@ class EpochaverageInfo:
         :param gridinfo:
         :return:
         """
-        if gridinfo.mission != self.mission: return False
-        if gridinfo.grid_name != self.grid_name: return False
-        if gridinfo.grid_crs != self.grid_crs: return False
-        if gridinfo.grid_binsize != self.grid_binsize: return False
-        if gridinfo.grid_width != self.grid_width: return False
-        if gridinfo.grid_height != self.grid_height: return False
+        if gridinfo.mission != self.mission:
+            return False
+        if gridinfo.grid_name != self.grid_name:
+            return False
+        if gridinfo.grid_crs != self.grid_crs:
+            return False
+        if gridinfo.grid_binsize != self.grid_binsize:
+            return False
+        if gridinfo.grid_width != self.grid_width:
+            return False
+        if gridinfo.grid_height != self.grid_height:
+            return False
 
         return True
 
@@ -835,33 +978,56 @@ class EpochaverageInfo:
 # ----------------------------------------------------------------------------------------------------------
 #  Main  Code
 # ----------------------------------------------------------------------------------------------------------
-if __name__ == '__main__':
+if __name__ == "__main__":
 
-    import sys
     import argparse
+    import sys
 
     # initiate the parser
     parser = argparse.ArgumentParser()
 
     # add long and short argument
-    parser.add_argument("--griddir", "-g",
-                        help="Directory containing dh and time single mission grid files in .npz format, generated by surfacefit.py. If this is given, the dh and time files in this directory will be used, so do not provide filenames.")
-    parser.add_argument("--dhfile", "-f1",
-                        help="Single mission dh grid file in .npz format, generated by surfacefit.py. Only provide a filename if you have NOT specified a directory.")
-    parser.add_argument("--timefile", "-f2",
-                        help="Single mission time grid file in .npz format, generated by surfacefit.py. Only provide a filename if you have NOT specified a directory.")
-    parser.add_argument("--outdir", "-o",
-                        help="Path of output directory for output files. If not specified will use directory path of input grid file for output")
-    parser.add_argument("--epoch_length", "-e", help="(integer, default=30), length of averaging epoch, in days")
-    parser.add_argument("--epoch_start", "-t1",
-                        help="(optional) start time of first epoch in decimal years YYYY.yy or DD/MM/YYYY format. If not provided then 1991.0 is used. Will be rounded down to start of day.")
-    parser.add_argument("--epoch_end", "-t2",
-                        help="(optional) end time of last epoch in decimal years YYYY.yy or DD/MM/YYYY format. If not provided then latest time in grid is used. If this time would truncate last epoch, will be extended to avoid truncation. Will be rounded up to end of day.")
-    parser.add_argument("--gia_model", "-gia",
-                        help="(optional) GIA model to use for correction. If not provided, no correction will be applied. List model names with gia_models.py --list_all.")
+    parser.add_argument(
+        "--griddir",
+        "-g",
+        help="Directory containing dh and time single mission grid files in .npz format, generated by surfacefit.py. If this is given, the dh and time files in this directory will be used, so do not provide filenames.",
+    )
+    parser.add_argument(
+        "--dhfile",
+        "-f1",
+        help="Single mission dh grid file in .npz format, generated by surfacefit.py. Only provide a filename if you have NOT specified a directory.",
+    )
+    parser.add_argument(
+        "--timefile",
+        "-f2",
+        help="Single mission time grid file in .npz format, generated by surfacefit.py. Only provide a filename if you have NOT specified a directory.",
+    )
+    parser.add_argument(
+        "--outdir",
+        "-o",
+        help="Path of output directory for output files. If not specified will use directory path of input grid file for output",
+    )
+    parser.add_argument(
+        "--epoch_length", "-e", help="(integer, default=30), length of averaging epoch, in days"
+    )
+    parser.add_argument(
+        "--epoch_start",
+        "-t1",
+        help="(optional) start time of first epoch in decimal years YYYY.yy or DD/MM/YYYY format. If not provided then 1991.0 is used. Will be rounded down to start of day.",
+    )
+    parser.add_argument(
+        "--epoch_end",
+        "-t2",
+        help="(optional) end time of last epoch in decimal years YYYY.yy or DD/MM/YYYY format. If not provided then latest time in grid is used. If this time would truncate last epoch, will be extended to avoid truncation. Will be rounded up to end of day.",
+    )
+    parser.add_argument(
+        "--gia_model",
+        "-gia",
+        help="(optional) GIA model to use for correction. If not provided, no correction will be applied. List model names with gia_models.py --list_all.",
+    )
 
     if len(sys.argv) == 1:
-        print('no args provided')
+        print("no args provided")
         parser.print_help()
         sys.exit()
 
@@ -869,11 +1035,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    epoch_average(griddir=args.griddir,
-                  dhfile=args.dhfile,
-                  timefile=args.timefile,
-                  outdir=args.outdir,
-                  epoch_length=args.epoch_length,
-                  epoch_start=args.epoch_start,
-                  epoch_end=args.epoch_end,
-                  gia_model=args.gia_model)
+    epoch_average(
+        griddir=args.griddir,
+        dhfile=args.dhfile,
+        timefile=args.timefile,
+        outdir=args.outdir,
+        epoch_length=args.epoch_length,
+        epoch_start=args.epoch_start,
+        epoch_end=args.epoch_end,
+        gia_model=args.gia_model,
+    )

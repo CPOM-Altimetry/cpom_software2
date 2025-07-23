@@ -2,25 +2,25 @@
 # -*- coding: utf-8 -*-
 """
 cpom.altimetry.tools.sec_tools.grid_altimetry_data.py
- 
+
 Purpose:
   Grid altimetry data for SEC (model fit) processing,
   storing each measurement in a partitioned Parquet dataset,
   partitioned by (year, x_part, y_part) or (year, month, x_part, y_part)
   if --partition_by_month is used.
- 
+
   Supports two modes:
     1) Full regrid: remove entire dataset and rewrite from scratch for *all* years
        (use --regrid)
     2) Update/add a single year: only overwrite that year partition in the existing dataset
        (use --update_year YYYY)
- 
+
 Additionally:
   - Maintains a JSON file "partition_index.json" at the top-level Parquet directory,
     which stores the unique (year, month, x_part, y_part, file_path) for each partition file.
     This helps future reading scripts avoid expensive globbing; they can just read
     partition_index.json to discover which files exist.
- 
+
 TODO:
   - direction (ascending) calc for other missions
   - Check other params required?
@@ -57,7 +57,6 @@ def _ensure_dir(path: str) -> None:
     """Utility function to ensure a directory exists, create if needed."""
     if not os.path.isdir(path):
         os.makedirs(path, exist_ok=True)
-
 
 
 def process_file(file_path, year_val, data_set, this_area, this_dataset, grid, offset, log):
@@ -605,7 +604,7 @@ def main(args):
         required=False,
         default=20,
     )
-    
+
     parser.add_argument(
         "--dataset_overrides",
         "-do",

@@ -1,8 +1,8 @@
 dataset_definition = {
+    "mission": "cs2",
     "long_name": "Cryotempo Land Ice",
     "time_epoch": "2000-01-01T00:00:00",
     "l2_dir": "${CPOM_DATA_DIR}/altimetry/cryotempo_li",
-    
     # Search pattern for L2 file discovery."
     "search_pattern": "**/CS_OFFL_SIR_TDP_LI*.nc",
     # "int int : negative indices from end of L2 file name or path which point to the

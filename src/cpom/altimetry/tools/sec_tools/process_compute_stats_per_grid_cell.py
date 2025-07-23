@@ -23,12 +23,14 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import sys
-import polars as pl 
-import duckdb 
 from typing import Dict, List, Tuple
-import json 
+
+import duckdb
+import polars as pl
+
 from cpom.areas.area_plot import Polarplot
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -38,7 +40,7 @@ log = logging.getLogger(__name__)
 SECONDS_PER_YEAR = 3600.0 * 24.0 * 365.25  # approximate
 
 
-def get_stats_per_grid_cell(griddir:str, conn: duckdb.DuckDBPyConnection) -> pl.DataFrame:
+def get_stats_per_grid_cell(griddir: str, conn: duckdb.DuckDBPyConnection) -> pl.DataFrame:
     """
     Get statistics per grid cell from the parquet files.
     """
@@ -47,7 +49,8 @@ def get_stats_per_grid_cell(griddir:str, conn: duckdb.DuckDBPyConnection) -> pl.
     else:
         parquet_glob = f"{griddir}/year=*/**/*.parquet"
 
-    tbl = conn.execute(f""" 
+    tbl = conn.execute(
+        f""" 
                 SELECT 
                 x_bin, 
                 y_bin,
@@ -59,39 +62,44 @@ def get_stats_per_grid_cell(griddir:str, conn: duckdb.DuckDBPyConnection) -> pl.
                 FROM parquet_scan('{parquet_glob}')
                 group by x_part, y_part, x_bin , y_bin, 
                 order by x_bin, y_bin
-    """).pl()
+    """
+    ).pl()
 
-    return tbl 
+    return tbl
+
 
 def get_grid_and_metadata(griddir: str) -> Tuple[GridArea, Dict]:
     with open(griddir + "grid_meta.json", "r") as f:
         grid_meta = json.load(f)
-            
+
     if "grid_name" in grid_meta and "bin_size" in grid_meta:
         grid = GridArea(grid_meta["grid_name"], int(grid_meta["bin_size"]))
         grid.info()
 
     return grid, grid_meta
 
+
 def attach_xy_latlon(df: pl.DataFrame, grid: GridArea) -> pl.DataFrame:
     """
     Attach x_center, y_center, lat_center, lon_center columns to a DataFrame
     that has [x_bin, y_bin].
     """
-    if len(df) == 0  or grid is None:
+    if len(df) == 0 or grid is None:
         return df
 
-    df = df.with_columns((pl.col("x_bin") * grid.binsize + grid.minxm + (grid.binsize / 2)).alias("x_centre"), 
-                           (pl.col("y_bin") * grid.binsize + grid.minym + (grid.binsize / 2)).alias("y_centre"))
-
-
-    lat_arr, lon_arr = grid.transform_x_y_to_lat_lon(df["x_centre"].to_numpy(), df["y_centre"].to_numpy())
-
     df = df.with_columns(
-                    pl.Series("lat_centre", lat_arr),
-                    pl.Series("lon_centre", lon_arr))
+        (pl.col("x_bin") * grid.binsize + grid.minxm + (grid.binsize / 2)).alias("x_centre"),
+        (pl.col("y_bin") * grid.binsize + grid.minym + (grid.binsize / 2)).alias("y_centre"),
+    )
+
+    lat_arr, lon_arr = grid.transform_x_y_to_lat_lon(
+        df["x_centre"].to_numpy(), df["y_centre"].to_numpy()
+    )
+
+    df = df.with_columns(pl.Series("lat_centre", lat_arr), pl.Series("lon_centre", lon_arr))
 
     return df
+
 
 def plot_variable(
     df: pl.DataFrame,
@@ -211,8 +219,8 @@ def process(args):
 
     # 1) Compute stats (mean_elev, coverage_yrs) for each cell in parallel
     tbl = get_stats_per_grid_cell(args.griddir, conn)
-    grid_obj , grid_meta = get_grid_and_metadata(args.griddir)
-    
+    grid_obj, grid_meta = get_grid_and_metadata(args.griddir)
+
     # 2) (Optional) Write the final DataFrame
     if args.output_file and not len(tbl) == 0:
         tbl.write_parquet(args.output_file, compression="zstd")
