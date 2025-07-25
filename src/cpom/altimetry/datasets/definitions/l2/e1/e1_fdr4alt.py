@@ -1,0 +1,25 @@
+"""ERS-1 FDR4ALT Land Ice dataset definition"""
+
+# pylint: disable=R0801
+
+import os
+
+dataset_definition = {
+    "mission": "e1",
+    "long_name": "ERS-1 FDR4ALT Land Ice",
+    "l2_dir": os.environ["CPDATA_DIR"] + "/SATS/RA/ERS1/L2/FDR4ALT/TDP",
+    "search_pattern": "**/ER1_F4A_ALT_TDP_LI_*.nc",
+    "yyyymm_str_fname_indices": [-23, -31],
+    "time_epoch": "1950-01-01T00:00:00",
+    # -------------------#
+    # --Core Parameters--#
+    # -------------------#
+    "latitude_param": "expert/ice_sheet_lat_poca",
+    "longitude_param": "expert/ice_sheet_lon_poca",
+    "latitude_nadir_param": "expert/latitude",
+    "longitude_nadir_param": "expert/longitude",
+    "elevation_param": "expert/ice_sheet_elevation_ice1_roemer",
+    "power_param": "expert/sigma0_ice1",
+    "quality_param": "expert/retracking_ice1_qual",
+    "time_param": "expert/time",
+}
