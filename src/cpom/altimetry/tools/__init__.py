@@ -18,5 +18,20 @@ in area map.
 
 Further details at `cpom.altimetry.tools.find_files_in_area`
 
+## nc_vals.py
+
+Tool which prints netcdf parameters. A bit like ncdump but with more options
+and allows single parameters to be printed more easily.
+
+Further details at `cpom.altimetry.tools.nc_vals`
+
+## validate_l2_altimetry_elevations.py
+
+This tool compares a selected month of radar altimetry mission elevation data 
+against laser altimetry reference elevations. 
+It also allows comparing a reference mission to itself.
+
+Further details at `cpom.altimetry.tools.validate_l2_altimetry_elevations`
+
 
 """

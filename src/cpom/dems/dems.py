@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import rasterio  # to extract GeoTIFF extents
 import zarr
+from netCDF4 import Dataset  # pylint:disable=E0611
 from pyproj import CRS  # coordinate reference system
 from pyproj import Transformer  # transforms
 from rasterio.errors import RasterioIOError
@@ -56,6 +57,12 @@ dem_list = [
     "arcticdem_100m_greenland",  # ArcticDEM v3.0, 100m resolution, subarea greenland
     "arcticdem_100m_greenland_v4.1",  # ArcticDEM v4.1, 100m resolution, subarea greenland
     "arcticdem_100m_greenland_v4.1_zarr",  # Zarr format of ArcticDEM v4.1, 100m resolution, grn
+    "atl14_grn_100m_004_003_zarr",  # Zarr format of IS/IS2 ATL14_GL_0324_100m_004_03.nc
+    "atl14_ant_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A(1-4)_0324_100m_004_04.nc
+    "atl14_ant_a1_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A1_0324_100m_004_04.nc (AIS NE)
+    "atl14_ant_a2_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A2_0324_100m_004_04.nc (AIS NW)
+    "atl14_ant_a3_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A3_0324_100m_004_04.nc (AIS SW)
+    "atl14_ant_a4_100m_004_004_zarr",  # Zarr format of IS/IS2 ATL14_A4_0324_100m_004_04.nc (AIS SE)
 ]
 
 
@@ -94,8 +101,8 @@ class Dem:
         self.reference_year = 0  # YYYY, the year the DEM's elevations are referenced to
         self.xdem = np.array([])
         self.ydem = np.array([])
-        self.zdem = np.array([])
-        self.zdem_flip = np.array([])
+        self.zdem: zarr.core.Array | np.ndarray = np.array([])
+        self.zdem_flip: zarr.core.Array | np.ndarray = np.array([])
         self.mindemx = None
         self.mindemy = None
         self.binsize = 0
@@ -106,6 +113,9 @@ class Dem:
         self.shared_mem_child = False  # set to True if a child process
         self.npz_type = False  # set to True when using .npz DEM file
         self.zarr_type = False  # set to True when using .zarr DEM file
+        self.nc_type = False  # set to True when using .nc DEM file
+        self.zflip = True  # whether self.zdem needs flipping
+        self.void_value: float | int = -3267
 
         # is accessing the Dem's shared memory
         # default is False (parent process which allocates
@@ -122,6 +132,49 @@ class Dem:
             raise ValueError(f"DEM name {name} not in allowed list")
 
         self.load()
+
+    def get_nc_extent(self, fname: str):
+        """get the DEM extent from nc file
+
+        Args:
+            fname (str): path of GeoTIFF file
+
+        Raises:
+            ValueError: _description_
+            IOError: _description_
+
+        Returns:
+            tuple(int,int,int,int,int,int,int): width,height,top_left,top_right,bottom_left,
+            bottom_right,pixel_width
+        """
+
+        nc = Dataset(fname)
+        height, width = np.shape(nc["h"])
+        top_left = (np.min(nc["x"][:]), np.max(nc["y"][:]))
+        top_right = (np.max(nc["x"][:]), np.max(nc["y"][:]))
+        bottom_left = (np.min(nc["x"][:]), np.min(nc["y"][:]))
+        bottom_right = (np.max(nc["y"][:]), np.min(nc["y"][:]))
+        pixel_width = nc["x"][:][1] - nc["x"][:][0]
+
+        print(
+            width,
+            height,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            pixel_width,
+        )
+
+        return (
+            width,
+            height,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            pixel_width,
+        )
 
     def get_geotiff_extent(self, fname: str):
         """Get info from GeoTIFF on its extent
@@ -254,16 +307,31 @@ class Dem:
         """
 
         try:
-            zdem = zarr.open_array(demfile, mode="r")
+            self.zdem = zarr.open_array(demfile, mode="r")
         except Exception as exc:
             raise IOError(f"Failed to open Zarr file: {demfile} {exc}") from exc
 
-        ncols = zdem.attrs["ncols"]
-        nrows = zdem.attrs["nrows"]
-        top_l = zdem.attrs["top_l"]
-        top_r = zdem.attrs["top_r"]
-        bottom_l = zdem.attrs["bottom_l"]
-        binsize = zdem.attrs["binsize"]
+        ncols = self.zdem.attrs["ncols"]
+        nrows = self.zdem.attrs["nrows"]
+
+        print(f"ncols {ncols} nrows {nrows}")
+
+        for key in self.zdem.attrs:
+            print(key, self.zdem.attrs[key])
+
+        top_l = self.zdem.attrs["top_l"]
+        top_r = self.zdem.attrs["top_r"]
+        bottom_l = self.zdem.attrs["bottom_l"]
+        binsize = self.zdem.attrs["binsize"]
+
+        print(
+            ncols,
+            nrows,
+            top_l,
+            top_r,
+            bottom_l,
+            binsize,
+        )
 
         self.xdem = np.linspace(top_l[0], top_r[0], ncols, endpoint=True)
         self.ydem = np.linspace(bottom_l[1], top_l[1], nrows, endpoint=True)
@@ -272,12 +340,48 @@ class Dem:
         self.mindemy = self.ydem.min()
         self.binsize = binsize  # grid resolution in m
 
-        self.zdem = zdem
-
         try:
             self.zdem_flip = zarr.open_array(demfile.replace(".zarr", "_flipped.zarr"), mode="r")
         except Exception as exc:
             raise IOError(f"Failed to open Zarr file: {demfile} {exc}") from exc
+
+    def load_nc(self, demfile: str):
+        """Load a netcdf file
+
+        Args:
+            demfile (str): path of netcdf file
+        """
+        (
+            ncols,
+            nrows,
+            top_l,
+            top_r,
+            bottom_l,
+            _,
+            binsize,
+        ) = self.get_nc_extent(demfile)
+
+        print(f"ncols {ncols} nrows {nrows}")
+
+        nc = Dataset(demfile)
+        zdem = nc["h"][:].data
+
+        if not isinstance(zdem, np.ndarray):
+            raise TypeError(f"DEM image type not supported : {type(zdem)}")
+        self.zdem = zdem
+
+        # Set void data to Nan
+        if self.void_value:
+            void_data = np.where(self.zdem == self.void_value)
+            if np.any(void_data):
+                self.zdem[void_data] = np.nan
+
+        self.xdem = np.linspace(top_l[0], top_r[0], ncols, endpoint=True)
+        self.ydem = np.linspace(bottom_l[1], top_l[1], nrows, endpoint=True)
+        # self.ydem = np.flip(self.ydem)
+        self.mindemx = self.xdem.min()
+        self.mindemy = self.ydem.min()
+        self.binsize = binsize  # grid resolution in m
 
     def load_geotiff(self, demfile: str):
         """Load a GeoTIFF file
@@ -711,6 +815,173 @@ class Dem:
             self.reference_year = 2010  # YYYY, the year the DEM's elevations are referenced to
             self.zarr_type = True
 
+        elif self.name == "atl14_ant_a1_100m_004_004_zarr":
+            # ATL-14 Antarctic sector A1 (NE) 100m DEM
+            # zarr version created with
+            # python src/cpom/dems/netcdf_to_zarr.py -f \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A1_0324_100m_004_04.nc -v 3.402823e+38 -o \
+            # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_A1_0324_100m_004_04.zarr"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A1 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic A1 (NE) 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = True
+
+        elif self.name == "atl14_ant_a2_100m_004_004_zarr":
+            # ATL-14 Antarctic sector A2 (NW) 100m DEM
+            # zarr version created with
+            # python src/cpom/dems/netcdf_to_zarr.py -f \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A2_0324_100m_004_04.nc -v 3.402823e+38 -o \
+            # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_A2_0324_100m_004_04.zarr"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A2 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic A2 (NW) 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = True
+
+        elif self.name == "atl14_ant_a3_100m_004_004_zarr":
+            # ATL-14 Antarctic sector A3 (SW) 100m DEM
+            # zarr version created with
+            # python src/cpom/dems/netcdf_to_zarr.py -f \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A3_0324_100m_004_04.nc -v 3.402823e+38 -o \
+            # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_A3_0324_100m_004_04.zarr"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A3 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic A3 (SW) 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = True
+
+        elif self.name == "atl14_ant_a4_100m_004_004_zarr":
+            # ATL-14 Antarctic sector A4 (SE) 100m DEM
+            # zarr version created with
+            # python src/cpom/dems/netcdf_to_zarr.py -f \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc -v 3.402823e+38 -o \
+            # /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_A4_0324_100m_004_04.zarr"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A4 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic A4 (SE) 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = True
+
+        elif self.name == "atl14_ant_a4_100m_004_004":
+            # ATL-14 Antarctic sector A4 (SE) 100m DEM
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_A4_0324_100m_004_04.nc"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A4 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic A4 (SE) 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = False
+            self.nc_type = True
+            self.zflip = False  # no need to transpose the DEM
+
+        elif self.name == "atl14_ant_100m_004_004_zarr":
+            # ATL-14 Antarctic A1-A4 100m DEM
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+            # zarr version created with
+            # python src/cpom/dems/atl14_ant_4quadrant_nc_to_zarr.py \
+            # --nc_files \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A1_0324_100m_004_04.nc \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A2_0324_100m_004_04.nc \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A3_0324_100m_004_04.nc \
+            # /cpdata/SATS/RA/DEMS/ATL14/ATL14_A4_0324_100m_004_04.nc \
+            # -o /cpdata/SATS/RA/DEMS/ATL14
+            # https://cmr.earthdata.nasa.gov/virtual-directory/
+            # collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01
+
+            filename = "ATL14_0324_100m_004_04.zarr"
+            filled_filename = filename
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://cmr.earthdata.nasa.gov/virtual-directory/"
+                "collections/C3162179692-NSIDC_CPRD/temporal/2019/01/01"
+            )
+            self.src_url_filled = ""
+            self.dem_version = "ATL14 A4 100m"
+            self.src_institute = "NASA"
+            self.long_name = "ATL14 Antarctic 100m DEM"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = 3.402823e38
+            self.dtype = np.float32
+            self.reference_year = 2019  # YYYY, the year the DEM's elevations are referenced to
+            self.zarr_type = True
+
         # --------------------------------------------------------------------------------
         elif self.name == "arcticdem_100m_greenland":
             # 100m DEM (subarea of Greenland) extracted from ArcticDem v3
@@ -796,6 +1067,28 @@ class Dem:
             self.dtype = np.float32
 
         # --------------------------------------------------------------------------------
+        elif self.name == "atl14_grn_100m_004_003_zarr":
+            # 100m DEM (subarea of Greenland) from ATL14_GL_0324_100m_004_03.nc
+            # The void areas will contain null values (-9999) in lieu of the terrain elevations.
+            filename = "ATL14_GL_0324_100m_004_03.zarr"
+            filled_filename = "ATL14_GL_0324_100m_004_03.zarr"  # No filled version available
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/ATL14'
+            self.src_url = (
+                "https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic"
+                "/latest/100m/arcticdem_mosaic_100m_v4.1_dem.tif"
+            )
+            self.reference_year = 2010  # YYYY, the year the DEM's elevations are referenced to
+            self.src_url_filled = ""
+            self.dem_version = "4.1"
+            self.src_institute = "PGC"
+            self.long_name = "ATL14 Dem 100m, Greenland"
+            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
+            self.southern_hemisphere = False
+            self.void_value = -9999
+            self.dtype = np.float32
+            self.zarr_type = True
+
+        # --------------------------------------------------------------------------------
         elif self.name == "arcticdem_100m_greenland_v4.1_zarr":
             # 100m DEM (subarea of Greenland) extracted from ArcticDem v4.1
             # The void areas will contain null values (-9999) in lieu of the terrain elevations.
@@ -822,7 +1115,7 @@ class Dem:
         # --------------------------------------------------------------------------------
 
         else:
-            raise ValueError(f"{self.name} does not have load support")
+            raise ValueError(f"{self.name} is not a supported DEM name")
 
         # Form the DEM file name and load the DEM
         try:
@@ -835,6 +1128,8 @@ class Dem:
             self.load_npz(demfile)
         elif self.zarr_type:
             self.load_zarr(demfile)
+        elif self.nc_type:
+            self.load_nc(demfile)
         else:
             self.load_geotiff(demfile)
 

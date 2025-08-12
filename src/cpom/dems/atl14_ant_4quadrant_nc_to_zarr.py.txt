@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""
+Utility to combine four quadrant ATL14 Antarctic DEM NetCDF files
+into a single Zarr mosaic.
+
+The four input files should be arranged as follows (by quadrant label in the filename):
+
+       A2   |   A1
+      ---------------
+       A3   |   A4
+
+For each file the script reads the GeoTransform (e.g. 
+    [x0, dx, 0, y0, 0, dy])
+and computes coordinate arrays as:
+
+    x = x0 + dx * arange(nx)
+    y = y0 + dy * arange(ny)
+
+It then computes the global mosaic grid from the union of the quadrant extents and
+places each quadrant into the appropriate offset.
+A Zarr mosaic (and a vertically flipped copy) are then written using a specified chunk size.
+"""
+
+import argparse
+import os
+import shutil
+import sys
+
+import numpy as np
+import xarray as xr
+import zarr
+
+
+def get_quadrant_data(nc_file):
+    """
+    Open the NetCDF file, read the DEM ("h") and GeoTransform from the
+    "Polar_Stereographic" variable, and compute the full x and y coordinate arrays.
+
+    Returns a dictionary with keys:
+      - 'h': 2D DEM data (numpy array)
+      - 'nx': number of columns
+      - 'ny': number of rows
+      - 'GT': the GeoTransform as a list of 6 floats [x0, dx, 0, y0, 0, dy]
+      - 'x': 1D numpy array of x coordinates (cell centers)
+      - 'y': 1D numpy array of y coordinates (cell centers)
+    """
+    ds = xr.open_dataset(nc_file)
+    h = ds["h"].values  # shape (ny, nx)
+    ny, nx = h.shape
+
+    # Try to get GeoTransform from the Polar_Stereographic variable attributes.
+    if "Polar_Stereographic" not in ds.variables:
+        sys.exit(f"File {nc_file} does not contain a 'Polar_Stereographic' variable.")
+    ps_attr = ds["Polar_Stereographic"].attrs
+    GT = ps_attr.get("GeoTransform", None)
+    if GT is None:
+        sys.exit(f"File {nc_file} is missing a GeoTransform attribute.")
+    # Ensure GT is a list of floats.
+    if hasattr(GT, "tolist"):
+        GT = GT.tolist()
+    elif isinstance(GT, (list, tuple)):
+        GT = [float(val) for val in GT]
+    else:
+        GT = [float(GT)]
+    if len(GT) != 6:
+        sys.exit(f"GeoTransform in {nc_file} does not have 6 elements.")
+    # Compute x and y arrays from the GeoTransform.
+    # GeoTransform is typically: [x0, dx, 0, y0, 0, dy] where dy is negative.
+    x0, dx, _, y0, _, dy = GT
+    x = x0 + dx * np.arange(nx)
+    y = y0 + dy * np.arange(ny)
+    ds.close()
+    return {"h": h, "nx": nx, "ny": ny, "GT": GT, "x": x, "y": y}
+
+
+def parse_quadrant_files(file_list):
+    """
+    Determine which file is which quadrant based on filename.
+    For this mosaic we require:
+      - A2: top left
+      - A1: top right
+      - A3: bottom left
+      - A4: bottom right
+    Returns a dictionary mapping quadrant label to filename.
+    """
+    quadrants = {}
+    for f in file_list:
+        base = os.path.basename(f)
+        if "A1" in base:
+            quadrants["A1"] = f
+        elif "A2" in base:
+            quadrants["A2"] = f
+        elif "A3" in base:
+            quadrants["A3"] = f
+        elif "A4" in base:
+            quadrants["A4"] = f
+        else:
+            sys.exit(f"Could not determine quadrant from filename {f}")
+    for q in ["A1", "A2", "A3", "A4"]:
+        if q not in quadrants:
+            sys.exit(f"Missing file for quadrant {q}")
+    return quadrants
+
+
+def build_global_grid(qdata):
+    """
+    Given a dictionary of quadrant data (with keys A1, A2, A3, A4), compute the global mosaic grid.
+
+    For our arrangement:
+       A2   |   A1   (top row)
+       ---------------
+       A3   |   A4   (bottom row)
+
+    We compute:
+      global_x_min = min( A2.x[0], A3.x[0] )
+      global_x_max = max( A1.x[-1], A4.x[-1] )
+      global_y_max = max( A2.y[0], A1.y[0] )    (remember: dy is negative so the first element is the top)
+      global_y_min = min( A3.y[-1], A4.y[-1] )
+
+    We also assume the same pixel spacing (dx and dy) in all quadrants.
+
+    Returns:
+      global_x, global_y, dx, dy, ncols_global, nrows_global
+    """
+    # Use A2 and A3 for left-side x; A1 and A4 for right-side x.
+    x_left = qdata["A2"]["x"][0]
+    x_left_b = qdata["A3"]["x"][0]
+    global_x_min = min(x_left, x_left_b)
+    x_right = qdata["A1"]["x"][-1]
+    x_right_b = qdata["A4"]["x"][-1]
+    global_x_max = max(x_right, x_right_b)
+
+    # Use A2 and A1 for top y; A3 and A4 for bottom y.
+    y_top_A2 = qdata["A2"]["y"][0]
+    y_top_A1 = qdata["A1"]["y"][0]
+    global_y_max = max(y_top_A2, y_top_A1)
+    y_bot_A3 = qdata["A3"]["y"][-1]
+    y_bot_A4 = qdata["A4"]["y"][-1]
+    global_y_min = min(y_bot_A3, y_bot_A4)
+
+    # Assume pixel spacing from one quadrant (they should be the same)
+    dx = qdata["A2"]["GT"][1]
+    dy = qdata["A2"]["GT"][5]
+    # Compute number of columns and rows in the global mosaic.
+    ncols_global = int(round((global_x_max - global_x_min) / dx)) + 1
+    nrows_global = int(round((global_y_max - global_y_min) / abs(dy))) + 1
+
+    # Build global coordinate arrays.
+    global_x = global_x_min + dx * np.arange(ncols_global)
+    # For y, since dy is negative, we want descending order.
+    global_y = global_y_max - abs(dy) * np.arange(nrows_global)
+    return global_x, global_y, dx, dy, ncols_global, nrows_global
+
+
+def place_quadrant(mosaic, global_x, global_y, qdat):
+    """
+    Place a quadrant’s DEM (qdat) into the mosaic.
+
+    The offset indices are computed as:
+      offset_col = round((qdat.x[0] - global_x[0]) / dx)
+      offset_row = round((global_y[0] - qdat.y[0]) / abs(dy))
+
+    mosaic is updated in place.
+    """
+    dx = qdat["GT"][1]
+    dy = qdat["GT"][5]
+    # Compute offsets.
+    offset_col = int(round((qdat["x"][0] - global_x[0]) / dx))
+    offset_row = int(round((global_y[0] - qdat["y"][0]) / abs(dy)))
+    ny, nx = qdat["h"].shape
+    mosaic[offset_row : offset_row + ny, offset_col : offset_col + nx] = qdat["h"]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Combine four quadrant ATL14 Antarctic DEM NetCDF files into a single Zarr mosaic."
+    )
+    parser.add_argument(
+        "--nc_files",
+        "-f",
+        nargs=4,
+        required=True,
+        help="Paths to the four quadrant NetCDF files (should include A1, A2, A3, A4 in filenames)",
+    )
+    parser.add_argument(
+        "--outdir",
+        "-o",
+        type=str,
+        default=".",
+        help="Directory to write the Zarr output (not the Zarr directory itself)",
+    )
+    parser.add_argument(
+        "--chunk_size",
+        "-c",
+        type=int,
+        default=20000,
+        help="Desired chunk size in meters (default: 20000 i.e. 20km)",
+    )
+    args = parser.parse_args()
+
+    # Validate files.
+    for f in args.nc_files:
+        if not os.path.isfile(f):
+            sys.exit(f"File {f} not found.")
+
+    # Parse quadrant files.
+    quad_files = parse_quadrant_files(args.nc_files)
+
+    # Load data for each quadrant.
+    qdata = {}
+    for q in ["A1", "A2", "A3", "A4"]:
+        print(f"Loading quadrant {q} from {quad_files[q]} …")
+        qdata[q] = get_quadrant_data(quad_files[q])
+        print(f"  Quadrant {q}: shape {qdata[q]['h'].shape}")
+
+    # Compute global grid.
+    global_x, global_y, dx, dy, ncols_global, nrows_global = build_global_grid(qdata)
+    print(f"Global mosaic: {nrows_global} rows x {ncols_global} cols")
+    print(f"X range: {global_x[0]} to {global_x[-1]}, Y range: {global_y[0]} to {global_y[-1]}")
+
+    # Create empty mosaic array.
+    dtype = qdata["A1"]["h"].dtype
+    mosaic = np.full((nrows_global, ncols_global), np.nan, dtype=dtype)
+
+    # Place each quadrant in the mosaic.
+    # Per documentation: A2 = top left, A1 = top right, A3 = bottom left, A4 = bottom right.
+
+    place_quadrant(mosaic, global_x, global_y, qdata["A3"])
+    place_quadrant(mosaic, global_x, global_y, qdata["A4"])
+    place_quadrant(mosaic, global_x, global_y, qdata["A2"])
+    place_quadrant(mosaic, global_x, global_y, qdata["A1"])
+
+    # Compute overall corner coordinates.
+    top_left_corner = (global_x[0], global_y[0])
+    top_right_corner = (global_x[-1], global_y[0])
+    bottom_left_corner = (global_x[0], global_y[-1])
+
+    # Determine chunk size (in grid cells) from desired chunk width in meters.
+    chunk_rows = max(int(nrows_global * dx / args.chunk_size), 1)
+    chunk_cols = max(int(ncols_global * dx / args.chunk_size), 1)
+    chunk_size = (chunk_rows, chunk_cols)
+    print(f"Using chunk size (rows, cols): {chunk_size}")
+
+    # Prepare output filenames.
+    # Use first input file name, remove quadrant tag and extension.
+    base = os.path.basename(quad_files["A1"])
+    out_base = base.replace("A1", "").replace(".nc", "")
+    zarr_file = os.path.join(args.outdir, out_base + ".zarr")
+    flipped_zarr_file = os.path.join(args.outdir, out_base + "_flipped.zarr")
+
+    # Remove existing output directories if they exist.
+    for z in (zarr_file, flipped_zarr_file):
+        if os.path.isdir(z):
+            print(f"{z} already exists; removing it.")
+            shutil.rmtree(z)
+
+    # Create Zarr arrays.
+    compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE)
+    zarr_array = zarr.open_array(
+        zarr_file,
+        mode="w",
+        shape=(nrows_global, ncols_global),
+        chunks=chunk_size,
+        dtype=dtype,
+        compressor=compressor,
+    )
+    flipped_zarr_array = zarr.open_array(
+        flipped_zarr_file,
+        mode="w",
+        shape=(nrows_global, ncols_global),
+        chunks=chunk_size,
+        dtype=dtype,
+        compressor=compressor,
+    )
+
+    # Write mosaic data in chunks.
+    for i in range(0, nrows_global, chunk_size[0]):
+        for j in range(0, ncols_global, chunk_size[1]):
+            chunk = mosaic[i : i + chunk_size[0], j : j + chunk_size[1]]
+            actual_shape = chunk.shape
+            zarr_array[i : i + actual_shape[0], j : j + actual_shape[1]] = chunk
+            # Create vertically flipped copy.
+            flipped_zarr_array[
+                (nrows_global - i - actual_shape[0]) : (nrows_global - i),
+                j : j + actual_shape[1],
+            ] = chunk[::-1, :]
+
+    # Save metadata attributes.
+    geo_metadata = {
+        "transform": qdata["A2"]["GT"],  # using A2's GeoTransform (could choose another)
+        "crs": None,  # you may extract this similarly if needed
+        "void_value": None,
+    }
+    grid_metadata = {
+        "ncols": ncols_global,
+        "nrows": nrows_global,
+        "top_l": top_left_corner,
+        "top_r": top_right_corner,
+        "bottom_l": bottom_left_corner,
+        "binsize": dx,
+    }
+    zarr_array.attrs.update(geo_metadata)
+    zarr_array.attrs.update(grid_metadata)
+    flipped_zarr_array.attrs.update(geo_metadata)
+    flipped_zarr_array.attrs.update(grid_metadata)
+
+    print(f"Created {zarr_file}")
+    print(f"Created {flipped_zarr_file}")
+
+
+if __name__ == "__main__":
+    main()

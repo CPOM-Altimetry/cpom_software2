@@ -96,25 +96,25 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a><span class="sd">chunk size equivalent to the CS2 beamwidth or a selectable chunk size</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="kn">import</span> <span class="nn">argparse</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">import</span> <span class="nn">shutil</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="kn">import</span> <span class="nn">sys</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a>
-</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">import</span> <span class="nn">rasterio</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="kn">import</span> <span class="nn">zarr</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">rasterio</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 </span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a>
 </span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="c1"># pylint: disable=too-many-locals</span>
 </span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a>
 </span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
-</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="k">class</span> <span class="nc">DEMConverter</span><span class="p">:</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="k">class</span><span class="w"> </span><span class="nc">DEMConverter</span><span class="p">:</span>
 </span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Class to convert Geotiff format DEMs to zarr&quot;&quot;&quot;</span>
 </span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a>
-</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a>
-</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>    <span class="k">def</span> <span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Get info from GeoTIFF on its extent</span>
 </span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a>
 </span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="sd">        Args:</span>
@@ -145,7 +145,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_width</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_height</span><span class="p">):</span>
 </span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pixel_width </span><span class="si">{</span><span class="n">pixel_width</span><span class="si">}</span><span class="s2"> != pixel_height </span><span class="si">{</span><span class="n">pixel_height</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>        <span class="k">except</span> <span class="n">rasterio</span><span class="o">.</span><span class="n">errors</span><span class="o">.</span><span class="n">RasterioIOError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>        <span class="k">return</span> <span class="p">(</span>
 </span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>            <span class="n">width</span><span class="p">,</span>
 </span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>            <span class="n">height</span><span class="p">,</span>
@@ -156,7 +156,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>            <span class="n">pixel_width</span><span class="p">,</span>
 </span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>        <span class="p">)</span>
 </span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>    <span class="k">def</span> <span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
 </span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>        <span class="n">demfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>        <span class="n">zarrfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -275,10 +275,10 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="L-181"><a href="#L-181"><span class="linenos">181</span></a>                <span class="p">)</span>
 </span><span id="L-182"><a href="#L-182"><span class="linenos">182</span></a>
 </span><span id="L-183"><a href="#L-183"><span class="linenos">183</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="L-184"><a href="#L-184"><span class="linenos">184</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="L-184"><a href="#L-184"><span class="linenos">184</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span><span id="L-185"><a href="#L-185"><span class="linenos">185</span></a>
 </span><span id="L-186"><a href="#L-186"><span class="linenos">186</span></a>
-</span><span id="L-187"><a href="#L-187"><span class="linenos">187</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+</span><span id="L-187"><a href="#L-187"><span class="linenos">187</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="L-188"><a href="#L-188"><span class="linenos">188</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function for command line tool&quot;&quot;&quot;</span>
 </span><span id="L-189"><a href="#L-189"><span class="linenos">189</span></a>
 </span><span id="L-190"><a href="#L-190"><span class="linenos">190</span></a>    <span class="c1"># ----------------------------------------------------------------------</span>
@@ -394,13 +394,13 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter-18"><a href="#DEMConverter-18"><span class="linenos"> 18</span></a><span class="k">class</span> <span class="nc">DEMConverter</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter-18"><a href="#DEMConverter-18"><span class="linenos"> 18</span></a><span class="k">class</span><span class="w"> </span><span class="nc">DEMConverter</span><span class="p">:</span>
 </span><span id="DEMConverter-19"><a href="#DEMConverter-19"><span class="linenos"> 19</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Class to convert Geotiff format DEMs to zarr&quot;&quot;&quot;</span>
 </span><span id="DEMConverter-20"><a href="#DEMConverter-20"><span class="linenos"> 20</span></a>
-</span><span id="DEMConverter-21"><a href="#DEMConverter-21"><span class="linenos"> 21</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+</span><span id="DEMConverter-21"><a href="#DEMConverter-21"><span class="linenos"> 21</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="DEMConverter-22"><a href="#DEMConverter-22"><span class="linenos"> 22</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span><span id="DEMConverter-23"><a href="#DEMConverter-23"><span class="linenos"> 23</span></a>
-</span><span id="DEMConverter-24"><a href="#DEMConverter-24"><span class="linenos"> 24</span></a>    <span class="k">def</span> <span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="DEMConverter-24"><a href="#DEMConverter-24"><span class="linenos"> 24</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="DEMConverter-25"><a href="#DEMConverter-25"><span class="linenos"> 25</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Get info from GeoTIFF on its extent</span>
 </span><span id="DEMConverter-26"><a href="#DEMConverter-26"><span class="linenos"> 26</span></a>
 </span><span id="DEMConverter-27"><a href="#DEMConverter-27"><span class="linenos"> 27</span></a><span class="sd">        Args:</span>
@@ -431,7 +431,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="DEMConverter-52"><a href="#DEMConverter-52"><span class="linenos"> 52</span></a>                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_width</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_height</span><span class="p">):</span>
 </span><span id="DEMConverter-53"><a href="#DEMConverter-53"><span class="linenos"> 53</span></a>                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pixel_width </span><span class="si">{</span><span class="n">pixel_width</span><span class="si">}</span><span class="s2"> != pixel_height </span><span class="si">{</span><span class="n">pixel_height</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="DEMConverter-54"><a href="#DEMConverter-54"><span class="linenos"> 54</span></a>        <span class="k">except</span> <span class="n">rasterio</span><span class="o">.</span><span class="n">errors</span><span class="o">.</span><span class="n">RasterioIOError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="DEMConverter-55"><a href="#DEMConverter-55"><span class="linenos"> 55</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="DEMConverter-55"><a href="#DEMConverter-55"><span class="linenos"> 55</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span><span id="DEMConverter-56"><a href="#DEMConverter-56"><span class="linenos"> 56</span></a>        <span class="k">return</span> <span class="p">(</span>
 </span><span id="DEMConverter-57"><a href="#DEMConverter-57"><span class="linenos"> 57</span></a>            <span class="n">width</span><span class="p">,</span>
 </span><span id="DEMConverter-58"><a href="#DEMConverter-58"><span class="linenos"> 58</span></a>            <span class="n">height</span><span class="p">,</span>
@@ -442,7 +442,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="DEMConverter-63"><a href="#DEMConverter-63"><span class="linenos"> 63</span></a>            <span class="n">pixel_width</span><span class="p">,</span>
 </span><span id="DEMConverter-64"><a href="#DEMConverter-64"><span class="linenos"> 64</span></a>        <span class="p">)</span>
 </span><span id="DEMConverter-65"><a href="#DEMConverter-65"><span class="linenos"> 65</span></a>
-</span><span id="DEMConverter-66"><a href="#DEMConverter-66"><span class="linenos"> 66</span></a>    <span class="k">def</span> <span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
+</span><span id="DEMConverter-66"><a href="#DEMConverter-66"><span class="linenos"> 66</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
 </span><span id="DEMConverter-67"><a href="#DEMConverter-67"><span class="linenos"> 67</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DEMConverter-68"><a href="#DEMConverter-68"><span class="linenos"> 68</span></a>        <span class="n">demfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="DEMConverter-69"><a href="#DEMConverter-69"><span class="linenos"> 69</span></a>        <span class="n">zarrfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -561,7 +561,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="DEMConverter-182"><a href="#DEMConverter-182"><span class="linenos">182</span></a>                <span class="p">)</span>
 </span><span id="DEMConverter-183"><a href="#DEMConverter-183"><span class="linenos">183</span></a>
 </span><span id="DEMConverter-184"><a href="#DEMConverter-184"><span class="linenos">184</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="DEMConverter-185"><a href="#DEMConverter-185"><span class="linenos">185</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="DEMConverter-185"><a href="#DEMConverter-185"><span class="linenos">185</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span></pre></div>
 
 
@@ -579,7 +579,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.__init__-21"><a href="#DEMConverter.__init__-21"><span class="linenos">21</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.__init__-21"><a href="#DEMConverter.__init__-21"><span class="linenos">21</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">void_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 </span><span id="DEMConverter.__init__-22"><a href="#DEMConverter.__init__-22"><span class="linenos">22</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">void_value</span> <span class="o">=</span> <span class="n">void_value</span>
 </span></pre></div>
 
@@ -609,7 +609,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.get_geotiff_extent"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.get_geotiff_extent-24"><a href="#DEMConverter.get_geotiff_extent-24"><span class="linenos">24</span></a>    <span class="k">def</span> <span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.get_geotiff_extent-24"><a href="#DEMConverter.get_geotiff_extent-24"><span class="linenos">24</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_geotiff_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 </span><span id="DEMConverter.get_geotiff_extent-25"><a href="#DEMConverter.get_geotiff_extent-25"><span class="linenos">25</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Get info from GeoTIFF on its extent</span>
 </span><span id="DEMConverter.get_geotiff_extent-26"><a href="#DEMConverter.get_geotiff_extent-26"><span class="linenos">26</span></a>
 </span><span id="DEMConverter.get_geotiff_extent-27"><a href="#DEMConverter.get_geotiff_extent-27"><span class="linenos">27</span></a><span class="sd">        Args:</span>
@@ -640,7 +640,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="DEMConverter.get_geotiff_extent-52"><a href="#DEMConverter.get_geotiff_extent-52"><span class="linenos">52</span></a>                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_width</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pixel_height</span><span class="p">):</span>
 </span><span id="DEMConverter.get_geotiff_extent-53"><a href="#DEMConverter.get_geotiff_extent-53"><span class="linenos">53</span></a>                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pixel_width </span><span class="si">{</span><span class="n">pixel_width</span><span class="si">}</span><span class="s2"> != pixel_height </span><span class="si">{</span><span class="n">pixel_height</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="DEMConverter.get_geotiff_extent-54"><a href="#DEMConverter.get_geotiff_extent-54"><span class="linenos">54</span></a>        <span class="k">except</span> <span class="n">rasterio</span><span class="o">.</span><span class="n">errors</span><span class="o">.</span><span class="n">RasterioIOError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="DEMConverter.get_geotiff_extent-55"><a href="#DEMConverter.get_geotiff_extent-55"><span class="linenos">55</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="DEMConverter.get_geotiff_extent-55"><a href="#DEMConverter.get_geotiff_extent-55"><span class="linenos">55</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read GeoTIFF: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span><span id="DEMConverter.get_geotiff_extent-56"><a href="#DEMConverter.get_geotiff_extent-56"><span class="linenos">56</span></a>        <span class="k">return</span> <span class="p">(</span>
 </span><span id="DEMConverter.get_geotiff_extent-57"><a href="#DEMConverter.get_geotiff_extent-57"><span class="linenos">57</span></a>            <span class="n">width</span><span class="p">,</span>
 </span><span id="DEMConverter.get_geotiff_extent-58"><a href="#DEMConverter.get_geotiff_extent-58"><span class="linenos">58</span></a>            <span class="n">height</span><span class="p">,</span>
@@ -689,7 +689,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 
     </div>
     <a class="headerlink" href="#DEMConverter.convert_geotiff_to_zarr"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.convert_geotiff_to_zarr-66"><a href="#DEMConverter.convert_geotiff_to_zarr-66"><span class="linenos"> 66</span></a>    <span class="k">def</span> <span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DEMConverter.convert_geotiff_to_zarr-66"><a href="#DEMConverter.convert_geotiff_to_zarr-66"><span class="linenos"> 66</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">convert_geotiff_to_zarr</span><span class="p">(</span>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-67"><a href="#DEMConverter.convert_geotiff_to_zarr-67"><span class="linenos"> 67</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-68"><a href="#DEMConverter.convert_geotiff_to_zarr-68"><span class="linenos"> 68</span></a>        <span class="n">demfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-69"><a href="#DEMConverter.convert_geotiff_to_zarr-69"><span class="linenos"> 69</span></a>        <span class="n">zarrfile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -808,7 +808,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-182"><a href="#DEMConverter.convert_geotiff_to_zarr-182"><span class="linenos">182</span></a>                <span class="p">)</span>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-183"><a href="#DEMConverter.convert_geotiff_to_zarr-183"><span class="linenos">183</span></a>
 </span><span id="DEMConverter.convert_geotiff_to_zarr-184"><a href="#DEMConverter.convert_geotiff_to_zarr-184"><span class="linenos">184</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-</span><span id="DEMConverter.convert_geotiff_to_zarr-185"><a href="#DEMConverter.convert_geotiff_to_zarr-185"><span class="linenos">185</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+</span><span id="DEMConverter.convert_geotiff_to_zarr-185"><a href="#DEMConverter.convert_geotiff_to_zarr-185"><span class="linenos">185</span></a>            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to convert GeoTIFF to Zarr: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 </span></pre></div>
 
 
@@ -838,7 +838,7 @@ chunk size equivalent to the CS2 beamwidth or a selectable chunk size</p>
 
     </div>
     <a class="headerlink" href="#main"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="main-188"><a href="#main-188"><span class="linenos">188</span></a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="main-188"><a href="#main-188"><span class="linenos">188</span></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
 </span><span id="main-189"><a href="#main-189"><span class="linenos">189</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;main function for command line tool&quot;&quot;&quot;</span>
 </span><span id="main-190"><a href="#main-190"><span class="linenos">190</span></a>
 </span><span id="main-191"><a href="#main-191"><span class="linenos">191</span></a>    <span class="c1"># ----------------------------------------------------------------------</span>

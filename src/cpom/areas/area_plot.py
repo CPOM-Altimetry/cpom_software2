@@ -3,15 +3,13 @@ class to plot areas defined in cpom.areas.definitions
 
 To do reminder:
 
-TODO: doc in __init__.py
 TODO: grid support
-TODO: vostok antarctic area still to be added
-TODO: arctic area
 """
 
 import logging
 import os
 from dataclasses import dataclass
+from typing import List, Tuple, Union
 
 import cartopy.crs as ccrs  # type: ignore
 import matplotlib.colors as mcolors
@@ -41,29 +39,38 @@ from cpom.backgrounds.backgrounds import (  # background images functions for po
 log = logging.getLogger(__name__)
 
 
-def get_unique_colors(n: int, cmap_name_override: str | None = None):
-    """get a list of n unique colors for plotting flag data (when no colors are
-       provided, as sampled from the tab20 or tab10 colormap
+def get_unique_colors(
+    n: int, cmap_name_override: str | None = None, as_hex: bool = False
+) -> List[Union[str, Tuple[float, float, float, float]]]:
+    """Get a list of n unique colors for plotting flag data (when no colors are
+       provided), as sampled from the tab20 or tab10 colormap.
 
     Args:
-        n (int): number of colors required (<= 20 will provide unique colors
-        otherwise some repetition)
-        cmap_name_override (str): override colormap name to use, Typical alternatives are
-                         "tab10", "tab20b", "tab20c", and "Set1", "Set2","Set3"
+        n (int): Number of colors required (<= 20 will provide unique colors,
+                 otherwise some repetition).
+        cmap_name_override (str | None): Override colormap name to use. Typical alternatives are
+                                         "tab10", "tab20b", "tab20c", "Set1", "Set2", "Set3".
+        as_hex (bool): If True, returns colors as hex strings. If False, returns RGBA tuples.
 
     Returns:
-        List[Tuple[float,float,float,float]]: list of color RGBA
+        List[str | Tuple[float, float, float, float]]: List of colors as hex strings or RGBA tuples.
     """
+    # Select colormap
     if n <= 10:
         cmap_name = "tab10"
     else:
         cmap_name = "tab20"
     if cmap_name_override is not None:
         cmap_name = cmap_name_override
-    cmap = colormaps[cmap_name].resampled(
-        n
-    )  # Using the dictionary-like access and resampled method
-    colors = [cmap(i) for i in range(cmap.N)]
+
+    # Get and resample colormap
+    cmap = colormaps[cmap_name].resampled(n)
+    colors: List[Union[str, Tuple[float, float, float, float]]] = [cmap(i) for i in range(cmap.N)]
+
+    # Convert to hex if requested
+    if as_hex:
+        colors = [mcolors.to_hex(color) for color in colors]
+
     return colors
 
 
@@ -483,11 +490,13 @@ class Polarplot:
 
                 if n_vals != len(lats):
                     raise ValueError(
-                        f"length of vals array must equal lats array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lats array {len(lats)} in "
+                        f"data set {ds_num}"
                     )
                 if n_vals != len(lons):
                     raise ValueError(
-                        f"length of vals array must equal lons array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lons array {len(lons)} "
+                        f"in data set {ds_num}"
                     )
 
                 # convert to ndarray if a list
@@ -2353,7 +2362,10 @@ class Polarplot:
         # EPSG:3395: World Mercator/ WGS 84
         elif self.thisarea.epsg_number == 3395:
             dataprj = ccrs.epsg("3395")
-            this_projection = ccrs.PlateCarree()
+            if self.thisarea.name == "global":
+                this_projection = ccrs.PlateCarree()
+            else:
+                this_projection = ccrs.Mercator()
 
         else:
             raise ValueError(f"EPSG-{self.thisarea.epsg_number} not supported")

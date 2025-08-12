@@ -104,26 +104,26 @@
 </span><span id="L-2"><a href="#L-2"><span class="linenos">   2</span></a><span class="sd">Class to manage background images for polar plotting</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos">   3</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos">   4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">   5</span></a><span class="kn">import</span> <span class="nn">gc</span>  <span class="c1"># garbage collection</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">   6</span></a><span class="kn">import</span> <span class="nn">logging</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">   7</span></a><span class="kn">import</span> <span class="nn">os</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">   8</span></a><span class="kn">import</span> <span class="nn">sys</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos">   5</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>  <span class="c1"># garbage collection</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">   6</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">   7</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos">   8</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos">   9</span></a>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">  10</span></a><span class="kn">import</span> <span class="nn">cartopy</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">  11</span></a><span class="kn">import</span> <span class="nn">cartopy.feature</span> <span class="k">as</span> <span class="nn">cfeature</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">  12</span></a><span class="kn">import</span> <span class="nn">cartopy.io.img_tiles</span> <span class="k">as</span> <span class="nn">cimgt</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">  13</span></a><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>  <span class="c1"># plotting functions</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">  14</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">  15</span></a><span class="kn">import</span> <span class="nn">pyproj</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">  16</span></a><span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">colormaps</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">  17</span></a><span class="kn">from</span> <span class="nn">matplotlib.colors</span> <span class="kn">import</span> <span class="n">LinearSegmentedColormap</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">  18</span></a><span class="kn">from</span> <span class="nn">netCDF4</span> <span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint: disable=E0611</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">  19</span></a><span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">  20</span></a><span class="kn">from</span> <span class="nn">pyproj</span> <span class="kn">import</span> <span class="n">Transformer</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">  21</span></a><span class="kn">from</span> <span class="nn">skimage</span> <span class="kn">import</span> <span class="n">exposure</span>  <span class="c1"># from scikit-image</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">  10</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">cartopy</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">  11</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">cartopy.feature</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cfeature</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">  12</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">cartopy.io.img_tiles</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cimgt</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">  13</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>  <span class="c1"># plotting functions</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">  14</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">  15</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyproj</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">  16</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">colormaps</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">  17</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSegmentedColormap</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">  18</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">netCDF4</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>  <span class="c1"># pylint: disable=E0611</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">  19</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">  20</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyproj</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transformer</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos">  21</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">skimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">exposure</span>  <span class="c1"># from scikit-image</span>
 </span><span id="L-22"><a href="#L-22"><span class="linenos">  22</span></a>
-</span><span id="L-23"><a href="#L-23"><span class="linenos">  23</span></a><span class="kn">from</span> <span class="nn">cpom.areas.areas</span> <span class="kn">import</span> <span class="n">Area</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">  24</span></a><span class="kn">from</span> <span class="nn">cpom.dems.dems</span> <span class="kn">import</span> <span class="n">Dem</span>  <span class="c1"># DEM reading</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos">  23</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.areas.areas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Area</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos">  24</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">cpom.dems.dems</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dem</span>  <span class="c1"># DEM reading</span>
 </span><span id="L-25"><a href="#L-25"><span class="linenos">  25</span></a>
 </span><span id="L-26"><a href="#L-26"><span class="linenos">  26</span></a><span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 </span><span id="L-27"><a href="#L-27"><span class="linenos">  27</span></a>
@@ -142,7 +142,7 @@
 </span><span id="L-40"><a href="#L-40"><span class="linenos">  40</span></a>    <span class="s2">&quot;cartopy_stock&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
 </span><span id="L-41"><a href="#L-41"><span class="linenos">  41</span></a>    <span class="s2">&quot;cartopy_stock_ocean&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
 </span><span id="L-42"><a href="#L-42"><span class="linenos">  42</span></a>    <span class="s2">&quot;arcgis_shaded_relief&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
-</span><span id="L-43"><a href="#L-43"><span class="linenos">  43</span></a>    <span class="c1"># &quot;google_satellite&quot;: [&quot;canadianlake_woods&quot;],</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos">  43</span></a>    <span class="s2">&quot;google_satellite&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;sweden&quot;</span><span class="p">],</span>
 </span><span id="L-44"><a href="#L-44"><span class="linenos">  44</span></a>    <span class="s2">&quot;bluemarble&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
 </span><span id="L-45"><a href="#L-45"><span class="linenos">  45</span></a>    <span class="s2">&quot;natural_earth_cbh&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
 </span><span id="L-46"><a href="#L-46"><span class="linenos">  46</span></a>    <span class="s2">&quot;natural_earth_cbh_oceanmasked&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;antarctica_is&quot;</span><span class="p">,</span> <span class="s2">&quot;arctic&quot;</span><span class="p">],</span>
@@ -168,10 +168,10 @@
 </span><span id="L-66"><a href="#L-66"><span class="linenos">  66</span></a><span class="c1"># all_backgrounds = {&quot;google_satellite&quot;: &#39;canadianlake_woods&#39;,}</span>
 </span><span id="L-67"><a href="#L-67"><span class="linenos">  67</span></a>
 </span><span id="L-68"><a href="#L-68"><span class="linenos">  68</span></a>
-</span><span id="L-69"><a href="#L-69"><span class="linenos">  69</span></a><span class="k">class</span> <span class="nc">Background</span><span class="p">:</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos">  69</span></a><span class="k">class</span><span class="w"> </span><span class="nc">Background</span><span class="p">:</span>
 </span><span id="L-70"><a href="#L-70"><span class="linenos">  70</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;class to handle background images&quot;&quot;&quot;</span>
 </span><span id="L-71"><a href="#L-71"><span class="linenos">  71</span></a>
-</span><span id="L-72"><a href="#L-72"><span class="linenos">  72</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos">  72</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
 </span><span id="L-73"><a href="#L-73"><span class="linenos">  73</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;class initialization</span>
 </span><span id="L-74"><a href="#L-74"><span class="linenos">  74</span></a>
 </span><span id="L-75"><a href="#L-75"><span class="linenos">  75</span></a><span class="sd">        Args:</span>
@@ -195,7 +195,7 @@
 </span><span id="L-93"><a href="#L-93"><span class="linenos">  93</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">moa_image</span> <span class="o">=</span> <span class="kc">None</span>
 </span><span id="L-94"><a href="#L-94"><span class="linenos">  94</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">moa_zimage</span> <span class="o">=</span> <span class="kc">None</span>
 </span><span id="L-95"><a href="#L-95"><span class="linenos">  95</span></a>
-</span><span id="L-96"><a href="#L-96"><span class="linenos">  96</span></a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span>
+</span><span id="L-96"><a href="#L-96"><span class="linenos">  96</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span>
 </span><span id="L-97"><a href="#L-97"><span class="linenos">  97</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="L-98"><a href="#L-98"><span class="linenos">  98</span></a>        <span class="n">ax</span><span class="p">,</span>  <span class="c1"># axis to display background</span>
 </span><span id="L-99"><a href="#L-99"><span class="linenos">  99</span></a>        <span class="n">dataprj</span><span class="p">,</span>  <span class="c1"># cartopy coordinate reference system (crs)</span>
@@ -1259,7 +1259,7 @@
                     <div class="attr variable">
             <span class="name">all_backgrounds</span>        =
 <input id="all_backgrounds-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
-            <label class="view-value-button pdoc-button" for="all_backgrounds-view-value"></label><span class="default_value">{&#39;basic_land&#39;: [&#39;antarctica_is&#39;], &#39;basic_land_black&#39;: [&#39;antarctica_is&#39;], &#39;cartopy_stock&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;cartopy_stock_ocean&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;arcgis_shaded_relief&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;bluemarble&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh_oceanmasked&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh_ocean&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_gray&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth1&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;stamen&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_faded&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;moa&#39;: [&#39;antarctica_is&#39;, &#39;vostok&#39;], &#39;cpom_dem&#39;: [&#39;antarctica_is&#39;], &#39;awi_gis_dem&#39;: [&#39;greenland&#39;], &#39;arcticdem_1km&#39;: [&#39;arctic&#39;], &#39;rema_dem_1km&#39;: [&#39;antarctica_is&#39;], &#39;grn_s1_mosaic&#39;: [&#39;greenland&#39;], &#39;hillshade&#39;: [&#39;antarctica_is&#39;, &#39;greenland&#39;], &#39;ant_iceshelves&#39;: [&#39;antarctica_is&#39;], &#39;ibcso_bathymetry&#39;: [&#39;antarctica_is&#39;], &#39;ibcao_bathymetry&#39;: [&#39;arctic&#39;]}</span>
+            <label class="view-value-button pdoc-button" for="all_backgrounds-view-value"></label><span class="default_value">{&#39;basic_land&#39;: [&#39;antarctica_is&#39;], &#39;basic_land_black&#39;: [&#39;antarctica_is&#39;], &#39;cartopy_stock&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;cartopy_stock_ocean&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;arcgis_shaded_relief&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;google_satellite&#39;: [&#39;sweden&#39;], &#39;bluemarble&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh_oceanmasked&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_cbh_ocean&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_gray&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth1&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;stamen&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;natural_earth_faded&#39;: [&#39;antarctica_is&#39;, &#39;arctic&#39;], &#39;moa&#39;: [&#39;antarctica_is&#39;, &#39;vostok&#39;], &#39;cpom_dem&#39;: [&#39;antarctica_is&#39;], &#39;awi_gis_dem&#39;: [&#39;greenland&#39;], &#39;arcticdem_1km&#39;: [&#39;arctic&#39;], &#39;rema_dem_1km&#39;: [&#39;antarctica_is&#39;], &#39;grn_s1_mosaic&#39;: [&#39;greenland&#39;], &#39;hillshade&#39;: [&#39;antarctica_is&#39;, &#39;greenland&#39;], &#39;ant_iceshelves&#39;: [&#39;antarctica_is&#39;], &#39;ibcso_bathymetry&#39;: [&#39;antarctica_is&#39;], &#39;ibcao_bathymetry&#39;: [&#39;arctic&#39;]}</span>
 
         
     </div>
@@ -1291,10 +1291,10 @@
 
     </div>
     <a class="headerlink" href="#Background"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Background-70"><a href="#Background-70"><span class="linenos">  70</span></a><span class="k">class</span> <span class="nc">Background</span><span class="p">:</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Background-70"><a href="#Background-70"><span class="linenos">  70</span></a><span class="k">class</span><span class="w"> </span><span class="nc">Background</span><span class="p">:</span>
 </span><span id="Background-71"><a href="#Background-71"><span class="linenos">  71</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;class to handle background images&quot;&quot;&quot;</span>
 </span><span id="Background-72"><a href="#Background-72"><span class="linenos">  72</span></a>
-</span><span id="Background-73"><a href="#Background-73"><span class="linenos">  73</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
+</span><span id="Background-73"><a href="#Background-73"><span class="linenos">  73</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
 </span><span id="Background-74"><a href="#Background-74"><span class="linenos">  74</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;class initialization</span>
 </span><span id="Background-75"><a href="#Background-75"><span class="linenos">  75</span></a>
 </span><span id="Background-76"><a href="#Background-76"><span class="linenos">  76</span></a><span class="sd">        Args:</span>
@@ -1318,7 +1318,7 @@
 </span><span id="Background-94"><a href="#Background-94"><span class="linenos">  94</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">moa_image</span> <span class="o">=</span> <span class="kc">None</span>
 </span><span id="Background-95"><a href="#Background-95"><span class="linenos">  95</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">moa_zimage</span> <span class="o">=</span> <span class="kc">None</span>
 </span><span id="Background-96"><a href="#Background-96"><span class="linenos">  96</span></a>
-</span><span id="Background-97"><a href="#Background-97"><span class="linenos">  97</span></a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span>
+</span><span id="Background-97"><a href="#Background-97"><span class="linenos">  97</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span>
 </span><span id="Background-98"><a href="#Background-98"><span class="linenos">  98</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Background-99"><a href="#Background-99"><span class="linenos">  99</span></a>        <span class="n">ax</span><span class="p">,</span>  <span class="c1"># axis to display background</span>
 </span><span id="Background-100"><a href="#Background-100"><span class="linenos"> 100</span></a>        <span class="n">dataprj</span><span class="p">,</span>  <span class="c1"># cartopy coordinate reference system (crs)</span>
@@ -2379,7 +2379,7 @@
 
     </div>
     <a class="headerlink" href="#Background.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Background.__init__-73"><a href="#Background.__init__-73"><span class="linenos">73</span></a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Background.__init__-73"><a href="#Background.__init__-73"><span class="linenos">73</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">area</span><span class="p">):</span>
 </span><span id="Background.__init__-74"><a href="#Background.__init__-74"><span class="linenos">74</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;class initialization</span>
 </span><span id="Background.__init__-75"><a href="#Background.__init__-75"><span class="linenos">75</span></a>
 </span><span id="Background.__init__-76"><a href="#Background.__init__-76"><span class="linenos">76</span></a><span class="sd">        Args:</span>
@@ -2461,7 +2461,7 @@
 
     </div>
     <a class="headerlink" href="#Background.load"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Background.load-97"><a href="#Background.load-97"><span class="linenos">  97</span></a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Background.load-97"><a href="#Background.load-97"><span class="linenos">  97</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span>
 </span><span id="Background.load-98"><a href="#Background.load-98"><span class="linenos">  98</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="Background.load-99"><a href="#Background.load-99"><span class="linenos">  99</span></a>        <span class="n">ax</span><span class="p">,</span>  <span class="c1"># axis to display background</span>
 </span><span id="Background.load-100"><a href="#Background.load-100"><span class="linenos"> 100</span></a>        <span class="n">dataprj</span><span class="p">,</span>  <span class="c1"># cartopy coordinate reference system (crs)</span>
