@@ -1,0 +1,58 @@
+#####################
+# Run Control file # 
+#####################
+# Steps to be run 
+algorithm_list:
+  # - grid_for_elev_change_regrid
+  # - grid_for_elev_change_update_year 
+
+  # - process_compute_stats_per_grid_cell
+  # - surface_fit 
+  # - epoch_average
+  - single_mission_dhdt
+  # - process_compute_dhdt
+
+# Algorithm configurations 
+grid_for_elev_change_regrid: 
+  base_dir :   "/home/willisc3/luna/CPOM/archive/SATS/LASER/ICESAT-2/ATL-06/versions/006"
+  # Method 1: Use YAML file reference
+  dataset : "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/is2_atl06.yml"
+  area: 'greenland_is'
+  gridarea : "greenland"
+  binsize: 5000
+  grid_output_dir: "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/gridded_altimetry/larger_partitions"
+  standard_epoch : "1991-01-01T00:00:00"
+  partition_xy_chunking: 10  # Number of grid cells in each partition - The larger the quicker surface fit 
+  # Reduce if facing issues with memory 
+
+
+grid_for_elev_change_update_year:
+  update_year: 2017
+  grid_metadata : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/gridded_altimetry/cs2/greenland_5km_cs2/grid_meta.json"
+
+surface_fit: 
+  griddir : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/gridded_altimetry/larger_partitions/cs2/greenland_5km_cs2/"
+  sfdir : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/surface_fit/linlag/"
+  min_vals_in_cell : 20 
+  min_percent_timespan_in_cell : 70.0
+  n_sigma : 2.0 
+  max_surfacefit_iterations : 30 
+  max_linearfit_iterations : 3
+  mintime : "2010/01/20"
+  maxtime : "2024/07/31"
+  powercorrect : false 
+  pcmintime : "2010/01/20"
+  pcmaxtime : "2024/07/31"
+
+epoch_average:
+  sfdir :  "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/surface_fit/linlag/cs2/greenland_5km_cs2/"
+  epochdir : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/epoch_average/v2/"
+
+single_mission_dhdt: 
+  epochdir : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/epoch_average/cs2/greenland_5km_cs2/"
+  dhdtdir: "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/dhdt/"
+  # dhdt_start: None
+  # dhdt_end: None
+  dhdt_period: "1y"
+  step_length: "6m"
+

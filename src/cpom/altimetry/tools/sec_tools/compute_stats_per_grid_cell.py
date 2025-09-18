@@ -26,7 +26,7 @@ import argparse
 import json
 import logging
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import duckdb
 import polars as pl
@@ -50,9 +50,9 @@ def get_stats_per_grid_cell(griddir: str, conn: duckdb.DuckDBPyConnection) -> pl
         parquet_glob = f"{griddir}/year=*/**/*.parquet"
 
     tbl = conn.execute(
-        f""" 
-                SELECT 
-                x_bin, 
+        f"""
+                SELECT
+                x_bin,
                 y_bin,
                 mean(elevation) as mean_elev,
                 (MAX(time) - MIN(time)) / {SECONDS_PER_YEAR} AS coverage_yrs,
@@ -69,7 +69,15 @@ def get_stats_per_grid_cell(griddir: str, conn: duckdb.DuckDBPyConnection) -> pl
 
 
 def get_grid_and_metadata(griddir: str) -> Tuple[GridArea, Dict]:
-    with open(griddir + "grid_meta.json", "r") as f:
+    """Get grid area and metadata from the grid directory.
+
+    Args:
+        griddir (str): Path to the grid directory.
+
+    Returns:
+        Tuple[GridArea, Dict]: A tuple containing the GridArea object and the metadata dictionary.
+    """
+    with open(griddir + "grid_meta.json", "r", encoding="utf-8") as f:
         grid_meta = json.load(f)
 
     if "grid_name" in grid_meta and "bin_size" in grid_meta:
