@@ -1,10 +1,11 @@
 """
 # Area definition
 
-## Summary: 
+## Summary:
 Based on area: antarctica_hs_is
 
 """
+
 area_definition = {
     "use_definitions_from": "antarctica_hs_is",
     "area_long_name_position_simple": (

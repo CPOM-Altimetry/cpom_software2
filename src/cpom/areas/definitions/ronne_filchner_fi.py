@@ -1,7 +1,7 @@
 """
 # Area definition
 
-## Summary: 
+## Summary:
 Based on area: ronne_filchner
 **mask: floating ice**
 

@@ -656,7 +656,7 @@ class Area:
             & (pl.col(lon_col) <= self.maxlon)
         )
 
-        return df.collect() if (isinstance(df, pl.LazyFrame) & return_pl_dataframe) else df
+        return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
 
     # pylint: disable=R0913
     def latlon_to_xy_polars(
@@ -743,7 +743,7 @@ class Area:
             return_pl_dataframe=return_pl_dataframe,
         )
 
-        return df.collect() if (isinstance(df, pl.LazyFrame) & return_pl_dataframe) else df
+        return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
 
     def inside_area_polars(
         self,
