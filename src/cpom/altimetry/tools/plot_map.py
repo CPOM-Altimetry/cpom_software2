@@ -54,6 +54,10 @@ shown to specify flag values, names and colours:
 
 __all__ = ["main"]
 
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-return-statements
+# pylint: disable=too-many-lines
+
 import argparse
 import glob
 import logging
@@ -68,11 +72,6 @@ from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area, list_all_area_definition_names
-
-# pylint: disable=too-many-branches
-# pylint: disable=too-many-return-statements
-# pylint: disable=too-many-lines
-
 
 # Colour constants for highlighting terminal output text
 RED = "\033[0;31m"  # pylint: disable=invalid-name
