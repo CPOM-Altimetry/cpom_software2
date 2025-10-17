@@ -31,14 +31,13 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--dhdt_filename", "-f", help="path of input multi-mission dhdt.npz file", required=True
+        "--prod_filename", "-f", help="path of input multi-mission dhdt.npz file", required=True
     )
 
     parser.add_argument(
         "--outdir",
         "-od",
         help=("file name in output directory for output file."),
-        required=True,
     )
     parser.add_argument(
         "--area",
@@ -70,7 +69,7 @@ def main():
     if not output_dir:
         output_dir = os.path.dirname
 
-    prod_name = os.path.basename(args.dhdt_filename)
+    prod_name = os.path.basename(args.prod_filename)
 
     out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}.nc')}"
 
@@ -105,7 +104,7 @@ def main():
     else:
         mission_name = f"{mission_str}"
 
-    with Dataset(args.dhdt_filename) as nc:
+    with Dataset(args.prod_filename) as nc:
         # start_date = str(nc.data_start_time)
         # start_month = int(start_date[5:7])
         # start_year = int(start_date[0:4])
