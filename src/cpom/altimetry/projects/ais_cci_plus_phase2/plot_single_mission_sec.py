@@ -67,7 +67,7 @@ def main():
 
     output_dir = args.outdir
     if not output_dir:
-        output_dir = os.path.dirname
+        output_dir = os.path.dirname(args.prod_filename)
 
     prod_name = os.path.basename(args.prod_filename)
 
