@@ -46,14 +46,11 @@ def main():
         default="antarctica",
     )
 
-    parser.add_argument("--parameter", "-p", help="parameter to plot", default="sec")
-
     parser.add_argument(
-        "--hillshade",
-        "-hs",
-        help="apply hillshade to data",
-        required=False,
-        action="store_true",
+        "--parameter",
+        "-p",
+        help=("parameter to plot: sec, sec_uncertainty, basin_id, surface_type"),
+        default="sec",
     )
 
     if len(sys.argv) == 1:
@@ -281,7 +278,7 @@ def main():
         )
 
         area_overrides = {
-            "apply_hillshade_to_vals": args.hillshade,
+            "apply_hillshade_to_vals": True,
             "show_bad_data_map": False,
         }
 
