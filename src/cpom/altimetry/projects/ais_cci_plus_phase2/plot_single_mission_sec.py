@@ -72,6 +72,12 @@ def main():
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
+    elif args.parameter == "sec_uncertainty":
+        param_long_name = "Uncertainty of SEC"
+    elif args.parameter == "basin_id":
+        param_long_name = "Glaciological Basin ID"
+    elif args.parameter == "surface_type":
+        param_long_name = "Ice Surface Type"
     else:
         param_long_name = args.parameter
 
