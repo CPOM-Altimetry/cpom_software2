@@ -760,7 +760,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     )  # Under color at the beginning of the scale
 
                 thiscolor = vals
-            elif data_set["flag_values"]:
+            elif data_set.get("flag_values", None):
                 print(f"flag_values = {data_set['flag_values']}")
 
                 if "flag_colors" not in data_set:

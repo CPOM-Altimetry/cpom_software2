@@ -28,6 +28,7 @@ dask = "^2025.2.0"
 geopandas = "^1.0.1"
 h5py = "^3.11.0"
 astropy = "^7.0.0"
+pyvista = "^0.46.3"
 
 
 
