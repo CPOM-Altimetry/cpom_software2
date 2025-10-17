@@ -149,6 +149,8 @@ def main():
             dataset["cmap_name"] = "RdYlBu_r"
             dataset["cmap_over_color"] = "#9E0005"
             dataset["cmap_under_color"] = "#150685"
+            dataset["min_plot_range"] = 0.0
+            dataset["max_plot_range"] = 0.3
 
         logo_image = plt.imread("ais_cci_phase2_logo.png")
         logo_width = 0.23  # in axis coordinates
