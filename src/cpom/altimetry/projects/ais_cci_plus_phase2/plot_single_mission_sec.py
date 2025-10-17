@@ -152,11 +152,6 @@ def main():
             logo_height,
         )  # [left, bottom, width, height]
 
-        area_overrides = {
-            "apply_hillshade_to_vals": args.hillshade,
-            "show_bad_data_map": False,
-        }
-
         xpos = 0.01
         ypos = 0.83
         ysep = 0.03
@@ -271,10 +266,29 @@ def main():
             )
         )
 
+        area_overrides = {
+            "show_bad_data_map": False,
+        }
+
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
             # map_only=True,
             output_file=out_file,
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+        )
+
+        area_overrides = {
+            "apply_hillshade_to_vals": args.hillshade,
+            "show_bad_data_map": False,
+        }
+
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=out_file.replace(".png", "-hs.png"),
             use_default_annotation=False,
             annotation_list=annotation_list,
             logo_image=logo_image,
