@@ -35,8 +35,8 @@ def main():
     )
 
     parser.add_argument(
-        "--outfile",
-        "-of",
+        "--outdir",
+        "-od",
         help=("file name in output directory for output file."),
         required=True,
     )
@@ -64,9 +64,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Read dhdt file
+    # Extract CCI netcdf file: example: ESACCI-AIS-L3C-SEC-CS2-5KM-20100927-20250909-fv2.nc
+
+    output_dir = args.outdir
+    if not output_dir:
+        output_dir = os.path.dirname
 
     prod_name = os.path.basename(args.dhdt_filename)
+
+    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}.nc')}"
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
@@ -269,7 +275,7 @@ def main():
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
             # map_only=True,
-            output_file=args.outfile,
+            output_file=out_file,
             use_default_annotation=False,
             annotation_list=annotation_list,
             logo_image=logo_image,
