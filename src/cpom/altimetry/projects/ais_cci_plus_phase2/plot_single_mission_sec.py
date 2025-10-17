@@ -71,7 +71,7 @@ def main():
 
     prod_name = os.path.basename(args.prod_filename)
 
-    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}.nc')}"
+    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}.png')}"
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
