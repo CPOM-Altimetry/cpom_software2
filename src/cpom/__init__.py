@@ -40,7 +40,8 @@ This will install
 - python 3.12
 - poetry
 - project packages (using poetry)
-- create a file ./setup_env.sh which is used to setup the correct environment variables
+- create a file ./activate.sh which is used to activate the poetry environment and
+  required environment variables
 
 
 ### Load the Virtual Environment
