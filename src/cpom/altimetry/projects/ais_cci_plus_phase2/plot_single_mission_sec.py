@@ -282,7 +282,7 @@ def main():
             logo_position=logo_position,
         )
 
-        print(f"Output: {args.outfile}")
+        print(f"Output: {out_file}")
 
 
 if __name__ == "__main__":
