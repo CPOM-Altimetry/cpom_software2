@@ -75,7 +75,7 @@ def main():
     elif args.parameter == "sec_uncertainty":
         param_long_name = "Uncertainty of SEC"
     elif args.parameter == "basin_id":
-        param_long_name = "Glaciological Basin ID"
+        param_long_name = "Glaciological Basin ID (Rignot 2016)"
     elif args.parameter == "surface_type":
         param_long_name = "Ice Surface Type"
     else:
@@ -124,7 +124,7 @@ def main():
         long_name = nc[args.parameter].long_name
         try:
             units = nc[args.parameter].units
-        except KeyError:
+        except (KeyError, AttributeError):
             units = ""
 
         # Plot parameter
@@ -151,6 +151,87 @@ def main():
             dataset["cmap_under_color"] = "#150685"
             dataset["min_plot_range"] = 0.0
             dataset["max_plot_range"] = 0.3
+
+        if args.parameter == "surface_type":
+            dataset = {
+                "name": long_name,
+                "units": units,
+                "lats": lats,
+                "lons": lons,
+                "vals": plot_var,
+                "plot_size_scale_factor": 0.01,
+                "flag_values": [0, 1, 2, 3, 4],  # Optional: List of flag values
+                "flag_names": [
+                    "Ocean",
+                    "Ice-free Land",
+                    "Grounded Ice",
+                    "Floating Ice",
+                    "Lake Vostok",
+                ],  # Optional: List of flag names
+                "flag_colors": [
+                    "#F2F7FF",
+                    "green",
+                    "orange",
+                    "yellow",
+                    "red",
+                ],  # Optional: Colors for flags or colormap
+            }
+        if args.parameter == "basin_id":
+            flag_colors = [
+                "#F2F7FF",
+                "blue",
+                "green",
+                "orange",
+                "purple",
+                "brown",
+                "pink",
+                "gray",
+                "olive",
+                "cyan",
+                "magenta",
+                "gold",
+                "navy",
+                "teal",
+                "coral",
+                "lime",
+                "indigo",
+                "maroon",
+                "orchid",
+            ]
+
+            dataset = {
+                "name": long_name,
+                "units": units,
+                "lats": lats,
+                "lons": lons,
+                "vals": plot_var,
+                "plot_size_scale_factor": 0.01,
+                "flag_values": list(range(0, 19)),
+                "flag_names": [
+                    "Outside:00",
+                    "West H-Hp:01",
+                    "West F-G:02",
+                    "East E-Ep:03",
+                    "East D-Dp:04",
+                    "East Cp-D:05",
+                    "East B-C:06",
+                    "East A-Ap:07",
+                    "East Jpp-K:08",
+                    "West G-H:09",
+                    "East Dp-E:10",
+                    "East Ap-B:11",
+                    "East C-Cp:12",
+                    "East K-A:13",
+                    "West J-Jpp:14",
+                    "Peninsula Ipp-J:15",
+                    "Peninsula I-Ipp:16",
+                    "Peninsula Hp-I:17",
+                    "West Ep-F:18",
+                ],
+                "flag_colors": flag_colors,
+            }
+
+            print(f"min {np.nanmin(plot_var)} max {np.nanmax(plot_var)}")
 
         logo_image = plt.imread("ais_cci_phase2_logo.png")
         logo_width = 0.23  # in axis coordinates
@@ -280,6 +361,13 @@ def main():
             "show_bad_data_map": False,
         }
 
+        if args.parameter == "basin_id":
+            area_overrides["flag_perc_axis"] = (
+                0.78,
+                0.15,
+                0.05,
+            )  # [left,bottom, width] of axis. Note height is auto set
+
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
             # map_only=True,
@@ -290,10 +378,7 @@ def main():
             logo_position=logo_position,
         )
 
-        area_overrides = {
-            "apply_hillshade_to_vals": True,
-            "show_bad_data_map": False,
-        }
+        area_overrides["apply_hillshade_to_vals"] = True
 
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
