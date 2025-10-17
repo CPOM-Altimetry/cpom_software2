@@ -1,6 +1,4 @@
-"""pytests for clev2er.utils.areas.areas.py
-"""
-
+"""pytests for clev2er.utils.areas.areas.py"""
 
 import pytest
 
