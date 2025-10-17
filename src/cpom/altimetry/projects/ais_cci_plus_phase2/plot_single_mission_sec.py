@@ -145,6 +145,11 @@ def main():
             "cmap_extend": "both",  # Optional: Extend colormap
         }
 
+        if args.parameter == "sec_uncertainty":
+            dataset["cmap_name"] = "RdYlBu_r"
+            dataset["cmap_over_color"] = "#9E0005"
+            dataset["cmap_under_color"] = "#150685"
+
         logo_image = plt.imread("ais_cci_phase2_logo.png")
         logo_width = 0.23  # in axis coordinates
         logo_height = 0.23
