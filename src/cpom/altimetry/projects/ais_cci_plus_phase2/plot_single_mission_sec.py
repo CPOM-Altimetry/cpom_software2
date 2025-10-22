@@ -237,15 +237,15 @@ def main():
         logo_width = 0.23  # in axis coordinates
         logo_height = 0.23
         logo_position = (
-            -0.01,
-            1 - logo_height + 0.05,
+            -0.0,
+            1 - logo_height + 0.03,
             logo_width,
             logo_height,
         )  # [left, bottom, width, height]
 
-        xpos = 0.01
-        ypos = 0.83
-        ysep = 0.03
+        xpos = 0.74
+        ypos = 0.89
+        ysep = 0.032
 
         annot = Annotation(
             xpos,
@@ -259,10 +259,20 @@ def main():
         annotation_list.append(
             Annotation(
                 xpos,
-                ypos + ysep,
-                f"Mission: {mission_name}",
+                ypos + ysep + 0.03,
+                "Mission: ",
                 None,
-                16,
+                12,
+                fontweight="normal",
+            )
+        )
+        annotation_list.append(
+            Annotation(
+                xpos,
+                ypos + ysep + 0.001,
+                f"{mission_name}",
+                None,
+                18,
                 fontweight="bold",
             )
         )
@@ -363,8 +373,8 @@ def main():
 
         if args.parameter == "basin_id":
             area_overrides["flag_perc_axis"] = (
-                0.78,
-                0.15,
+                0.8,
+                0.1,
                 0.05,
             )  # [left,bottom, width] of axis. Note height is auto set
 

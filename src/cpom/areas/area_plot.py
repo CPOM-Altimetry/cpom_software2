@@ -1638,7 +1638,7 @@ class Polarplot:
                     self.thisarea.flag_perc_axis[0],
                     self.thisarea.flag_perc_axis[1],
                     0.02,
-                    0.04 * number_of_flags,
+                    0.026 * number_of_flags,
                 ],  # left, bottom, width, height (fractions of axes)
             )
             axis_flag_color_square.spines["top"].set_visible(False)
@@ -1667,7 +1667,7 @@ class Polarplot:
                     self.thisarea.flag_perc_axis[0],
                     self.thisarea.flag_perc_axis[1],
                     self.thisarea.flag_perc_axis[2],
-                    0.04 * number_of_flags,
+                    0.026 * number_of_flags,
                 ]
             )  # left, bottom, width, height (fractions of axes)
 
