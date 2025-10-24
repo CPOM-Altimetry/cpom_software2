@@ -399,6 +399,32 @@ def main():
             logo_position=logo_position,
             image_format="webp",
         )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=out_file + ".small",
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="avif",
+            dpi=40,
+        )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=out_file + ".small",
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="webp",
+            dpi=40,
+        )
+
+        # -----------------------------------------------------------------------
+        # Redo plots with hillshade
+        # -----------------------------------------------------------------------
 
         area_overrides["apply_hillshade_to_vals"] = True
 
@@ -421,6 +447,28 @@ def main():
             logo_image=logo_image,
             logo_position=logo_position,
             image_format="webp",
+        )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=f"{out_file}-hs.small",
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="avif",
+            dpi=40,
+        )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=f"{out_file}-hs.small",
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="webp",
+            dpi=40,
         )
 
         print(f"Output: {out_file}")
