@@ -54,13 +54,6 @@ def main():
         default="sec",
     )
 
-    parser.add_argument(
-        "--image_format",
-        "-if",
-        help=("image format is either png, webp or avif"),
-        default="png",
-    )
-
     if len(sys.argv) == 1:
         print("no args provided")
         parser.print_help()
@@ -76,8 +69,7 @@ def main():
 
     prod_name = os.path.basename(args.prod_filename)
 
-    out_file = f"{output_dir}/{prod_name.replace(
-        '.nc',f'-{args.parameter}.{args.image_format}')}"
+    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}')}"
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
@@ -413,7 +405,7 @@ def main():
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
             # map_only=True,
-            output_file=out_file.replace(".png", "-hs.png"),
+            output_file=f"{out_file}-hs",
             use_default_annotation=False,
             annotation_list=annotation_list,
             logo_image=logo_image,
@@ -423,7 +415,7 @@ def main():
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
             # map_only=True,
-            output_file=out_file.replace(".png", "-hs.png"),
+            output_file=f"{out_file}-hs",
             use_default_annotation=False,
             annotation_list=annotation_list,
             logo_image=logo_image,
