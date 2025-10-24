@@ -6,6 +6,7 @@ To do reminder:
 TODO: grid support
 """
 
+import io
 import logging
 import os
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import numpy as np
+
+# registers AVIF with Pillow
+import pillow_avif  # noqa pylint: disable=unused-import
 import shapefile as shp  # type: ignore
 from cartopy.mpl.geoaxes import GeoAxesSubplot  # type: ignore
 from matplotlib import colormaps
@@ -23,6 +27,7 @@ from matplotlib import pyplot as plt
 from matplotlib import ticker
 from matplotlib.figure import Figure
 from numpy import ma  # masked arrays
+from PIL import Image
 
 from cpom.areas.areas import Area
 from cpom.backgrounds.backgrounds import (  # background images functions for polar plots
@@ -152,6 +157,9 @@ class Polarplot:
         dpi: int = 85,
         transparent_background: bool = False,
         map_only: bool = False,
+        image_format: str = "png",
+        avif_settings: tuple[int, int] = (60, 4),
+        webp_settings: tuple[int, int] = (80, 6),
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -218,6 +226,9 @@ class Polarplot:
 
         - `map_only` (bool, optional, default: `False`):
           Plot only the map and colorbar, without histograms or other elements.
+
+        - `format` (str, optional, default: `png`)
+          image file format to save to. Options are png, avif or webp
 
         ### Raises
 
@@ -864,10 +875,39 @@ class Polarplot:
                 plot_filename = f"{output_dir}/param_{_ds_name_0}_{self.area}.png"
             else:
                 raise ValueError("Neither outputdir or output_file provided")
-            if ".png" != plot_filename[-4:]:
-                plot_filename += ".png"
-            log.info("Saving plot to %s at %d dpi", plot_filename, dpi)
-            plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
+            print("Saving plot", plot_filename, image_format)
+            if f"{image_format}" not in plot_filename[-6:]:
+                plot_filename += f".{image_format}"
+            print("Saving plot to %s at %d dpi", plot_filename, dpi)
+            if image_format == "avif":
+                # Save to an in-memory PNG
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=dpi, transparent=transparent_background)
+                buf.seek(0)
+
+                # Open with Pillow and convert to AVIF
+                im = Image.open(buf)
+                im.save(
+                    plot_filename, format="AVIF", quality=avif_settings[0], speed=avif_settings[1]
+                )
+            elif image_format == "webp":
+                plt.savefig(
+                    plot_filename,
+                    dpi=dpi,
+                    transparent=transparent_background,
+                    format="webp",
+                    pil_kwargs={
+                        "quality": webp_settings[0],
+                        "method": webp_settings[1],
+                        # optional extras you might care about:
+                        # "lossless": False,
+                    },
+                )
+
+            elif image_format == "png":  # png
+                plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
+            else:
+                raise ValueError(f"image_format {image_format} not supported")
 
         else:
             plt.show()

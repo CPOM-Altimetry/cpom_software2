@@ -12,6 +12,7 @@ plot_single_mission_sec.py -f \
         ESACCI-AIS-L3C-SEC-CS2-5KM-20100927-20241203-fv2.nc \
           -o /tmp
 
+ Note: requires : poetry add pillow-avif-plugin for AVIF format support
 """
 
 import argparse
@@ -53,6 +54,13 @@ def main():
         default="sec",
     )
 
+    parser.add_argument(
+        "--image_format",
+        "-if",
+        help=("image format is either png, webp or avif"),
+        default="png",
+    )
+
     if len(sys.argv) == 1:
         print("no args provided")
         parser.print_help()
@@ -68,7 +76,8 @@ def main():
 
     prod_name = os.path.basename(args.prod_filename)
 
-    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}.png')}"
+    out_file = f"{output_dir}/{prod_name.replace(
+        '.nc',f'-{args.parameter}.{args.image_format}')}"
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
@@ -386,6 +395,17 @@ def main():
             annotation_list=annotation_list,
             logo_image=logo_image,
             logo_position=logo_position,
+            image_format="avif",
+        )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=out_file,
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="webp",
         )
 
         area_overrides["apply_hillshade_to_vals"] = True
@@ -398,6 +418,17 @@ def main():
             annotation_list=annotation_list,
             logo_image=logo_image,
             logo_position=logo_position,
+            image_format="avif",
+        )
+        Polarplot(args.area, area_overrides).plot_points(
+            dataset,
+            # map_only=True,
+            output_file=out_file.replace(".png", "-hs.png"),
+            use_default_annotation=False,
+            annotation_list=annotation_list,
+            logo_image=logo_image,
+            logo_position=logo_position,
+            image_format="webp",
         )
 
         print(f"Output: {out_file}")
