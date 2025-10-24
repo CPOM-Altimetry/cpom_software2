@@ -140,14 +140,14 @@ def main():
             "plot_size_scale_factor": 0.01,
             "min_plot_range": -1.0,
             "max_plot_range": 1.0,
-            "cmap_name": "RdYlBu",  # Optional: Colormap name
+            "cmap_name": "RdBu",  # Colormap name, could use RdYlBu
             "cmap_over_color": "#150685",  # Optional: Over color for colormap
             "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
             "cmap_extend": "both",  # Optional: Extend colormap
         }
 
         if args.parameter == "sec_uncertainty":
-            dataset["cmap_name"] = "RdYlBu_r"
+            dataset["cmap_name"] = "RdBu_r"
             dataset["cmap_over_color"] = "#9E0005"
             dataset["cmap_under_color"] = "#150685"
             dataset["min_plot_range"] = 0.0
