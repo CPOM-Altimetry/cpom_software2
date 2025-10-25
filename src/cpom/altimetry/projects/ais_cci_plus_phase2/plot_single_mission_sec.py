@@ -44,7 +44,7 @@ def main():
         "--area",
         "-a",
         help="Area of interest, greenland or antarctica. Default is antarctica.",
-        default="antarctica",
+        default="antarctica_cci",
     )
 
     parser.add_argument(
@@ -365,6 +365,40 @@ def main():
                 None,
                 10,
                 fontweight="normal",
+            )
+        )
+
+        annotation_list.append(
+            Annotation(
+                0.236,
+                0.165,
+                "66S",
+                None,
+                8,
+                fontweight="normal",
+                color="grey",
+            )
+        )
+        annotation_list.append(
+            Annotation(
+                0.25,
+                0.215,
+                "70S",
+                None,
+                8,
+                fontweight="normal",
+                color="grey",
+            )
+        )
+        annotation_list.append(
+            Annotation(
+                0.265,
+                0.265,
+                "74S",
+                None,
+                8,
+                fontweight="normal",
+                color="grey",
             )
         )
 
