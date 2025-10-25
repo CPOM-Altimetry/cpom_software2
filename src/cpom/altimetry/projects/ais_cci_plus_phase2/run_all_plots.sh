@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for mission in CS2 ENV ER2 ER1 S3A S3B IS2; do
+for mission in IS2 CS2 ENV ER2 ER1 S3A S3B ; do
   f=(/cpnet/altimetry/landice/ais_cci_plus_phase2/products/single_mission/ESACCI-AIS-L3C-SEC-${mission}*-fv2.nc)
 
   echo "==> ${mission}: starting plots in parallel…"
