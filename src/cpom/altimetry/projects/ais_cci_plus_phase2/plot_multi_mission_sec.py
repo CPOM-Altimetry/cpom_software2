@@ -33,11 +33,15 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--prod_dir", "-d", help="path of input multi-mission products", required=True
+        "--prod_dir",
+        "-d",
+        help="path of input multi-mission products",
     )
 
     parser.add_argument(
-        "--prod_filename", "-f", help="path of input multi-mission dhdt.npz file", required=True
+        "--prod_filename",
+        "-f",
+        help="path of input multi-mission dhdt.npz file",
     )
 
     parser.add_argument(
