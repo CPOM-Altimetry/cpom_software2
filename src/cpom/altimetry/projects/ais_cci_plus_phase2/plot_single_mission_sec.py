@@ -422,6 +422,7 @@ def main():
             logo_image=logo_image,
             logo_position=logo_position,
             image_format="avif",
+            use_cmap_in_hist=(args.parameter != "sec"),
         )
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
@@ -432,6 +433,7 @@ def main():
             logo_image=logo_image,
             logo_position=logo_position,
             image_format="webp",
+            use_cmap_in_hist=(args.parameter != "sec"),
         )
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
@@ -443,6 +445,7 @@ def main():
             logo_position=logo_position,
             image_format="avif",
             dpi=40,
+            use_cmap_in_hist=(args.parameter != "sec"),
         )
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
@@ -454,6 +457,7 @@ def main():
             logo_position=logo_position,
             image_format="webp",
             dpi=40,
+            use_cmap_in_hist=(args.parameter != "sec"),
         )
 
         # -----------------------------------------------------------------------

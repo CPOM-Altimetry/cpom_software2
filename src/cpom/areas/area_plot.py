@@ -160,6 +160,7 @@ class Polarplot:
         image_format: str = "png",
         avif_settings: tuple[int, int] = (60, 4),
         webp_settings: tuple[int, int] = (80, 6),
+        use_cmap_in_hist: bool = True,
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -229,6 +230,9 @@ class Polarplot:
 
         - `format` (str, optional, default: `png`)
           image file format to save to. Options are png, avif or webp
+
+        - `use_cmap_in_hist` (bool, default: True) : if True colour first
+           histogram using plots cmap, otherwise just plot in single dark colour
 
         ### Raises
 
@@ -802,6 +806,7 @@ class Polarplot:
                                 data_set.get("max_plot_range", np.nanmax(vals)),
                                 data_set.get("units", "no units"),
                                 cmap,  # pylint: disable=used-before-assignment
+                                use_cmap=use_cmap_in_hist,
                             )
 
                         if self.thisarea.show_latitude_scatter:
@@ -1385,6 +1390,7 @@ class Polarplot:
         max_plot_range: float,
         varunits: str,
         cmap,
+        use_cmap=True,
     ):
         """draw two histograms of plot range and full range
 
@@ -1421,8 +1427,9 @@ class Polarplot:
         col = bin_centers - min(bin_centers)
         col /= max(col)
 
-        for c, p in zip(col, patches):
-            plt.setp(p, "facecolor", cmap(c))
+        if use_cmap:
+            for c, p in zip(col, patches):
+                plt.setp(p, "facecolor", cmap(c))
 
         hist_axes.set_xticklabels([])
         hist_axes.get_xaxis().set_visible(False)
