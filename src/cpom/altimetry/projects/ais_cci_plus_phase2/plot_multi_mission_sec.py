@@ -1,16 +1,16 @@
 """
-cpom.altimetry.projects.ais_cci_plus_phase2.plot_single_mission_sec.py
+cpom.altimetry.projects.ais_cci_plus_phase2.plot_multi_mission_sec.py
 
 # Purpose
 
-Plot parameters from AIS CCI+ phase-2 single mission dh/dt products
+Plot parameters from AIS CCI+ phase-2 multi mission dh/dt products
 
 # Example
 
-plot_single_mission_sec.py -f \
-    ~/Downloads/\
-        ESACCI-AIS-L3C-SEC-CS2-5KM-20100927-20241203-fv2.nc \
-          -o /tmp
+python plot_multi_mission_sec.py -f \
+/cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission/\
+        ESACCI-AIS-L3C-SEC-MULTIMISSION-5KM-5YEAR-MEANS-202006-202506-fv2.nc \
+--outdir /tmp
 
  Note: requires : poetry add pillow-avif-plugin for AVIF format support
 """
@@ -61,7 +61,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Extract CCI netcdf file: example: ESACCI-AIS-L3C-SEC-CS2-5KM-20100927-20250909-fv2.nc
+    # Extract CCI netcdf file: example:
+    # ESACCI-AIS-L3C-SEC-MULTIMISSION-5KM-5YEAR-MEANS-202006-202506-fv2.nc
 
     output_dir = args.outdir
     if not output_dir:
@@ -82,45 +83,19 @@ def main():
     else:
         param_long_name = args.parameter
 
-    start_year = prod_name[27:31]
-    start_month = prod_name[31:33]
+    start_year = prod_name[48:52]
+    start_month = prod_name[52:54]
     print(f"{start_month} {start_year}")
-    end_year = prod_name[36:40]
-    end_month = prod_name[40:42]
+    end_year = prod_name[55:59]
+    end_month = prod_name[59:61]
     print(f"{end_month} {end_year}")
-    mission_str = prod_name[19:22]
-    print(f"mission_str {mission_str}")
-
-    if mission_str == "CS2":
-        mission_name = "CryoSat-2"
-    elif mission_str == "S3A":
-        mission_name = "Sentinel-3A"
-    elif mission_str == "S3B":
-        mission_name = "Sentinel-3B"
-    elif mission_str == "ER1":
-        mission_name = "ERS-1"
-    elif mission_str == "ER2":
-        mission_name = "ERS-2"
-    elif mission_str == "ENV":
-        mission_name = "ENVISAT"
-    elif mission_str == "IS2":
-        mission_name = "ICESat-2"
-    else:
-        mission_name = f"{mission_str}"
 
     with Dataset(args.prod_filename) as nc:
-        # start_date = str(nc.data_start_time)
-        # start_month = int(start_date[5:7])
-        # start_year = int(start_date[0:4])
-        # end_date = str(nc.data_end_time)
-        # end_month = int(end_date[5:7])
-        # end_year = int(end_date[0:4])
-        sec_period_length = str(nc.sec_period_length).replace("yrs", "")
 
         lats = np.ma.filled(nc.variables["lat"][:], np.nan)
         lons = np.ma.filled(nc.variables["lon"][:], np.nan)
 
-        plot_var = np.ma.filled(nc.variables[args.parameter][:], np.nan)
+        plot_var = np.ma.filled(nc.variables[args.parameter][0][:], np.nan)
 
         long_name = nc[args.parameter].long_name
         try:
@@ -246,45 +221,34 @@ def main():
 
         xpos = 0.74
         ypos = 0.89
-        ysep = 0.032
+        ysep = 0.036
 
         annot = Annotation(
             xpos,
-            ypos,
-            "Period start of:",
+            ypos + ysep + 0.015,
+            "5-Year Multi-Mission",
             None,
-            10,
+            18,
+            fontweight="bold",
         )
         annotation_list = [annot]
 
         annotation_list.append(
             Annotation(
                 xpos,
-                ypos + ysep + 0.03,
-                "Mission: ",
+                ypos,
+                "Period start of:",
                 None,
-                12,
-                fontweight="normal",
+                10,
             )
         )
-        annotation_list.append(
-            Annotation(
-                xpos,
-                ypos + ysep + 0.001,
-                f"{mission_name}",
-                None,
-                18,
-                fontweight="bold",
-            )
-        )
-
         annotation_list.append(
             Annotation(
                 xpos,
                 ypos - ysep,
                 f"{start_month} {start_year}",
                 None,
-                16,
+                20,
                 fontweight="bold",
             )
         )
@@ -302,38 +266,17 @@ def main():
         annotation_list.append(
             Annotation(
                 xpos,
-                ypos - ysep * 4,
-                "Duration (yrs):",
-                None,
-                10,
-                fontweight="normal",
-            )
-        )
-        annotation_list.append(
-            Annotation(
-                xpos,
-                ypos - ysep * 5,
-                f"{sec_period_length}",
-                None,
-                16,
-                fontweight="bold",
-            )
-        )
-
-        annotation_list.append(
-            Annotation(
-                xpos,
                 ypos - ysep * 3,
                 f"{end_month} {end_year}",
                 None,
-                16,
+                20,
                 fontweight="bold",
             )
         )
 
         annotation_list.append(
             Annotation(
-                0.28,
+                0.265,
                 0.94,
                 param_long_name,
                 {
@@ -349,9 +292,9 @@ def main():
 
         annotation_list.append(
             Annotation(
-                0.275,
+                0.265,
                 0.9,
-                f"Product: {prod_name}",
+                f"{prod_name}",
                 None,
                 10,
                 fontweight="normal",
@@ -359,7 +302,7 @@ def main():
         )
         annotation_list.append(
             Annotation(
-                0.275,
+                0.265,
                 0.87,
                 f"NetCDF parameter: {args.parameter}",
                 None,
