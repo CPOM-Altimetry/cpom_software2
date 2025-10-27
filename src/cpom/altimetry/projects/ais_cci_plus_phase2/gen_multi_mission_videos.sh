@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd /cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission
+rm -f mm_quicklooks/*
 
 ffmpeg \
 -framerate 12 \
