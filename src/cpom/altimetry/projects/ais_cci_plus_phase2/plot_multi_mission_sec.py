@@ -229,24 +229,29 @@ def main():
                 print(f"min {np.nanmin(plot_var)} max {np.nanmax(plot_var)}")
 
             logo_image = plt.imread("ais_cci_phase2_logo.png")
-            logo_width = 0.23  # in axis coordinates
-            logo_height = 0.23
+            logo_width = 0.225  # in axis coordinates
+            logo_height = 0.225
             logo_position = (
                 -0.0,
-                1 - logo_height + 0.03,
+                1 - logo_height + 0.05,
                 logo_width,
                 logo_height,
             )  # [left, bottom, width, height]
 
-            xpos = 0.74
-            ypos = 0.89
+            xpos = 0.01
+            ypos = 0.857
             ysep = 0.036
 
             annot = Annotation(
-                xpos,
-                ypos + ysep + 0.015,
-                "5-Year Multi-Mission",
-                None,
+                0.269,
+                0.958,
+                f"5-Year Multi-Mission {param_long_name}",
+                {
+                    "boxstyle": "round",  # Style of the box (e.g.,'round','square')
+                    "facecolor": "aliceblue",  # Background color of the box
+                    "alpha": 1.0,  # Transparency of the box (0-1)
+                    "edgecolor": "lightgrey",  # Color of the box edge
+                },
                 18,
                 fontweight="bold",
             )
@@ -295,45 +300,19 @@ def main():
 
             annotation_list.append(
                 Annotation(
-                    0.265,
-                    0.94,
-                    param_long_name,
-                    {
-                        "boxstyle": "round",  # Style of the box (e.g.,'round','square')
-                        "facecolor": "aliceblue",  # Background color of the box
-                        "alpha": 1.0,  # Transparency of the box (0-1)
-                        "edgecolor": "lightgrey",  # Color of the box edge
-                    },
-                    18,
-                    fontweight="bold",
-                )
-            )
-
-            annotation_list.append(
-                Annotation(
-                    0.265,
-                    0.9,
+                    0.246,
+                    0.08,
                     f"{prod_name}",
                     None,
                     10,
                     fontweight="normal",
                 )
             )
-            annotation_list.append(
-                Annotation(
-                    0.265,
-                    0.87,
-                    f"NetCDF parameter: {args.parameter}",
-                    None,
-                    10,
-                    fontweight="normal",
-                )
-            )
 
             annotation_list.append(
                 Annotation(
-                    0.236,
-                    0.165,
+                    0.237,
+                    0.235,
                     "66S",
                     None,
                     8,
@@ -343,8 +322,8 @@ def main():
             )
             annotation_list.append(
                 Annotation(
-                    0.25,
-                    0.215,
+                    0.275,
+                    0.283,
                     "70S",
                     None,
                     8,
@@ -354,8 +333,8 @@ def main():
             )
             annotation_list.append(
                 Annotation(
-                    0.265,
-                    0.265,
+                    0.315,
+                    0.33,
                     "74S",
                     None,
                     8,
@@ -377,18 +356,7 @@ def main():
 
             Polarplot(args.area, area_overrides).plot_points(
                 dataset,
-                # map_only=True,
-                output_file=out_file,
-                use_default_annotation=False,
-                annotation_list=annotation_list,
-                logo_image=logo_image,
-                logo_position=logo_position,
-                image_format="avif",
-                use_cmap_in_hist=(args.parameter != "sec"),
-            )
-            Polarplot(args.area, area_overrides).plot_points(
-                dataset,
-                # map_only=True,
+                map_only=True,
                 output_file=out_file,
                 use_default_annotation=False,
                 annotation_list=annotation_list,
@@ -396,6 +364,8 @@ def main():
                 logo_position=logo_position,
                 image_format="webp",
                 use_cmap_in_hist=(args.parameter != "sec"),
+                dpi=75,
+                webp_settings=(95, 6),
             )
 
             # -----------------------------------------------------------------------
@@ -406,18 +376,7 @@ def main():
 
             Polarplot(args.area, area_overrides).plot_points(
                 dataset,
-                # map_only=True,
-                output_file=f"{out_file}-hs",
-                use_default_annotation=False,
-                annotation_list=annotation_list,
-                logo_image=logo_image,
-                logo_position=logo_position,
-                image_format="avif",
-                use_cmap_in_hist=(args.parameter != "sec"),
-            )
-            Polarplot(args.area, area_overrides).plot_points(
-                dataset,
-                # map_only=True,
+                map_only=True,
                 output_file=f"{out_file}-hs",
                 use_default_annotation=False,
                 annotation_list=annotation_list,
@@ -425,6 +384,8 @@ def main():
                 logo_position=logo_position,
                 image_format="webp",
                 use_cmap_in_hist=(args.parameter != "sec"),
+                dpi=75,
+                webp_settings=(95, 6),
             )
 
             print(f"Output: {out_file}")

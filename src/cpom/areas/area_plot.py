@@ -231,6 +231,9 @@ class Polarplot:
         - `format` (str, optional, default: `png`)
           image file format to save to. Options are png, avif or webp
 
+        - `webp_settings` (tuple[int,int], default=(80,6)), : (quality,method),
+                                    where quality:0..100, method:0-6
+
         - `use_cmap_in_hist` (bool, default: True) : if True colour first
            histogram using plots cmap, otherwise just plot in single dark colour
 
