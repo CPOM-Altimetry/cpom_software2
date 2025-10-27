@@ -913,10 +913,9 @@ class Polarplot:
                 plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
             else:
                 raise ValueError(f"image_format {image_format} not supported")
-
         else:
             plt.show()
-            plt.close()
+        plt.close()
 
     def gen_plot_points_figure_coordinates(
         self, x, y, figure_dpi, figsize=(12, 10), draw_axis_frame=True
