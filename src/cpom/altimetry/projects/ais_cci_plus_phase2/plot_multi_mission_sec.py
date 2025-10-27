@@ -77,10 +77,10 @@ def main():
         input_files = glob.glob(
             f"{args.prod_dir}/ESACCI-AIS-L3C-SEC-MULTIMISSION-5KM-5YEAR-MEANS*fv2.nc"
         )
-    elif args.prod_file:
-        input_files = [args.prod_file]
+    elif args.prod_filename:
+        input_files = [args.prod_filename]
     else:
-        sys.exit("Must have either --prod_file or --prod_dir")
+        sys.exit("Must have either --prod_filename or --prod_dir")
 
     output_dir = args.outdir
     if not output_dir:
