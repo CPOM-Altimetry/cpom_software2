@@ -80,3 +80,13 @@ ffmpeg \
 -movflags +faststart \
 mm_quicklooks/multi_mission_h264_hs.mp4
 
+# find last frame
+cd quicklooks
+f=`ls *sec.webp | tail -1`
+cp $f ../mm_quicklooks/last_frame.webp
+
+f=`ls *sec-hs.webp | tail -1`
+cp $f ../mm_quicklooks/last_frame_hs.webp
+
+
+
