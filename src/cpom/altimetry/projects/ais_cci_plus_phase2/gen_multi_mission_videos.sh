@@ -5,88 +5,92 @@ rm -f mm_quicklooks/*
 
 # Generate AV1 format 
 
+for type in sec sec-ase
+do
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec.webp" \
+-pattern_type glob -i "quicklooks/*${type}.webp" \
 -c:v libaom-av1 \
 -crf 30 \
 -b:v 0 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_av1.webm
+mm_quicklooks/multi_mission_av1.${type}.webm
 
 # Now generate AV1 with hillshade
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec-hs.webp" \
+-pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libaom-av1 \
 -crf 30 \
 -b:v 0 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_av1_hs.webm
+mm_quicklooks/multi_mission_av1_hs.${type}.webm
 
 # Generate VP9 format 
 
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec.webp" \
+-pattern_type glob -i "quicklooks/*${type}.webp" \
 -c:v libvpx-vp9  \
 -crf 32 \
 -b:v 0 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_vp9.webm
+mm_quicklooks/multi_mission_vp9.${type}.webm
 
 # Now generate VP9 format with hillshade
 
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec-hs.webp" \
+-pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libvpx-vp9  \
 -crf 32 \
 -b:v 0 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_vp9_hs.webm
+mm_quicklooks/multi_mission_vp9_hs.${type}.webm
 
 # Generate MP4 format 
 
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec.webp" \
+-pattern_type glob -i "quicklooks/*${type}.webp" \
 -c:v libx264 \
 -crf 23 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-mm_quicklooks/multi_mission_h264.mp4
+mm_quicklooks/multi_mission_h264.${type}.mp4
 
 # Generate MP4 format with hillshade
 
 ffmpeg \
 -framerate 12 \
--pattern_type glob -i "quicklooks/*sec-hs.webp" \
+-pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libx264 \
 -crf 23 \
 -g 12 \
 -keyint_min 12 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-mm_quicklooks/multi_mission_h264_hs.mp4
+mm_quicklooks/multi_mission_h264_hs.${type}.mp4
 
 # find last frame
 cd quicklooks
-f=`ls *sec.webp | tail -1`
-cp $f ../mm_quicklooks/last_frame.webp
+f=`ls *${type}.webp | tail -1`
+cp $f ../mm_quicklooks/last_frame.${type}.webp
 
-f=`ls *sec-hs.webp | tail -1`
-cp $f ../mm_quicklooks/last_frame_hs.webp
+f=`ls *${type}-hs.webp | tail -1`
+cp $f ../mm_quicklooks/last_frame_hs.${type}.webp
+
+done
 
 
 
