@@ -24,8 +24,8 @@ area_definition = {
     #   --------
     "lon_0": None,  # None or projection y-axis longitude (used for mercator)
     #   --------
-    "width_km": 800,  # width in km of plot area (x direction)
-    "height_km": 800,  # height in km of plot area (y direction)
+    "width_km": 900,  # width in km of plot area (x direction)
+    "height_km": 900,  # height in km of plot area (y direction)
     # --------------------------------------------
     # Area characteristics
     # --------------------------------------------
@@ -59,7 +59,7 @@ area_definition = {
         0.70,  # height (axes fraction)
     ],
     "simple_axes": [  # define plot axis position in the map_only plot
-        0.09,  # left
+        0.16,  # left
         0.12,  # bottom
         0.78,  # width (axes fraction)
         0.78,  # height (axes fraction)
