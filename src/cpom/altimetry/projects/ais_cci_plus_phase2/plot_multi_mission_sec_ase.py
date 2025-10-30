@@ -89,7 +89,7 @@ def main():
     for input_file in input_files:
         prod_name = os.path.basename(input_file)
 
-        out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}')}"
+        out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}-ase')}"
 
         if args.parameter == "sec":
             param_long_name = "Surface Elevation Change"
