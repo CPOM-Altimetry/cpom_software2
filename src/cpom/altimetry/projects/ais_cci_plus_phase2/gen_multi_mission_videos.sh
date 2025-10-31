@@ -5,7 +5,7 @@ rm -f mm_quicklooks/*
 
 # Generate AV1 format 
 
-for type in sec sec-ase
+for type in sec-ase sec
 do
 ffmpeg \
 -framerate 12 \
