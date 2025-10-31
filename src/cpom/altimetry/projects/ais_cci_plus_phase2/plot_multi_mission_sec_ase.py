@@ -311,9 +311,21 @@ def main():
 
             annotation_list.append(
                 Annotation(
-                    0.237,
-                    0.235,
-                    "66S",
+                    0.189,
+                    0.51,
+                    "100W",
+                    None,
+                    8,
+                    fontweight="normal",
+                    color="grey",
+                )
+            )
+
+            annotation_list.append(
+                Annotation(
+                    0.42,
+                    0.263,
+                    "110W",
                     None,
                     8,
                     fontweight="normal",
@@ -322,9 +334,9 @@ def main():
             )
             annotation_list.append(
                 Annotation(
-                    0.275,
+                    0.285,
                     0.283,
-                    "70S",
+                    "72S",
                     None,
                     8,
                     fontweight="normal",
@@ -333,11 +345,23 @@ def main():
             )
             annotation_list.append(
                 Annotation(
-                    0.315,
-                    0.33,
+                    0.47,
+                    0.34,
                     "74S",
                     None,
                     8,
+                    fontweight="normal",
+                    color="grey",
+                )
+            )
+
+            annotation_list.append(
+                Annotation(
+                    0.215,
+                    0.35,
+                    "AMUNDSEN SEA",
+                    None,
+                    13,
                     fontweight="normal",
                     color="grey",
                 )
