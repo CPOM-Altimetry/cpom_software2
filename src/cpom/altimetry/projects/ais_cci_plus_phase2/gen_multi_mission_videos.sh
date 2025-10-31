@@ -90,6 +90,8 @@ cp $f ../mm_quicklooks/last_frame.${type}.webp
 f=`ls *${type}-hs.webp | tail -1`
 cp $f ../mm_quicklooks/last_frame_hs.${type}.webp
 
+cd /cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission
+
 done
 
 
