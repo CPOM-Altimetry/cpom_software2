@@ -14,6 +14,11 @@ rm -f ${prod_dir}/ESACCI*.${filetype}
  $prod_dir
  done
 
+portal_dir=/cpnet/www/cpom/ais_cci_phase2/quicklooks
+rm -f ${portal_dir}/*
+mv ${prod_dir}/*.webp  ${portal_dir}
+mv ${prod_dir}/*.avif  ${portal_dir}
+
  
 
  
