@@ -11,6 +11,8 @@ rsync  -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rs
 shopt -s nullglob
 declare -A latest_file latest_time
 
+cd /cpnet/altimetry/landice/ais_cci_plus_phase2/products/single_mission
+
 for f in ESACCI-AIS-L3C-SEC-*-5KM-*.nc; do
   # "Type" key = everything up to "-5KM"
   key=$(sed -E 's/^(ESACCI-AIS-L3C-SEC-[^-]+-5KM).*/\1/' <<<"$f")
