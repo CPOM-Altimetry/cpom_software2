@@ -187,7 +187,8 @@ class Polarplot:
               "cmap_name": "RdYlBu_r",          # Optional: Colormap name
               "cmap_over_color": "#A85754",     # Optional: Over color for colormap
               "cmap_under_color": "#3E4371",    # Optional: Under color for colormap
-              "cmap_extend": "both",            # Optional: Extend colormap
+              "cmap_extend": "both",            # Optional: Extend colormap with arrow head on
+                                                # colorbar : {'neither', 'both', 'min', 'max'}
               "min_plot_range": None,           # Optional: Min range for colorbar
               "max_plot_range": None,           # Optional: Max range for colorbar
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor

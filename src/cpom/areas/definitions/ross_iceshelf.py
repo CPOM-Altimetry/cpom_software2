@@ -168,7 +168,7 @@ area_definition = {
     "inner_gridlabel_color": "white",  # color of grid labels
     "inner_gridlabel_size": 8,  # size of grid labels
     "latitude_of_radial_labels": -58.3,  # latitude for radial grid line labels for circular plots
-    "labels_at_top": True,  # allow lat or lon labels at top of plot
+    "labels_at_top": False,  # allow lat or lon labels at top of plot
     "labels_at_bottom": True,  # allow lat or lon labels at bottom of plot
     "labels_at_left": True,  # allow lat or lon labels at left of plot
     "labels_at_right": True,  # allow lat or lon labels at right of plot
@@ -217,7 +217,7 @@ area_definition = {
     # --------------------------------------------------------
     "show_bad_data_map": True,
     "bad_data_minimap_axes": [  # define minimap axis position
-        0.65,  # left
+        0.62,  # left
         0.69,  # bottom
         0.26,  # width (axes fraction)
         0.26,  # height (axes fraction)
@@ -240,7 +240,7 @@ area_definition = {
         -100,
     ],  # longitude lines to draw in bad data minimap
     "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
-    "bad_data_minimap_legend_pos": (1.5, 1.0),  # position of minimap legend (upper right)
+    "bad_data_minimap_legend_pos": (1.6, 1.0),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
     # ------------------------------------------------------------------
@@ -249,7 +249,7 @@ area_definition = {
     # -------------------------------------------------------------------
     "show_minimap": True,  # show the overview minmap
     "minimap_axes": [  # define minimap axis position
-        0.5,  # left
+        0.45,  # left
         0.84,  # bottom
         0.14,  # width (axes fraction)
         0.14,  # height (axes fraction)

@@ -6,6 +6,7 @@ Based on area: greenland
 **background_image: hillshade**
 
 """
+
 area_definition = {
     "use_definitions_from": "greenland",
     # --------------------------------------------
@@ -15,6 +16,6 @@ area_definition = {
         "ibcao_bathymetry",
         "hillshade",
     ],
-    "background_image_alpha": [0.14, 0.18],
+    "background_image_alpha": [0.2, 0.35],
     "background_color": "white",
 }
