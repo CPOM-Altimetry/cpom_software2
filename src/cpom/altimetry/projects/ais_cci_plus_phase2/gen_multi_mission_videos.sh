@@ -11,7 +11,7 @@ ffmpeg \
 -framerate 12 \
 -pattern_type glob -i "quicklooks/*${type}.webp" \
 -c:v libaom-av1 \
--cpu-used 3 -row-mt 1 -tiles 2x1 -lag-in-frames 48 -aq-mode 1 -tune-content screen \
+-cpu-used 3 -row-mt 1 -tiles 2x1 -lag-in-frames 48 -aq-mode 1  \
 -crf 34 \
 -b:v 0 \
 -g 24 \
@@ -24,7 +24,7 @@ ffmpeg \
 -framerate 12 \
 -pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libaom-av1 \
--cpu-used 3 -row-mt 1 -tiles 2x1 -lag-in-frames 48 -aq-mode 1 -tune-content screen \
+-cpu-used 3 -row-mt 1 -tiles 2x1 -lag-in-frames 48 -aq-mode 1  \
 -crf 34 \
 -b:v 0 \
 -g 24 \
