@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission
-rm -f mm_quicklooks/*
+cd /cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission
+
+rm -f videos/*
 
 # Generate AV1 format 
 
@@ -17,7 +18,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_av1.${type}.webm
+videos/multi_mission_av1.${type}.webm
 
 # Now generate AV1 with hillshade
 ffmpeg \
@@ -30,7 +31,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_av1_hs.${type}.webm
+videos/multi_mission_av1_hs.${type}.webm
 
 # Generate VP9 format 
 
@@ -43,7 +44,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_vp9.${type}.webm
+videos/multi_mission_vp9.${type}.webm
 
 # Now generate VP9 format with hillshade
 
@@ -56,7 +57,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-mm_quicklooks/multi_mission_vp9_hs.${type}.webm
+videos/multi_mission_vp9_hs.${type}.webm
 
 # Generate MP4 format 
 
@@ -69,7 +70,7 @@ ffmpeg \
 -keyint_min 24 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-mm_quicklooks/multi_mission_h264.${type}.mp4
+videos/multi_mission_h264.${type}.mp4
 
 # Generate MP4 format with hillshade
 
@@ -82,17 +83,17 @@ ffmpeg \
 -keyint_min 24 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-mm_quicklooks/multi_mission_h264_hs.${type}.mp4
+videos/multi_mission_h264_hs.${type}.mp4
 
 # find last frame
 cd quicklooks
 f=`ls *${type}.webp | tail -1`
-cp $f ../mm_quicklooks/last_frame.${type}.webp
+cp $f ../videos/last_frame.${type}.webp
 
 f=`ls *${type}-hs.webp | tail -1`
-cp $f ../mm_quicklooks/last_frame_hs.${type}.webp
+cp $f ../videos/last_frame_hs.${type}.webp
 
-cd /cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission
+cd /cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission
 
 done
 
