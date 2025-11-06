@@ -26,7 +26,7 @@ mv ${prod_dir}/*.avif  ${portal_dir}
 # Sync multi-mission videos to the portal
 
 # at NU
-mm_video_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission/mm_quicklooks
+mm_video_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission/videos
 
 # at UCL
 portal_dir=/cpnet/www/cpom/ais_cci_phase2/multi_mission_quicklooks
@@ -39,7 +39,7 @@ rm -f /cpnet/www/cpom/ais_cci_phase2/multi_mission_quicklooks/*
  $portal_dir
 
 # Sync multi-mission products
-nu_prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/sec_processing/multimission/products
+nu_prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission
 ucl_prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/multi_mission
 
 rm -f $ucl_prod_dir/*.zip
