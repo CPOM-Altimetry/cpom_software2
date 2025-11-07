@@ -704,6 +704,7 @@ def main(args):
 
     # Print a list of available area definitions
     if args.list_areas:
+        print("\nfinding area definitions...\n", flush=True)
         area_list = list_all_area_definition_names()
         mystr = f"{BLACK_BOLD}List of Available Area Names from CPOM Area Definitions{NC}"
         print("-" * (len(mystr) - 8))

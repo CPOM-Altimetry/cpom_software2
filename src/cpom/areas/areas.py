@@ -52,6 +52,8 @@ def list_all_area_definition_names(logger=None) -> list[str]:
             if "__init__" not in thisdef
         ]
 
+        alignment_length = len(max(all_defs, key=len)) + 3
+
         final_defs = []
         for thisdef in all_defs:
             thisarea = Area(thisdef)
@@ -60,12 +62,12 @@ def list_all_area_definition_names(logger=None) -> list[str]:
                 color = blue
             if thisarea.area_summary:
                 final_defs.append(
-                    f"{color}{thisdef}{endc} : {thisarea.area_summary} :"
+                    f"{color}{thisdef:<{alignment_length}}{endc} : {thisarea.area_summary} :"
                     f" background:{thisarea.background_image}"
                 )
             else:
                 final_defs.append(
-                    f"{color}{thisdef}{endc} : {thisarea.long_name} :"
+                    f"{color}{thisdef:<{alignment_length}}{endc} : {thisarea.long_name} :"
                     f" background:{thisarea.background_image}"
                 )
         return sorted(final_defs)
