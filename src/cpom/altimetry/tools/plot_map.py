@@ -940,7 +940,7 @@ def main(args):
                                 vals[vals == fill_value] = None
                             log.info("FillValue found: %s", fill_value)
                         except AttributeError as exc:
-                            log.info("No FillValue found for %s : %s", params[i], exc)
+                            log.debug("No FillValue found for %s : %s", params[i], exc)
 
                         lats = get_variable(nc, latnames[i])[:].data
                         if lats.ndim == 2:
