@@ -453,11 +453,9 @@ class Polarplot:
             background_resolutions = [background_resolution]
 
         if len(background_alphas) != len(backgrounds):
-            log.warning("Number of background_alphas does not match number of backgrounds.")
             background_alphas = np.full(len(backgrounds), background_alphas[0])
 
         if len(background_resolutions) != len(backgrounds):
-            log.warning("Number of background_resolutions does not match number of backgrounds.")
             background_resolutions = background_resolutions * len(backgrounds)
 
         # display each background in turn
