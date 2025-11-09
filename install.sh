@@ -26,12 +26,39 @@ else
 fi
 
 curl -sSL https://install.python-poetry.org | python3 -
-poetry config virtualenvs.create true
-poetry config virtualenvs.in-project true
-poetry config virtualenvs.prefer-active-python false
-poetry env use python3.12
+
+
+# Make sure we’re not inside any active venv/conda env
+[[ -n "${VIRTUAL_ENV-}" ]] && deactivate || true
+if [[ -n "${CONDA_PREFIX-}" ]] && command -v conda >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  source "$(conda info --base)/etc/profile.d/conda.sh" 2>/dev/null || true
+  conda deactivate || true
+fi
+unset VIRTUAL_ENV
+
+# Force in-project .venv for Poetry 2.x
+export POETRY_VIRTUALENVS_CREATE=true
+export POETRY_VIRTUALENVS_IN_PROJECT=true
+poetry config --local virtualenvs.in-project true
+
+# Remove any previously associated env(s) for this project
+poetry env remove --all >/dev/null 2>&1 || true
+
+# Create a fresh env with the exact interpreter you want
+poetry env use "$(command -v python3.12)"
+
+# Install deps into the new .venv
 poetry lock
 poetry install
+
+# Sanity check: should now be the project .venv
+VENV_PATH="$(poetry env info --path)"
+echo "Using virtualenv: $VENV_PATH"
+if [[ "$VENV_PATH" != "$PWD/.venv" ]]; then
+  echo "ERROR: expected $PWD/.venv but got $VENV_PATH" >&2
+  exit 1
+fi
 
 export ppath=$(poetry env info --path)
 
@@ -79,3 +106,4 @@ echo "-----------------------"
 echo "Installation complete. "
 echo "-----------------------"
 echo "Use \"source $setup_and_run_file\" to set up and activate the environment."
+echo "or \". $setup_and_run_file\" is an alternative syntax."

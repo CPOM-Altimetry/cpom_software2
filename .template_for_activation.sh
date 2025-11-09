@@ -34,6 +34,11 @@ export PYTHONPATH="$PROJECT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="$PROJECT_ROOT/src/clev2er/tools:$PATH"
 export CPDATA_DIR="/cpdata"
 
+if [ ! -d $CPDATA_DIR ]; then 
+echo "WARNING: Your CPDATA_DIR is set to $CPDATA_DIR which does not exist"; 
+echo "Edit this activate.sh file to set the line export CPDATA_DIR=/actual/cpdata"
+fi
+
 # Check paths
 missing_paths=()
 for var in CPDATA_DIR; do
