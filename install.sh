@@ -11,7 +11,7 @@ setup_and_run_file=./activate.sh
 
 export CPOM_SOFTWARE_DIR=$PWD
 
-echo "\nCPOM Software v2 Installation\n"
+echo -e "\nCPOM Software v2 Installation\n"
 
 cp ./.template_for_activation.sh $setup_and_run_file
 
@@ -27,6 +27,8 @@ fi
 
 curl -sSL https://install.python-poetry.org | python3 -
 poetry config virtualenvs.create true
+poetry config virtualenvs.in-project true
+poetry config virtualenvs.prefer-active-python false
 poetry env use python3.12
 poetry lock
 poetry install
