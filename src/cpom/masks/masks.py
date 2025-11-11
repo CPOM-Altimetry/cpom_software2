@@ -8,6 +8,7 @@ from os.path import isfile
 from typing import Any, Optional
 
 import numpy as np
+import polars as pl
 from netCDF4 import Dataset  # pylint: disable=E0611
 from pyproj import CRS  # CRS definitions
 from pyproj import Transformer  # for transforming between projections
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 mask_list = [
     "ase_xylimits_mask",  # rectangular mask for Amundsen Sea Embayment (ASE)
     "ronne_filchner_xylimits_mask",  # rectangular mask for Ronne Filchner (Antarctica)
-    "greenland_area_xylimits_mask",  # rectangular mask for Greenland
+    "trilinear_singular",  # rectangular mask for Greenland
     "antarctica_bedmachine_v2_grid_mask",  # Antarctic Bedmachine v2 surface type mask
     "greenland_bedmachine_v3_grid_mask",  # Greenland Bedmachine v3 surface type mask
     "antarctica_iceandland_dilated_10km_grid_mask",  # Antarctic ice (grounded+floating) and
@@ -755,6 +756,9 @@ class Mask:
         else:
             x, y = self.latlon_to_xy(lats, lons)  # pylint: disable=E0633
 
+        # get count of xy that are infinity
+        np.sum(np.isinf(x)) + np.sum(np.isinf(y))
+
         inmask = np.zeros(lats.size, np.bool_)
 
         n_inside = 0
@@ -774,6 +778,7 @@ class Mask:
         if self.mask_type == "grid":
             for i in range(x.size):
                 # calculate equivalent (ii,jj) in mask array
+
                 ii = int(np.around((x[i] - self.minxm) / self.binsize))
                 jj = int(np.around((y[i] - self.minym) / self.binsize))
 
@@ -895,3 +900,86 @@ class Mask:
                 raise IOError(
                     f'Shared memory for {self.mask_name} could not be closed {exc}"'
                 ) from exc
+
+    ######################################################
+    # Function to Mask to a polars LazyFrame or DataFrame #
+    ######################################################
+
+    def points_inside_polars(
+        self,
+        df: pl.LazyFrame | pl.DataFrame,
+        x_col: str = "x",
+        y_col: str = "y",
+        basin_numbers: Optional[list[int]] = None,
+        return_pl_dataframe=False,
+    ) -> pl.LazyFrame | pl.DataFrame:
+        """Given a list of lat,lon or x,y points, find the points that are inside the current mask
+        Args:
+            df (pl.LazyFrame|pl.DataFrame): polars LazyFrame or DataFrame with x,y columns
+            x_col (str): name of column in df containing x values
+            y_col (str): name of column in column in df containing y values
+            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
+            return_pl_dataframe (bool, optional): return a polars DataFrame instead of LazyFrame
+                                                  Defaults to False.
+        Returns:
+            pl.LazyFrame|pl.DataFrame: polars LazyFrame or DataFrame with only points inside mask
+        """
+        # Ensure LazyFrame
+        if isinstance(df, pl.DataFrame):
+            df = df.lazy()
+
+        # Basin numbers assignment
+        if basin_numbers and not isinstance(basin_numbers, (list, np.ndarray)):
+            basin_numbers = [basin_numbers]
+        if self.basin_numbers and not basin_numbers:
+            basin_numbers = self.basin_numbers
+
+        # Filter by mask type
+        if self.mask_type == "xylimits":
+            df = df.filter(
+                (pl.col(x_col) >= self.xlimits[0])
+                & (pl.col(x_col) <= self.xlimits[1])
+                & (pl.col(y_col) >= self.ylimits[0])
+                & (pl.col(y_col) <= self.ylimits[1])
+            )
+        elif self.mask_type == "grid":
+            df = df.with_columns(
+                [
+                    ((pl.col(x_col) - self.minxm) / self.binsize)
+                    .round()
+                    .cast(pl.Int64)
+                    .alias("ii"),
+                    ((pl.col(y_col) - self.minym) / self.binsize)
+                    .round()
+                    .cast(pl.Int64)
+                    .alias("jj"),
+                ]
+            )
+            df = (
+                df.with_columns(
+                    [
+                        (
+                            (pl.col("ii") >= 0)
+                            & (pl.col("ii") < self.num_x)
+                            & (pl.col("jj") >= 0)
+                            & (pl.col("jj") < self.num_y)
+                        ).alias("in_bounds")
+                    ]
+                )
+                .filter(pl.col("in_bounds"))
+                .drop("in_bounds")
+            )
+            jj = df.select("jj").collect().to_numpy().flatten()
+            ii = df.select("ii").collect().to_numpy().flatten()
+
+            # Get mask values from grid
+            mask_values = self.mask_grid[jj, ii]
+            df = df.with_columns([pl.Series("mask_value", mask_values)])
+
+            if self.basin_numbers:
+                df = df.filter(pl.col("mask_value").is_in(self.basin_numbers))
+            else:
+                df = df.filter(pl.col("mask_value") > 0)
+            df = df.drop(["ii", "jj", "mask_value"])
+
+        return df.collect() if return_pl_dataframe else df
