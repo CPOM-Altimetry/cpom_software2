@@ -1,9 +1,8 @@
 mission: "env"
 long_name: "ENVISAT FDR4ALT Land Ice"
 search_pattern: "**/EN1_F4A_ALT_TDP_LI_*.nc"
-yyyymm_str_fname_indices: [-22, -14]
+yyyymm_str_fname_indices: [-38, -30]
 dataset_epoch: "1950-01-01T00:00:00"
-latency: "NTC"
 latitude_param: "expert/ice_sheet_lat_poca"
 longitude_param: "expert/ice_sheet_lon_poca"
 latitude_nadir_param: "expert/latitude"
@@ -12,3 +11,4 @@ elevation_param: "expert/ice_sheet_elevation_ice1_roemer"
 power_param: "expert/sigma0_ice1"
 quality_param: "expert/retracking_ice1_qual"
 time_param: "expert/time"
+mode_param: "expert/chirp_band"

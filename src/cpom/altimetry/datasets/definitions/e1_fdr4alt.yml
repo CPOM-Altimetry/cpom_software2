@@ -1,9 +1,8 @@
 mission: "e1"
 long_name: "ERS-1 FDR4ALT Land Ice"
 search_pattern: "**/ER1_F4A_ALT_TDP_LI_*.nc"
-yyyymm_str_fname_indices: [-23, -31]
+yyyymm_str_fname_indices: [-38, -30]
 dataset_epoch: "1950-01-01T00:00:00"
-latency: "NTC"
 latitude_param: "expert/ice_sheet_lat_poca"
 longitude_param: "expert/ice_sheet_lon_poca"
 latitude_nadir_param: "expert/latitude"

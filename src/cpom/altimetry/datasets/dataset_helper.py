@@ -10,13 +10,14 @@ Supports two configuration methods:
 2. Direct keyword arguments to the constructor
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
-import yaml
+import yaml  # type: ignore[import-untyped]
 from netCDF4 import Dataset  # pylint: disable=E0611,W0611
 
 
@@ -77,37 +78,42 @@ class DatasetHelper(DatasetConfig):
         self,
         data_dir: str,
         dataset_yaml: Optional[str] = None,
-        **config_params,
+        **config_params: Any,
     ):
-        config_dict = {"data_dir": data_dir}
+        config_dict: dict[str, Any] = {"data_dir": data_dir}
         if dataset_yaml:
             loaded = self._load_dataset_config(dataset_yaml)
             config_dict.update(loaded)
         config_dict.update(config_params)
-        super().__init__(**config_dict)
+        super().__init__(**config_dict)  # type: ignore[arg-type]
 
-    def _load_dataset_config(self, dataset_yaml: str | None) -> dict:
+    def _load_dataset_config(self, dataset_yaml: str | Path) -> dict[str, Any]:
         """Load dataset configuration from YAML file.
 
         Args:
-            dataset_yaml (str | None): Path to the YAML configuration file of the dataset.
+            dataset_yaml (str | Path): Path to the YAML configuration file of the dataset.
 
         Raises:
             FileNotFoundError: If the YAML configuration file is not found.
 
         Returns:
-            dict: The loaded dataset configuration.
+            dict[str, Any]: The loaded dataset configuration.
         """
-        yaml_file = Path(dataset_yaml)
+        if isinstance(dataset_yaml, str):
+            yaml_file = Path(dataset_yaml)
+        else:
+            yaml_file = dataset_yaml
+
         if yaml_file.is_file():
             with open(yaml_file, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
+                result: dict[str, Any] = yaml.safe_load(f)
+                return result
         raise FileNotFoundError(f"YAML config file not found: {yaml_file}")
 
     def get_files_dir(
         self,
         cyclenum: int | None = None,
-    ) -> str:
+    ) -> Path:
         """Get the L2 directory for a data product.
         If specified filter to specified cycle.
 
@@ -116,9 +122,6 @@ class DatasetHelper(DatasetConfig):
         Returns:
             str: The L2 directory path.
         """
-        if cyclenum is None:
-            return Path(self.data_dir)
-
         cycle_format = [
             f"cycle_{cyclenum:03d}",
             f"Cycle_{cyclenum:03d}",
@@ -134,58 +137,74 @@ class DatasetHelper(DatasetConfig):
             not found in {directory} for formats {cycle_format}"
         )
 
-    def get_product_startdate_from_filename(self, filename: str) -> tuple:
+    def get_product_startdate_from_filename(self, filename: Path) -> datetime:
         """
-        Extract L2 product start date from the filename
-        filename is the full path of a L2 file
-        returns datetime and  integer (year, month, day)
+        Extract L2 product start date from the filenam using the
+        filename indicies defined in the configuration.
+
+        Args:
+            filename (Path): Full path to the L2 file.
+        Returns :
+            datetime: The file start date as a datetime object.
         """
         if ".SEN3" in filename.parent.name:
             fname = filename.parent.name
         else:
             fname = filename.name
 
+        assert self.yyyymm_str_fname_indices is not None
         date_obj = datetime.strptime(
             fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
         )
         return date_obj
 
+    # pylint: disable=R0913,R0914,R0915,R0917
     def get_files_and_dates(
         self,
-        cycles: str | None = None,
+        cycle: int | None = None,
         min_dt_time: str | datetime | None = None,
         max_dt_time: str | datetime | None = None,
-        hemisphere: str = None,
-    ):
+        hemisphere: str | None = None,
+        return_cycle_number: bool = False,
+    ) -> np.ndarray:
         """
-        Get a structred numpy array of valid files and their dates from the filename.
+        Get a structured numpy array of valid files and their dates from the filename.
+        Optionally include cycle numberin the output.
 
-        Options to filter by cycle number or a min/max datetime range.
-        For is2 pass a hemisphere to the filename.
-        Filters based on optional min and max datetime range, hemisphere and cycle.
-        Users can pass either a cycel number or a string with wildcards to match multiple cycles.
+        Options:
+            Filter to cycle number or a min/max datetime range.
+            Filter to hemisphere if in the directory path or filename,
+            in _get_file_by_hemisphere.
 
         Args:
-            cycles (str | None, optional): _description_. Defaults to None.
-            min_dt_time (str | datetime | None, optional): _description_. Defaults to None.
-            max_dt_time (str | datetime | None, optional): _description_. Defaults to None.
-            hemisphere (str, optional): _description_. Defaults to None.
+            cycles (str | None, optional): Cycle number to filter files. Defaults to None.
+            min_dt_time (str | datetime | None, optional):
+            Minimum datetime to filter files. Defaults to None.
+            max_dt_time (str | datetime | None, optional):
+            Maximum datetime to filter files. Defaults to None.
+            hemisphere (str, optional): Filter to hemisphere 'north' or 'south'. Defaults to None.
+            return_cycle_number (bool, optional): Whether to include cycle number in the output.
+            Defaults to False.
 
         Returns:
-            _type_: _description_
+            search_dir: np.ndarray: Structured array with file paths and dates.
         """
 
-        def _get_min_max_as_datetime(min_dt_time, max_dt_time):
+        def _get_min_max_as_datetime(
+            min_dt_time: str, max_dt_time: str
+        ) -> tuple[datetime, datetime]:
+            min_dt: datetime
+            max_dt: datetime
             if "/" in min_dt_time:
-                min_dt_time = datetime.strptime(min_dt_time, "%Y/%m/%d")
-                max_dt_time = datetime.strptime(max_dt_time, "%Y/%m/%d")
+                min_dt = datetime.strptime(min_dt_time, "%Y/%m/%d")
+                max_dt = datetime.strptime(max_dt_time, "%Y/%m/%d")
             elif "." in min_dt_time:
-                min_dt_time = datetime.strptime(min_dt_time, "%Y.%m.%d")
-                max_dt_time = datetime.strptime(max_dt_time, "%Y.%m.%d")
+                min_dt = datetime.strptime(min_dt_time, "%Y.%m.%d")
+                max_dt = datetime.strptime(max_dt_time, "%Y.%m.%d")
             else:
-                min_dt_time = datetime.strptime(min_dt_time, "%Y%m%d")
-                max_dt_time = datetime.strptime(max_dt_time, "%Y%m%d")
-            return min_dt_time, max_dt_time
+                min_dt = datetime.strptime(min_dt_time, "%Y%m%d")
+                max_dt = datetime.strptime(max_dt_time, "%Y%m%d")
+            return min_dt, max_dt
 
         def _get_search_dir_by_date(l2_dir, min_dt_time, max_dt_time):
             if min_dt_time and max_dt_time:
@@ -203,46 +222,87 @@ class DatasetHelper(DatasetConfig):
                 search_dir = l2_dir
             return search_dir
 
+        def _get_file_by_hemisphere(self, hemisphere, file_and_dates):
+
+            # Handle IS2 files
+            if "ATL06" in self.search_pattern:
+                if hemisphere.upper() == "NORTH":
+                    region_codes = [3, 4, 5]
+                else:
+                    region_codes = [10, 11, 12]
+                # Extract region code from filename and filter
+                mask = [int(Path(f).name[-12:-10]) in region_codes for f in file_and_dates["path"]]
+                file_and_dates = file_and_dates[mask]
+
+            return file_and_dates
+
+        def _get_cycle_number(file):
+            cycle_patterns = [
+                r"cycle_(\d{3})",
+                r"Cycle_(\d{3})",
+                r"CYCLE(\d{2,3})",
+                r"Cycle(\d{3})",
+            ]
+            for pattern in cycle_patterns:
+                match = re.search(pattern, str(Path(file).parent))
+                if match:
+                    return int(match.group(1))
+            return None
+
         if isinstance(min_dt_time, str):
+            assert isinstance(max_dt_time, str)
             min_dt_time, max_dt_time = _get_min_max_as_datetime(min_dt_time, max_dt_time)
 
         # Get narrow search directory based on min and max date if exists
-        l2_dir = self.get_files_dir(cycles)
+        if cycle is None:
+            l2_dir = Path(self.data_dir)
+        else:
+            l2_dir = self.get_files_dir(cycle)
+
         search_dir = _get_search_dir_by_date(l2_dir, min_dt_time, max_dt_time)
 
+        assert self.search_pattern is not None
         valid_files = []
         for file in Path(search_dir).rglob(self.search_pattern):
-            # Filter Based on hemisphere for is2 data
-            if self.beams and hemisphere:
-                if hemisphere == "north":
-                    regions = [3, 4, 5]
-                else:
-                    regions = [10, 11, 12]
-                if int(file.name[-12:-10]) not in regions:
-                    continue
             date_obj = self.get_product_startdate_from_filename(file)
             if isinstance(date_obj, datetime):
-                if min_dt_time is not None or max_dt_time is not None:
+                if min_dt_time is not None and max_dt_time is not None:
+                    assert isinstance(min_dt_time, datetime)
+                    assert isinstance(max_dt_time, datetime)
                     if min_dt_time <= date_obj <= max_dt_time:
-                        valid_files.append((file, date_obj, date_obj.year, date_obj.month))
+                        row = [file, date_obj, date_obj.year, date_obj.month]
+                        if return_cycle_number:
+                            row.append(_get_cycle_number(file))
+                        valid_files.append(tuple(row))
                     else:
-                        continue  # Skip files not in date range
+                        continue
                 else:
-                    valid_files.append((file, date_obj, date_obj.year, date_obj.month))
-                    # Valid date without range filter.
+                    row = [file, date_obj, date_obj.year, date_obj.month]
+                    if return_cycle_number:
+                        row.append(_get_cycle_number(file))
+                    valid_files.append(tuple(row))
             else:
-                continue  # Skip files that don't have a valid date
-        return np.array(
-            valid_files, dtype=[("path", object), ("date", "O"), ("year", int), ("month", int)]
-        )
+                continue
+
+        if hemisphere:
+            valid_files = (
+                _get_file_by_hemisphere(self, hemisphere, valid_files)
+                if hemisphere
+                else valid_files
+            )
+
+        dtype = [("path", object), ("date", "O"), ("year", int), ("month", int)]
+        if return_cycle_number:
+            dtype.append(("cycle", object))
+        return np.array(valid_files, dtype=dtype)
 
     def get_unified_time_epoch_offset(
-        self, goal_epoch_str: str = "1991-01-01", this_epoch_str: str = None
+        self, goal_epoch_str: str = "1991-01-01", this_epoch_str: str | None = None
     ) -> float:
         """
         Convert a timestamp from one custom epoch to another.
 
-        Parameters:
+        Args:
         - goal_epoch_str: str, the target epoch (default: "1991-01-01")
         - this_epoch_str: str, the original epoch of the dataset
 
@@ -251,6 +311,7 @@ class DatasetHelper(DatasetConfig):
         """
         if this_epoch_str is None:
             this_epoch_str = self.dataset_epoch
+        assert this_epoch_str is not None
         this_epoch = datetime.fromisoformat(this_epoch_str)  # + timedelta(days=1)
         goal_epoch = datetime.fromisoformat(goal_epoch_str)
         # Calculate offset between epochs in seconds
@@ -260,9 +321,9 @@ class DatasetHelper(DatasetConfig):
 
     def get_file_orbital_direction(
         self,
-        latitude: np.ndarray = None,
-        nc: Dataset = None,
-    ) -> str:
+        nc: Dataset,
+        latitude: np.ndarray | None = None,
+    ) -> np.ndarray:
         """Get the orbital direction of the satellite based on latitude.
         For datasets with Nadir Latitude variables, checks if the latitudes are
         increasing or decreasing.
@@ -271,15 +332,11 @@ class DatasetHelper(DatasetConfig):
         Which uses a global attribute to determine the direction of the track.
 
         Args:
-            latitude (np.ndarray, optional): _description_. Defaults to None.
-            nc (Dataset, optional): _description_. Defaults to None.
-            cryotempo (bool, optional): _description_. Defaults to False.
-
-        Raises:
-            ValueError: _description_
-
+            latitude (np.ndarray, optional): latitude array.
+                    If None, will be retrieved from config.
+            nc (Dataset, optional): netcdf Dataset.
         Returns:
-            str: _description_
+            np.ndarray: array of bool track directions. Ascending or Descending.
         """
         try:
             return self.get_measurement_directions_cryotempo(nc, latitude)
@@ -288,12 +345,15 @@ class DatasetHelper(DatasetConfig):
 
         if latitude is None:
             if self.latitude_param is not None and nc is not None:
-                latitude = self.get_variable(nc, self.latitude_nadir_param)
+                assert self.latitude_nadir_param is not None
+                latitude = self.get_variable(
+                    nc, self.latitude_nadir_param
+                )  # type: ignore[assignment]
             else:
                 raise ValueError("No latitude data provided or available.")
 
+        assert latitude is not None
         asc_directions = np.zeros_like(latitude, dtype=bool)
-
         asc_directions[0] = latitude[1] > latitude[0]
         asc_directions[1:-1] = latitude[2:] > latitude[1:-1]
         asc_directions[-1] = latitude[-1] > latitude[-2]
@@ -301,7 +361,7 @@ class DatasetHelper(DatasetConfig):
         return asc_directions
 
     def get_measurement_directions_cryotempo(
-        self, nc: Dataset, latitude: np.ndarray = None
+        self, nc: Dataset, latitude: np.ndarray | None = None
     ) -> np.ndarray:
         """Get the direction of each measurement (ie ascending or descending)
         as a numpy array of boolean values.
@@ -312,7 +372,7 @@ class DatasetHelper(DatasetConfig):
 
         Args:
             nc (Dataset): netCDF Dataset
-            latitude (np.ndarray, optional): latitude array. If None, will be retrieved from file.
+            latitude (np.ndarray, optional): latitude array. If None, will be retrieved from config.
         Returns:
             directions (np.ndarray[bool]) :
             array of bool track directions (asc==True, desc==False) of equal length
@@ -323,7 +383,10 @@ class DatasetHelper(DatasetConfig):
         descending_start = nc.descending_start_record
 
         if latitude is None:
-            latitude = self.get_variable(nc, self.latitude_param, False)
+            assert self.latitude_param is not None
+            latitude = self.get_variable(nc, self.latitude_param, False)  # type: ignore[assignment]
+
+        assert latitude is not None
         if ascending_start == "None":
             asc_directions = np.zeros_like(latitude, dtype=bool)
         elif descending_start == "None":
@@ -342,7 +405,9 @@ class DatasetHelper(DatasetConfig):
             )
         return asc_directions
 
-    def get_variable(self, nc: Dataset, nc_var_path: str, return_beams: bool = False) -> np.ndarray:
+    def get_variable(
+        self, nc: Dataset, nc_var_path: str, return_beams: bool = False, replace_fill: bool = True
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """Retrieve a variable from a NetCDF file, handling groups if necessary.
 
         Can handle both regular variables and beam-specific variables for is2.
@@ -355,6 +420,7 @@ class DatasetHelper(DatasetConfig):
                 with groups separated by '/'.
             return_beams (bool): If using beam processing, whether to return
                 beam identifiers along with data.
+            replace_fill (bool): Whether to replace fill values with NaN.
         Raises:
             KeyError: If the variable or group is not found in the file.
         Returns:
@@ -371,27 +437,44 @@ class DatasetHelper(DatasetConfig):
                     var = var[part]
                     if var is None:
                         return np.array([])  # Variable not found
-                return var[:]
+                data = var[:]  # automatically scaled & masked if applicable
+                return data
             except KeyError:
                 return np.array([])  # Variable not found
 
         if self.beams:
-            data_array, beam_array = [], []
+            data_list: list[np.ndarray] = []
+            beam_list: list[np.ndarray] = []
             for beam in self.beams:
                 var_data = _get_var(nc, f"{beam}/{nc_var_path}")
-                if var_data is not None:
-                    data_array.append(var_data)
+                if var_data is not None and len(var_data) > 0:
+                    data_list.append(var_data)
                     if return_beams:
-                        beam_array.append(np.full(var_data.shape[0], beam))
+                        beam_list.append(np.full(var_data.shape[0], beam))
 
-            data_array = np.concatenate(data_array, axis=0) if data_array else np.array([])
+            data_array = np.concatenate(data_list, axis=0) if data_list else np.array([])
             if return_beams:
-                beam_array = np.concatenate(beam_array, axis=0) if beam_array else np.array([])
+                beam_array = np.concatenate(beam_list, axis=0) if beam_list else np.array([])
                 return data_array, beam_array
             return data_array
 
         # No beams, just return the variable directly
         var_data = _get_var(nc, nc_var_path)
+
+        if replace_fill:
+            var = nc[nc_var_path]
+            scale_factor = getattr(var, "scale_factor", 0.0)
+            add_offset = getattr(var, "add_offset", 0.0)
+            fill_value = getattr(var, "_FillValue", None)
+            if fill_value is not None:
+                scaled_fill = fill_value * scale_factor + add_offset
+                var_data = np.where(
+                    np.isclose(var_data, scaled_fill, atol=1e-6)
+                    | np.isclose(var_data, -scaled_fill, atol=1e-6),
+                    np.nan,
+                    var_data,
+                )
+
         if var_data is None:
             return np.array([])
         return var_data
