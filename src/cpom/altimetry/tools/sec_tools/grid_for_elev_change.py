@@ -2,14 +2,29 @@
 cpom.altimetry.tools.sec_tools.grid_for_elevation_change.py
 
 Purpose:
-  Grid altimetry data for SEC (model fit) processing,
-  storing each measurement in a partitioned Parquet dataset,
-  partitioned by (year, x_part, y_part) or (year, month, x_part, y_part)
+    Grid altimetry data for SEC (model fit) processing.
+    Stores data in a ragged layout,  partitioned by (year, x_part, y_part)
+    or (year, month, x_part, y_part).
+    Each x_part/y_part is a group of grid cells. The size defined by
+    partition_xy_chunking parameter.
+
+Command line parameters:
+    --data_input_dir: Directory containing L2 files
+    --dataset: Path to dataset definition YAML file
+                or inline dataset config as JSON string defined in the rcf configuration yml
+    --out_dir: Output directory
+    --area: CPOM area object
+    --gridarea: CPOM grid area object
+    --binsize: Grid bin size in meters
+    --standard_epoch: Standard epoch for time conversion (e.g., '1991-01-01T00:00:00')
+    --partition_columns: Columns to partition data by, must include 'year', 'x_part', 'y_part'
+    --partition_xy_chunking: Chunking factor for spatial partitioning
+    --fill_missing_poca: Fill missing POCA lat/lons with nadir values.
+     Set True for FDR4ALT datasets.
 """
 
 import argparse
 import json
-import logging
 import os
 import shutil
 import sys
@@ -29,11 +44,10 @@ from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
+from cpom.masks.masks import Mask
 
-log = logging.getLogger(__name__)
 
-
-def get_set_up_objects(params, dataset, logger, confirm_regrid=True):
+def get_set_up_objects(params, dataset, confirm_regrid=False):
     """
     Gets the output directory , area and grid objects based on command line parameters.
     Validates if the output directory exists and prompts the user for confirmation
@@ -41,44 +55,47 @@ def get_set_up_objects(params, dataset, logger, confirm_regrid=True):
     Args:
         params (argparse.Namespace): Command line parameters
         dataset (DatasetHelper): Dataset configuration object
-        logger (logging.Logger): Kogger object
         confirm_regrid (bool): Boolean flag to prompt user for regridding.
     Returns:
-        Tuple: Configuration dict, grid area, and area objects
+        Tuple: Configuration dict, grid area,  area / mask objects and logger object.
     """
-
-    params.full_output_dir = os.path.join(
-        params.griddir,
-        dataset.mission,
-        f"{params.gridarea}_{int(params.binsize/1000)}km_{dataset.mission}",
-    )
-
     # Full regrid => remove entire directory, then create fresh
-    if os.path.exists(params.full_output_dir):
-        if (
-            params.full_output_dir != "/" and dataset.mission in params.full_output_dir
-        ):  # safety check
-            logger.info("Removing previous grid dir: %s ...", params.full_output_dir)
-            if confirm_regrid:
+    if os.path.exists(params.out_dir):
+        if params.out_dir != "/" and dataset.mission in params.out_dir:  # safety check
+            # logger.info("Removing previous grid dir: %s ...", params.out_dir)
+            if confirm_regrid is True:
                 response = (
                     input("Confirm removal of previous grid archive? (y/n): ").strip().lower()
                 )
                 if response == "y":
-                    shutil.rmtree(params.full_output_dir)
+                    shutil.rmtree(params.out_dir)
                 else:
                     print("Exiting as user requested not to overwrite grid archive")
                     sys.exit(0)
-        else:
-            logger.error("Invalid output_dir path: %s", params.full_output_dir)
-            sys.exit(1)
-    os.makedirs(params.full_output_dir, exist_ok=True)
+            else:
+                shutil.rmtree(params.out_dir)
 
-    logger.info("output_dir=%s", params.full_output_dir)
+        else:
+
+            # logger.error("Invalid output_dir path: %s", params.out_dir)
+            sys.exit(1)
+    os.makedirs(params.out_dir, exist_ok=True)
+
+    logger = set_loggers(
+        log_file_info=Path(params.out_dir) / "info.log",
+        log_file_error=Path(params.out_dir) / "errors.log",
+    )
+
+    logger.info("output_dir=%s", params.out_dir)
 
     thisgrid = GridArea(params.gridarea, params.binsize)
     thisarea = Area(params.area)
+    if params.mask_name:
+        thismask = Mask(params.mask_name)
+    else:
+        thismask = None
 
-    return params, thisgrid, thisarea
+    return params, thisgrid, thisarea, thismask, logger
 
 
 def fill_missing_poca_with_nadir_fdr4alt(
@@ -97,21 +114,26 @@ def fill_missing_poca_with_nadir_fdr4alt(
     Returns:
         tuple(np.ndarray): Updated lat/lons filled with Nadir
     """
-    # check if expert/ice_sheet_qual_relocation exists
-    if "expert/ice_sheet_qual_relocation" not in nc.variables:
+    try:
+        # Try to get the relocation failure variable
+        relocation_failure = dataset.get_variable(
+            nc, "expert/ice_sheet_qual_relocation", replace_fill=False
+        )
+
+        # Get nadir coordinates
+        latitude_nadir = dataset.get_variable(nc, dataset.latitude_nadir_param)
+        longitude_nadir = dataset.get_variable(nc, dataset.longitude_nadir_param)
+
+        # Fill missing POCA locations with nadir values
+        lats = np.where(relocation_failure > 0, latitude_nadir, lats)
+        lons = np.where(relocation_failure > 0, longitude_nadir, lons)
+
         return lats, lons
 
-    latitude_nadir = dataset.get_variable(nc, "latitude_nadir")
-    longitude_nadir = dataset.get_variable(nc, "longitude_nadir")
-    if lats is None and lons is None:
-        lats = dataset.get_variable(nc, "latitude")
-        lons = dataset.get_variable(nc, "longitude") % 360.0
-
-    relocation_failure = dataset.get_variable(nc, "expert/ice_sheet_qual_relocation")
-    lats = np.where(relocation_failure > 0, latitude_nadir, lats)
-    lons = np.where(relocation_failure > 0, longitude_nadir, lons)
-
-    return lats, lons
+    except (KeyError, ValueError, AttributeError) as e:
+        # Variable doesn't exist or can't be accessed - skip POCA filling
+        print(f"POCA filling skipped: {e}")
+        return lats, lons
 
 
 # pylint: disable=R0917, R0913 , R0914 , R0915, R0912
@@ -121,6 +143,8 @@ def process_file(
     offset: float,
     this_grid: GridArea,
     this_area: Area,
+    this_mask: Mask,
+    fill_missing_poca: bool = False,
 ) -> pl.LazyFrame | None:
     """
     Extract and process data from a single altimetry file.
@@ -132,36 +156,11 @@ def process_file(
         this_grid (GridArea): CPOM grid area object.
         this_area (Area): CPOM area object.
         offset (float): Time offset to apply to time data
+        fill_missing_poca (bool): Flag to fill POCA with Nadir (Set True for FDR4ALT)
 
     Returns:
         pl.LazyFrame: A Polars LazyFrame containing processed data, or None if no valid data
     """
-
-    def _get_variable(dataset, nc, var_name, context_manager=Dataset):
-        """Extract a variable from the dataset.
-        If the dataset is a NetCDF file,
-        check the _FillValue attribute and replace fill values with NaN.
-
-        Args:
-            dataset (argparse.Namespace): The dataset configuration.
-            nc (Dataset or h5py.File): The opened NetCDF or HDF5 file.
-            var_name (str): The name of the variable to extract.
-            context_manager (type, optional): The context manager to use.
-                                                Defaults to context_manager.
-
-        Returns:
-            np.ndarray: Data array for the variable, or None if not found.
-        """
-
-        data = dataset.get_variable(nc, var_name)
-        if context_manager == Dataset:
-            try:
-                fill_value = nc[var_name]._FillValue  # pylint: disable=W0212
-                data[data == fill_value] = np.nan
-            except (KeyError, AttributeError):
-                pass
-        return data
-
     # Deconstruct file and date tuple
     file_path = file_and_date["path"]
     year_val = file_and_date["year"]
@@ -172,7 +171,6 @@ def process_file(
     if dataset.search_pattern.endswith(".h5"):
         context_manager = h5py.File
     with context_manager(file_path) as nc:
-
         #  Get lat/lons and mask to area.
         if dataset.beams != []:
             lats, beams = dataset.get_variable(nc, dataset.latitude_param, return_beams=True)
@@ -180,36 +178,46 @@ def process_file(
             lats = dataset.get_variable(nc, dataset.latitude_param)
         lons = dataset.get_variable(nc, dataset.longitude_param) % 360.0
 
-        # lats, lons = fill_missing_poca_with_nadir_fdr4alt(dataset, nc, lats, lons)
-        area_mask, n_inside = this_area.inside_area(lats, lons)
+        if fill_missing_poca:
+            lats, lons = fill_missing_poca_with_nadir_fdr4alt(dataset, nc, lats, lons)
+
+        bounded_lat, bounded_lon, bounded_mask, _ = this_area.inside_latlon_bounds(lats, lons)
+
+        if this_mask is not None:
+            area_mask_valid, n_inside = this_mask.points_inside(bounded_lat, bounded_lon)
+            x_coords, y_coords = this_mask.latlon_to_xy(lats, lons)
+
+        else:
+            area_mask_valid, n_inside = this_area.inside_area(bounded_lat, bounded_lon)
+            x_coords, y_coords = this_area.latlon_to_xy(lats, lons)
+
         if n_inside < 2:  # Number of points needed to get the heading
-            print(f"No points in area for file {file_path}, skipping...")
             return None
 
-        elevs = _get_variable(dataset, nc, dataset.elevation_param)
+        elevs = dataset.get_variable(nc, dataset.elevation_param)
+
+        # Reconstruct full-size mask
+        area_mask = np.zeros_like(lats, dtype=bool)
+        area_mask[bounded_mask] = area_mask_valid
         bool_mask = area_mask & np.isfinite(elevs)
 
-        # Get quality mask
-        if (
-            dataset.beams != []
-            and dataset.quality_param == "land_ice_segments/atl06_quality_summary"
-        ):
-            bool_mask &= dataset.get_variable(nc, dataset.quality_param) == 0
+        # Get quality mask (for fdr4alt)
         if dataset.quality_param is not None:
-            bool_mask &= dataset.get_variable(nc, dataset.quality_param) == 0
+            bool_mask &= (
+                dataset.get_variable(nc, dataset.quality_param, replace_fill=False) == 0
+            )  # 0 = good, bad = 1
 
         if dataset.power_param is not None:
-            pwr = _get_variable(dataset, nc, dataset.power_param)
+            pwr = dataset.get_variable(nc, dataset.power_param)
             bool_mask &= np.isfinite(pwr)
         if sum(bool_mask) < 2:
-            print(f"No valid points in area for file {file_path}, skipping...")
             return None
 
         if dataset.uncertainty_param is not None:
-            uncert = _get_variable(dataset, nc, dataset.uncertainty_param)
+            uncert = dataset.get_variable(nc, dataset.uncertainty_param)
 
         # Get time variable and apply offset
-        t = _get_variable(dataset, nc, dataset.time_param) + offset
+        t = dataset.get_variable(nc, dataset.time_param) + offset
         bool_mask &= np.isfinite(t)
 
         ascending_points = dataset.get_file_orbital_direction(
@@ -222,27 +230,30 @@ def process_file(
         )[bool_mask]
 
         # Get grid cell and offsets for each point
-        x_coords, y_coords = this_area.latlon_to_xy(lats[bool_mask], lons[bool_mask])
-        x_bin, y_bin = this_grid.get_col_row_from_x_y(x_coords, y_coords)
-        xoffset, yoffset = this_grid.get_xy_relative_to_cellcentres(x_coords, y_coords)
+        x_coords_filtered = x_coords[bool_mask]
+        y_coords_filtered = y_coords[bool_mask]
+        x_bin, y_bin = this_grid.get_col_row_from_x_y(x_coords_filtered, y_coords_filtered)
+        xoffset, yoffset = this_grid.get_xy_relative_to_cellcentre(
+            x_coords_filtered, y_coords_filtered, x_bin, y_bin
+        )
 
+        # Use float 32 to match old code precision
         data_dict = {
-            "time": t[bool_mask],
+            "time": t[bool_mask].astype(np.float32),
             "year": year_val,
             "month": month_val,
             "x_bin": x_bin,
             "y_bin": y_bin,
-            "x_cell_offset": xoffset,
-            "y_cell_offset": yoffset,
-            "x": x_coords,
-            "y": y_coords,
-            "elevation": elevs[bool_mask],
+            "x_cell_offset": xoffset.astype(np.float32),
+            "y_cell_offset": yoffset.astype(np.float32),
+            "x": x_coords_filtered.astype(np.float32),
+            "y": y_coords_filtered.astype(np.float32),
+            "elevation": elevs[bool_mask].astype(np.float32),
             "ascending": ascending_points,
         }
 
         if dataset.power_param is not None:
-            data_dict["power"] = pwr[bool_mask]
-
+            data_dict["power"] = pwr[bool_mask].astype(np.float32)
         if dataset.mode_param is not None:
             mode = dataset.get_variable(nc, dataset.mode_param)
             data_dict["mode"] = mode[bool_mask]
@@ -251,11 +262,11 @@ def process_file(
             data_dict["beam"] = beams[bool_mask]
 
         if dataset.uncertainty_param is not None:
-            data_dict["uncertainty"] = uncert[bool_mask]
+            data_dict["uncertainty"] = uncert[bool_mask].astype(np.float32)
 
         df_meas = (
             pl.LazyFrame(data_dict)
-            .cast({"elevation": pl.Float64})
+            .cast({"elevation": pl.Float32})
             .filter((pl.col("elevation") < 6000) & (pl.col("elevation") > -500))
         )
 
@@ -263,7 +274,7 @@ def process_file(
 
 
 def get_data_and_status_multiprocessed(
-    params, dataset, thisgrid, thisarea, offset, file_and_dates, logger
+    params, dataset, thisgrid, thisarea, thismask, offset, file_and_dates, logger
 ):
     """
     Extract and process data from altimetry netcdf or hdf5 files
@@ -278,6 +289,7 @@ def get_data_and_status_multiprocessed(
         dataset (Dataset): CPOM Dataset Object
         thisgrid (GridArea): GridArea Object
         thisarea (Area): Area Object
+        thismask (Mask): Mask Object
         offset (float): Offset in seconds between the datasets epoch and the epoch used for the grid
         logger (Logger): Logger Object
         file_and_dates (np.ndarray): Array of file paths and dates
@@ -302,11 +314,12 @@ def get_data_and_status_multiprocessed(
         offset=offset,
         this_grid=thisgrid,
         this_area=thisarea,
+        this_mask=thismask,
+        fill_missing_poca=params.fill_missing_poca,
     )
     # ----------------------------------------------------------------------
     # Process each year
     # ----------------------------------------------------------------------
-
     # Get list of years from file_and_date from a tuple of (file_path, date)
     # Extract unique years from the file_and_dates array
     years = sorted(set(file_and_dates["year"]))
@@ -314,28 +327,28 @@ def get_data_and_status_multiprocessed(
     try:
         with ProcessPoolExecutor() as executor:
             for year in years:
-                log.info("Processing year: %s", year)
+                logger.info("Processing year: %s", year)
                 big_rows_list = []
                 file_and_date_year = file_and_dates[file_and_dates["year"] == year]
                 chunksize = max(15, len(file_and_date_year) // (10 * 4))
                 results = executor.map(worker, file_and_date_year, chunksize=chunksize)
                 big_rows_list = [r for r in results if r is not None]
-                print(f"Collected {len(big_rows_list)} valid results for year {year}")
+                logger.info(f"Collected {len(big_rows_list)} valid results for year {year}")
 
                 if len(big_rows_list) == 0:
-                    print(f"No valid data for year {year}, skipping...")
+                    logger.info(f"No valid data for year {year}, skipping...")
                     status["years_files_rejected"].append(len(file_and_date_year))
                     status["total_l2_files_rejected"] += len(file_and_date_year)
                     continue
 
                 final = pl.concat(big_rows_list).collect()
-                print(f"Final DataFrame shape: {final.shape}")
+                logger.info(f"Final DataFrame shape: {final.shape}")
 
                 total_rows = write_partitions_to_disk(
                     final_df=final,
                     partition_columns=params.partition_columns,
                     partition_xy_chunking=params.partition_xy_chunking,
-                    full_output_dir=params.full_output_dir,
+                    out_dir=params.out_dir,
                 )
 
                 status["years_ingested"].append(int(year))
@@ -352,7 +365,7 @@ def get_data_and_status_multiprocessed(
     return status
 
 
-def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking, full_output_dir):
+def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking, out_dir):
     """
     Write  DataFrame of altimetry data to disk.
     Partitioned by ('year', 'month', 'x_part', 'y_part') or
@@ -362,13 +375,15 @@ def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking,
         final_df (DataFrame): The final DataFrame to write.
         partition_columns (list): List of columns to partition by.
         partition_xy_chunking (int): Chunking factor for spatial partitioning.
-        full_output_dir (str): Full path to the output directory.
+        out_dir (str): Full path to the output directory.
 
     Returns:
         int: Total number of rows written to disk.
     """
     if "x_part" in partition_columns and "y_part" in partition_columns:
-        final_df = final_df.with_columns(
+        final_df = final_df.filter(
+            pl.col("x_bin").is_not_nan() & pl.col("y_bin").is_not_nan()
+        ).with_columns(
             (pl.col("x_bin") / partition_xy_chunking).cast(pl.Int64).alias("x_part"),
             (pl.col("y_bin") / partition_xy_chunking).cast(pl.Int64).alias("y_part"),
         )
@@ -378,7 +393,7 @@ def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking,
     total_rows = 0
     for key, group in partitions.items():
         subdir = os.path.join(
-            full_output_dir,
+            out_dir,
             *[f"{group}={str(i)}" for group, i in zip(partition_columns, key)],
         )
         if not os.path.isdir(subdir):
@@ -390,20 +405,20 @@ def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking,
             outfile,
             compression="zstd",
         )
-        # log.info("Written: %s", outfile)
         total_rows += len(group)
 
     return total_rows
 
 
-def get_metadata_json(params, dataset, status, thisgrid, start_time):
-    """Writes a metadata JSON file with gridding details to the output directory.
+def get_metadata_json(params, dataset, status, thisgrid, start_time, logger):
+    """
+    Create and save metadata.json to the output directory.
     Metadata includes:
-        - command line parameters
-        - dataset
-        - processing status
-        - grid area details
-        - processing time
+        - Command line parameters
+        - Dataset parameters
+        - Processing status
+        - Grid details
+        - Execution time
 
     Args:
         params (argparse.Namespace): Command line parameters
@@ -412,6 +427,7 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
         status (dict): Processing status dictionary
         thisgrid (GridArea): CPOM GridArea object
         start_time (float): Processing start time
+        logger (logging.Logger): Logger object
     """
     # get dict from command line parameters
     ds_dict = vars(dataset)
@@ -437,17 +453,13 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
     minutes, seconds = divmod(remainder, 60)
     output["gridding_time"] = f"{hours:02}:{minutes:02}:{seconds:02}"
 
-    # hours, remainder = divmod(int(compaction_time), 3600)
-    # minutes, seconds = divmod(remainder, 60)
-    # output["compaction_time"] = f"{hours:02}:{minutes:02}:{seconds:02}"
-
-    meta_json_path = os.path.join(params.full_output_dir, "grid_meta.json")
+    meta_json_path = os.path.join(params.out_dir, "metadata.json")
     try:
         with open(meta_json_path, "w", encoding="utf-8") as f_meta:
             json.dump(output, f_meta, indent=2)
-        log.info("Wrote data_set metadata to %s", meta_json_path)
+        logger.info("Wrote data_set metadata to %s", meta_json_path)
     except OSError as exc:
-        log.error("Failed to write grid_meta.json: %s", exc)
+        logger.error("Failed to write metadata.json: %s", exc)
 
 
 def main(args):
@@ -466,7 +478,9 @@ def main(args):
         description="""Convert altimetry data into partitioned parquet
         with ragged layout, storing each partition in a single file"""
     )
-    parser.add_argument("--base_dir", type=str, required=True, help="Directory containing L2 files")
+    parser.add_argument(
+        "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
+    )
     parser.add_argument(
         "--dataset",
         type=str,
@@ -474,8 +488,14 @@ def main(args):
         help="Path to dataset definition YAML file"
         " or inline dataset config as JSON string defined in the rcf configuration yml",
     )
-    parser.add_argument("--griddir", type=str, required=True, help="Output directory")
+    parser.add_argument("--out_dir", type=str, required=True, help="Output directory")
     parser.add_argument("--area", type=str, required=True, help="CPOM area object")
+    parser.add_argument(
+        "--mask_name",
+        type=str,
+        required=False,
+        help="Optional Mask Name to apply instead of Area Mask",
+    )
     parser.add_argument("--gridarea", type=str, required=True, help="CPOM grid area object")
     parser.add_argument("--binsize", type=int, default=5000, help="Grid bin size in meters")
     parser.add_argument(
@@ -502,6 +522,13 @@ def main(args):
         type=int,
         default=20,
     )
+    parser.add_argument(
+        "--fill_missing_poca",
+        action="store_true",
+        help="Fill missing POCA lat/lons with nadir values, "
+        "where the 'expert/ice_sheet_qual_relocation' is > 0. "
+        "This is specific to the FDR4ALT dataset.",
+    )
 
     args = parser.parse_args(args)
     start_time = time.time()
@@ -511,37 +538,29 @@ def main(args):
     dataset_path = Path(args.dataset)
     if dataset_path.exists() and dataset_path.suffix in [".yml", ".yaml"]:
         # Method 1: Load from YAML file
-        dataset = DatasetHelper(data_dir=args.base_dir, dataset_yaml=args.dataset)
+        dataset = DatasetHelper(data_dir=args.data_input_dir, dataset_yaml=args.dataset)
     else:
         # Method 2: Treat as JSON string (inline config)
         try:
             dataset_config = json.loads(args.dataset)
-            dataset = DatasetHelper(data_dir=args.base_dir, **dataset_config)
+            dataset = DatasetHelper(data_dir=args.data_input_dir, **dataset_config)
         except json.JSONDecodeError:
             parser.error(
                 f"Invalid dataset configuration: {args.dataset}. "
                 f"Must be either a path to a YAML file or a valid JSON string"
             )
 
-    # Setup logging
-    default_log_level = logging.INFO
-    logfile = "grid.log"
-    set_loggers(
-        log_file_info=logfile[:-3] + "info.log",
-        log_file_warning=logfile[:-3] + "warning.log",
-        log_file_error=logfile[:-3] + "errors.log",
-        log_file_debug=logfile[:-3] + "debug.log",
-        log_format="%(levelname)s : %(asctime)s %(name)s : %(message)s",
-        default_log_level=default_log_level,
-    )
     # -----------------------------#
     # 3. Get grid and area objects #
     # -----------------------------#
-    args, thisgrid, thisarea = get_set_up_objects(args, dataset, log, confirm_regrid=True)
+    args, thisgrid, thisarea, thismask, logger = get_set_up_objects(
+        args, dataset, confirm_regrid=True
+    )
     # --------------------------------------------#
     # 4.Get files/ dates and offset from dataset#
     # -------------------------------------------#
     files_and_dates = dataset.get_files_and_dates(hemisphere=thisarea.hemisphere)
+    print(f"Found {len(files_and_dates)} files to process")
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(args.standard_epoch, dataset.dataset_epoch)
     # --------------------------------------------------------#
@@ -552,15 +571,16 @@ def main(args):
         dataset=dataset,
         thisgrid=thisgrid,
         thisarea=thisarea,
+        thismask=thismask,
         offset=offset,
         file_and_dates=files_and_dates,
-        logger=log,
+        logger=logger,
     )
 
     # --------------------------------------------------#
     # 6. Write metadata JSON file with gridding details #
     # --------------------------------------------------#
-    get_metadata_json(args, dataset, status, thisgrid, start_time)
+    get_metadata_json(args, dataset, status, thisgrid, start_time, logger)
 
 
 if __name__ == "__main__":

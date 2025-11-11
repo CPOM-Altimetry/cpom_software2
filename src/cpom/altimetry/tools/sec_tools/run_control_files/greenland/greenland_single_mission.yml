@@ -1,0 +1,136 @@
+#################################################
+# Single Mission Run Control File for Greenland # 
+#################################################
+
+# This file processes one mission at a time
+# Mission-specific parameters are defined in the missions section
+# Use: python run_chain.py --config greenland_single_mission.yml --mission <mission_name>
+
+# Steps to be run for single mission processing
+missions_to_run: 
+  - e1
+  - e2
+  - env
+  - cs2
+
+base_out : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/"
+e1:
+  algorithm_list : 
+    # - grid_for_elev_change
+    - surface_fit
+    - surface_fit_plots
+    - epoch_average
+    - clip_to_glaciers
+    # - calculate_dhdt
+
+  base_folder: "greenland_e1_5km"
+  grid_for_elev_change:
+    data_input_dir: "/home/willisc3/luna/CPOM/archive/SATS/RA/ERS1/L2/FDR4ALT/TDP/greenland/land_ice"
+    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/e1_fdr4alt.yml"
+    fill_missing_poca: true  
+
+e2:
+  algorithm_list : 
+    # - grid_for_elev_change
+    - surface_fit
+    - epoch_average
+    - clip_to_glaciers
+    - calculate_dhdt
+  base_folder: "greenland_e2_5km"
+  grid_for_elev_change:
+    data_input_dir: "/home/willisc3/luna/CPOM/archive/SATS/RA/ERS2/L2/FDR4ALT/TDP/greenland/land_ice"
+    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/e2_fdr4alt.yml"
+    fill_missing_poca: true
+  
+env:
+  algorithm_list : 
+    # - grid_for_elev_change
+    # - surface_fit
+    # - epoch_average
+    # - clip_to_glaciers
+    - calculate_dhdt
+  base_folder: "greenland_env_5km"
+  grid_for_elev_change:
+    data_input_dir: "/home/willisc3/luna/CPOM/archive/SATS/RA/ENV/L2/FDR4ALT/TDP/greenland/land_ice"
+    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+    fill_missing_poca: true
+
+cs2:
+  algorithm_list : 
+    # - grid_for_elev_change
+    # - surface_fit
+    # - epoch_average
+    # - clip_to_glaciers
+    - calculate_dhdt
+  base_folder: "greenland_cs2_5km"
+  grid_for_elev_change:
+    data_input_dir: "/home/willisc3/luna/CPOM/archive/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/GREENL"
+    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/cryotempo.yml"
+  surface_fit:
+    mintime: "20/10/2010"
+    maxtime: "28/02/2025"
+    pcmintime: "20/10/2010"
+    pcmaxtime: "28/02/2025"
+    mode_values: [1, 3]  # LRM and SIN
+
+#----------------------------------------------------------#
+# Common processing parameters (shared across all missions)#
+#----------------------------------------------------------#
+
+########################
+# SEC Processing Steps # 
+########################
+
+grid_for_elev_change:
+  out_folder_name: gridded_altimetry
+  area: 'greenland'
+  gridarea: "greenland"
+  binsize: 5000
+  mask_name: 'greenland_icesheet_2km_grid_mask'
+  standard_epoch: "1991-01-01T00:00:00"
+  partition_xy_chunking: 200  # Number of grid cells in each partition
+  # Mission-specific parameters (data_input_dir, dataset) will be merged from missions section
+
+surface_fit:  
+  in_step: "grid_for_elev_change"
+  out_folder_name: surface_fit
+  min_vals_in_cell: 20
+  min_percent_timespan_in_cell: 70.0
+  n_sigma: 2.0
+  max_surfacefit_iterations: 30
+  max_linearfit_iterations: 3
+  weighted_surface_fit: false
+  powercorrect : true
+  # Mission-specific parameters (mintime, maxtime, etc.) will be merged from missions section
+
+surface_fit_plots:
+  in_step: "surface_fit"
+  out_folder_name: surface_fit_plots
+  grid_info_json: "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/greenland_e1_5km/gridded_altimetry/metadata.json"
+  
+epoch_average:
+  in_step: "surface_fit"
+  out_folder_name: epoch_average
+  epoch_length: 140
+  gia_model: "ice5g"
+  epoch_filter_threshold: 0.90
+
+clip_to_glaciers:
+  in_step: "epoch_average"
+  out_folder_name: epoch_average_glaciers
+  shapefile: mouginot_glaciers
+  selector_value: ['PETERMANN_GLETSCHER', 'HELHEIMGLETSCHER', 'JAKOBSHAVN_ISBRAE',
+        'KANGERLUSSUAQ', 'ZACHARIAE_ISSTROM', 'NIOGHALVFJERDSFJORDEN']
+
+calculate_dhdt: 
+  in_step: "epoch_average"
+  out_folder_name: single_mission_dhdt
+  min_pts_in_period: 10
+  min_period_coverage: 50 
+  max_allowed_dhdt: 30 
+  dh_avg_varname: "dh_ave"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  # sub_basins: ['all']
+  parquet_glob: "*/epoch_average.parquet"

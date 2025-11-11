@@ -10,7 +10,6 @@ step length and window size (the latter called dhdt_period).
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
@@ -24,7 +23,7 @@ from scipy.stats import stats
 
 
 def get_start_end_dates_for_calculation(
-    input_df: pl.LazyFrame, dhdt_start: str, dhdt_end: str, dh_time_var: str
+    input_df: pl.LazyFrame, dhdt_start: str | None, dhdt_end: str | None, dh_time_var: str
 ) -> tuple[datetime, datetime]:
     """
     Get time range to use for dh/dt calculation.
@@ -33,15 +32,15 @@ def get_start_end_dates_for_calculation(
 
     Args:
         input_df (pl.LazyFrame): Polars LazyFrame of epoch-averaged data.
-        dhdt_start (str): Start time of first dh/dt period, format (YYYY/MM/DD | YYYY.MM.DD.)
-        dhdt_end (str): End time of first dh/dt period, format (YYYY/MM/DD | YYYY.MM.DD.)
+        dhdt_start (str | None): Start time of first dh/dt period, format (YYYY/MM/DD | YYYY.MM.DD.)
+        dhdt_end (str | None): End time of first dh/dt period, format (YYYY/MM/DD | YYYY.MM.DD.)
         dh_time_var (str): Name of the time variable in the dataset.
 
     Returns:
-        tuple[datetime]: (dhdt_start, dhdt_end)
+        tuple[datetime, datetime]: (dhdt_start, dhdt_end)
     """
 
-    def _get_date(timedt=None):
+    def _get_date(timedt: str) -> datetime:
         if "/" in timedt:
             time_dt = datetime.strptime(timedt, "%Y/%m/%d")
             return time_dt
@@ -53,8 +52,8 @@ def get_start_end_dates_for_calculation(
         raise ValueError(f"Unrecognized date format: {timedt}, pass as YYYY/MM/DD or YYYY.MM.DD ")
 
     if dhdt_start is not None and dhdt_end is not None:
-        dhdt_start = _get_date(dhdt_start)
-        dhdt_end = _get_date(dhdt_end)
+        dhdt_start_dt = _get_date(dhdt_start)
+        dhdt_end_dt = _get_date(dhdt_end)
     else:
         result = input_df.select(
             [
@@ -63,10 +62,10 @@ def get_start_end_dates_for_calculation(
             ]
         ).collect()
 
-        dhdt_start = result["min_time"][0]
-        dhdt_end = result["max_time"][0]
+        dhdt_start_dt = result["min_time"][0]
+        dhdt_end_dt = result["max_time"][0]
 
-    return dhdt_start, dhdt_end
+    return dhdt_start_dt, dhdt_end_dt
 
 
 def get_period_limits_df(
@@ -87,7 +86,7 @@ def get_period_limits_df(
         dhdt_period (float): Length of dh/dt period in fractional years
     """
 
-    def _parse_period_string(period_str, as_string=False):
+    def _parse_period_string(period_str: str, as_string: bool = False) -> float | str:
         matches = re.findall(r"(\d+)([ymd])", period_str)
         time_values = {"y": 0, "m": 0, "d": 0}
         for value, unit in matches:
@@ -105,28 +104,32 @@ def get_period_limits_df(
         usable_periods = pl.DataFrame(
             {"period_lo": dhdt_start, "period_hi": dhdt_end, "period_id": 1}
         )
-        dhdt_period = (dhdt_end - dhdt_start).days / 365.25
+        dhdt_period_value = (dhdt_end - dhdt_start).days / 365.25
     else:
         con = duckdb.connect()
         usable_periods = con.execute(
             f"""
-            SELECT 
-                period_lo, 
-                period_lo + INTERVAL {_parse_period_string(step_length, True)} AS period_hi,
-                ROW_NUMBER() OVER () AS period_id,
-            FROM 
-            generate_series(DATE '{dhdt_start.strftime("%Y-%m-%d")}',
-            DATE '{dhdt_end.strftime("%Y-%m-%d")}', INTERVAL
-            {_parse_period_string(dhdt_period, True)} ) AS t(period_lo)
-            WHERE --Remove empty periods
-            period_lo > DATE '{dhdt_start.strftime("%Y-%m-%d")}'
-            OR period_hi < DATE '{dhdt_end.strftime("%Y-%m-%d")}'
+            WITH periods AS (
+                SELECT 
+                    period_lo, 
+                    period_lo + INTERVAL {_parse_period_string(dhdt_period, True)} AS period_hi,
+                    ROW_NUMBER() OVER () AS period_id
+                FROM 
+                generate_series(DATE '{dhdt_start.strftime("%Y-%m-%d")}',
+                DATE '{dhdt_end.strftime("%Y-%m-%d")}', INTERVAL
+                {_parse_period_string(step_length, True)} ) AS t(period_lo)
+            )
+            SELECT * FROM periods
+            WHERE period_lo + INTERVAL 
+            {_parse_period_string(dhdt_period, True)} <= DATE '{dhdt_end.strftime("%Y-%m-%d")}'
         """
         ).pl()
 
-        dhdt_period = _parse_period_string(dhdt_period)
+        dhdt_period_parsed = _parse_period_string(dhdt_period)
+        assert isinstance(dhdt_period_parsed, float)  # Type narrowing for mypy
+        dhdt_period_value = dhdt_period_parsed
         con.close()
-    return usable_periods, dhdt_period
+    return usable_periods, dhdt_period_value
 
 
 def get_input_df(
@@ -179,6 +182,36 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
             - record_dhdt: List of dictionaries with dh/dt results and uncertainties.
             - status: Dictionary with counts for each calculation status.
     """
+
+    def _get_uncertainty(group, params, dhdt_period, input_uncertainty, model_uncertainty):
+        xcal_uncertainty = None
+        total_uncertainty = None
+        if params.multi_mission:
+            xcal_stderr_array = group[params.xcal_stderr_varname].to_numpy()
+            if xcal_stderr_array is not None and len(xcal_stderr_array) > 0:
+                # Remove reference point (first element) as in original implementation
+                # xcal_stderr_array = xcal_stderr - xcal_stderr[0] # Remove first data point
+                if np.sum(xcal_stderr_array) > 0.0:
+                    xcal_uncertainty = np.sqrt(np.mean((xcal_stderr_array) ** 2)) / dhdt_period
+                else:
+                    xcal_uncertainty = 0.0
+
+                # Calculate total uncertainty with cross-calibration component
+                if np.isnan(input_uncertainty):
+                    total_uncertainty = np.sqrt(xcal_uncertainty**2 + model_uncertainty**2)
+                else:
+                    total_uncertainty = np.sqrt(
+                        input_uncertainty**2 + xcal_uncertainty**2 + model_uncertainty**2
+                    )
+        else:
+            # Single mission uncertainty calculation
+            if np.isnan(input_uncertainty):
+                total_uncertainty = model_uncertainty
+            else:
+                total_uncertainty = np.sqrt(input_uncertainty**2 + model_uncertainty**2)
+
+        return xcal_uncertainty, total_uncertainty
+
     record_dhdt = []
     status = {
         "no_input_data": 0,
@@ -190,6 +223,7 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
 
     grouped = dh_input.group_by(["x_bin", "y_bin", "period_id"])
     for (x_bin, y_bin, period), group in grouped:
+
         # Check for no input data
         if len(group) == 0:
             status["no_input_data"] += 1
@@ -219,12 +253,14 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
             status["calculated_dhdt_outside_max_allowed_dhdt_range"] += 1
             continue
 
+        # Calculate uncertainties
         input_uncertainty = np.sqrt(np.nanmean(group[params.dh_stddev_varname] ** 2)) / dhdt_period
+        model_uncertainty = std_err
+        total_uncertainty = np.nan
 
-        if np.isnan(input_uncertainty):
-            total_uncertainty = std_err
-        else:
-            total_uncertainty = np.sqrt(input_uncertainty**2 + std_err**2)
+        xcal_uncertainty, total_uncertainty = _get_uncertainty(
+            group, params, dhdt_period, input_uncertainty, model_uncertainty
+        )
 
         record_dhdt.append(
             {
@@ -234,37 +270,72 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
                 "dhdt": slope,
                 "dhdt_incept": icept,
                 "input_uncertainty": input_uncertainty,
-                "model_uncertainty": std_err,
+                "model_uncertainty": model_uncertainty,
                 "total_uncertainty": total_uncertainty,
                 "input_dh_start_time": group[params.dh_time_varname].min(),
                 "input_dh_end_time": group[params.dh_time_varname].max(),
                 "num_pts_in_dhdt": num_pts_in_dhdt,
             }
         )
+        if xcal_uncertainty is not None:
+            record_dhdt.append({"xcal_uncertainty": xcal_uncertainty})
+
         status["calculation_successful"] += 1
     return record_dhdt, status
+
+
+def get_sub_basins(input_directory: str) -> list[str]:
+    """
+    Discover available sub-basins by scanning the directory structure.
+    Used when no specific sub-basins are provided but sub-basins is set to "all".
+
+    Args:
+        input_directory (str): Base directory path to scan for sub-basin subdirectories.
+
+    Returns:
+        list[str]: Sorted list of sub-basin directory names that exist.
+                   Returns empty list if no sub-basins found.
+    """
+    all_sub_basins = set()
+
+    if Path(input_directory).exists():
+        # Look for subdirectories that contain parquet files
+        for subdir in Path(input_directory).iterdir():
+            if subdir.is_dir():
+                # Check if this subdirectory contains parquet files
+                parquet_files = list(subdir.glob("*.parquet"))
+                if parquet_files:
+                    all_sub_basins.add(subdir.name)
+
+    return sorted(all_sub_basins)
 
 
 # pylint: disable=R0914
 def main(args: list[str]) -> None:
     """
-    Main entry point for single mission dh/dt calculation.
+    Main entry point for single mission dh/dt calculation with optional multimission support.
 
-    Loads command-line arguments, reads metadata, performs dh/dt calculation,
-    writes output parquet and metadata JSON files.
+    Loads command-line arguments, reads metadata,
+    performs dh/dt calculation, and writes output parquet and metadata JSON files.
 
-    1. Load command line arguments
-    2. Load input fit dataframe and get start and end dates for calculation
-    3. Calculate period limits
-    4. Join periods with input data
-    5. Calculate dh/dt for each grid cell and period
-    6. Set output directory for surface fit results
+        Supports two processing modes:
+        1. Single mission: Uses input measurement and model fit uncertainties
+        2. Multimission: Adds cross-calibration uncertainty component for bias-corrected data
+
+        Steps:
+        1. Load command line arguments
+        2. Load input fit dataframe and get start and end dates for calculation
+        3. Calculate period limits
+        4. Join periods with input data
+        5. Calculate dh/dt for each grid cell and period with appropriate uncertainties
+        6. Write output parquet file and metadata JSON
 
     Args:
         args: List of command-line arguments.
 
-    Returns:
-        None
+    Output:
+        - dhdt.parquet: Grid cell dh/dt values with uncertainty components
+        - dhdt_meta.json: Processing metadata and quality statistics
     """
     # ------------------------------#
     # 1.Load command line arguments#
@@ -280,21 +351,16 @@ def main(args: list[str]) -> None:
     )
 
     parser.add_argument(
-        "--indir",
+        "--in_dir",
         help=("Path of the epoch average dir containing parquet files"),
         type=str,
         required=True,
     )
     parser.add_argument(
-        "--outdir",
+        "--out_dir",
         help=("Path of the directory containing dh/dt output files"),
         type=str,
         required=True,
-    )
-    parser.add_argument(
-        "--gridmeta_file",
-        help="Path to the grid metadata file",
-        required=False,
     )
     parser.add_argument(
         "--dhdt_start",
@@ -361,6 +427,32 @@ def main(args: list[str]) -> None:
         type=str,
         default="epoch_midpoint_fractional_yr",
     )
+    parser.add_argument(
+        "--multi_mission",
+        help="Flag to enable multimission cross-calibration uncertainty calculation",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--xcal_stderr_varname",
+        help="Variable name for cross-calibration standard error (required for multimission)",
+        type=str,
+        default="biased_dh_xcal_stderr",
+    )
+    parser.add_argument(
+        "--sub_basins",
+        nargs="+",
+        default="all",
+        help="Specific list of sub-basins to process."
+        "If not provided : Will calculate for entire directory. "
+        "If set to 'all' will auto-discover sub-basins.",
+    )
+    parser.add_argument(
+        "--parquet_glob",
+        help="Glob pattern to match parquet files within each sub-basin directory.",
+        type=str,
+        default="*/epoch_average.parquet",
+    )
 
     start_time = time.time()
     # -----------------------------------------#
@@ -368,72 +460,77 @@ def main(args: list[str]) -> None:
     # and end dates for calculation
     # -----------------------------------------#
     params = parser.parse_args(args)
-
     # Load required variables as a dataframe
-    input_df = pl.scan_parquet(Path(params.indir) / "*.parquet").select(
+    base_columns = [
         "x_bin",
         "y_bin",
         params.dh_avg_varname,
         params.dh_stddev_varname,
         params.dh_time_varname,
         params.dh_time_fractional_varname,
-    )
+    ]
+    # Add cross-calibration uncertainty column if in multimission mode
+    if params.multi_mission:
+        base_columns.append(params.xcal_stderr_varname)
 
-    dhdt_start, dhdt_end = get_start_end_dates_for_calculation(
-        input_df, params.dhdt_start, params.dhdt_end, params.dh_time_varname
-    )
-    # ----------------------------#
-    # 3. Calculate period limits #
-    # ----------------------------#
-    usable_periods, dhdt_period = get_period_limits_df(
-        params.dhdt_period, params.step_length, dhdt_start, dhdt_end
-    )
-    # --------------------------------#
-    # 4. Join periods with input data #
-    # --------------------------------#
-    dh_input = get_input_df(input_df, usable_periods, params.dh_time_varname)
+    if params.sub_basins in ("None", ["None"]):
+        sub_basins_to_process = ["None"]
+    elif params.sub_basins in ("all", ["all"]):
+        sub_basins_to_process = get_sub_basins(params.in_dir)
+    else:
+        sub_basins_to_process = params.sub_basins
 
-    # ----------------------------------------------#
-    # 5. Calculate dh/dt for each grid cell and period #
-    # ---------------------------------------------#
-    record_dhdt, status = get_dhdt(dh_input, dhdt_period, params)
-    # ------------------------------------------------#
-    # 6. Set output directory for dhdt , write data  #
-    # ------------------------------------------------#
-    with open(params.gridmeta_file, "r", encoding="utf-8") as f:
-        grid_dir = json.load(f)
+    for sub_basin in sub_basins_to_process:
+        if sub_basin == "None":
+            input_df = pl.scan_parquet(Path(params.in_dir) / params.parquet_glob).select(
+                base_columns
+            )
+            output_path = Path(params.out_dir)
+        else:
+            input_df = pl.scan_parquet(
+                Path(params.in_dir) / sub_basin / params.parquet_glob
+            ).select(base_columns)
+            output_path = Path(params.out_dir) / sub_basin
 
-    params.outdir = os.path.join(
-        params.outdir,
-        grid_dir["mission"],
-        f'{grid_dir["gridarea"]}_{int(grid_dir["binsize"]/1000)}km_{grid_dir["mission"]}',
-    )
+        output_path.mkdir(parents=True, exist_ok=True)
 
-    output_path = Path(params.outdir) / "dhdt.parquet"
-    # Ensure output directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(record_dhdt).write_parquet(output_path, compression="zstd")
+        dhdt_start, dhdt_end = get_start_end_dates_for_calculation(
+            input_df, params.dhdt_start, params.dhdt_end, params.dh_time_varname
+        )
+        # ----------------------------#
+        # 3. Calculate period limits #
+        # ----------------------------#
+        usable_periods, dhdt_period = get_period_limits_df(
+            params.dhdt_period, params.step_length, dhdt_start, dhdt_end
+        )
+        # --------------------------------#
+        # 4. Join periods with input data #
+        # --------------------------------#
+        dh_input = get_input_df(input_df, usable_periods, params.dh_time_varname)
+        # ----------------------------------------------#
+        # 5. Calculate dh/dt for each grid cell and period #
+        # ---------------------------------------------#
+        record_dhdt, status = get_dhdt(dh_input, dhdt_period, params)
+        # ------------------------------------------------#
+        # 6. Set output directory for dhdt , write data  #
+        # ------------------------------------------------#
+        pl.DataFrame(record_dhdt).write_parquet(output_path / "dhdt.parquet", compression="zstd")
+        # ----------------------------#
+        # 7. Write metadata json file #
+        # ----------------------------#
+        hours, remainder = divmod(int(time.time() - start_time), 3600)
+        minutes, seconds = divmod(remainder, 60)
 
-    # ----------------------------#
-    # 7. Write metadata json file #
-    # ----------------------------#
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    try:
-        with open(Path(params.outdir) / "dhdt_meta.json", "w", encoding="utf-8") as f_meta:
+        with open(Path(output_path) / "dhdt_meta.json", "w", encoding="utf-8") as f_meta:
             json.dump(
                 {
                     **vars(params),
                     **status,
-                    "griddir": grid_dir["griddir"],
                     "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
                 },
                 f_meta,
                 indent=2,
             )
-    except OSError as e:
-        sys.exit(e)
 
 
 if __name__ == "__main__":

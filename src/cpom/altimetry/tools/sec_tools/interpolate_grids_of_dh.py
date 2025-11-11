@@ -12,7 +12,6 @@ calculate_dhdt, but could take any other named variable.
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -27,7 +26,10 @@ from cpom.gridding.gridareas import GridArea
 def _initialize_grid_and_flags(group, nrows, ncols):
     # Populate grid with values
     grid = np.full((nrows, ncols), np.nan)
+    # Get grid cells that have data
     grid[group["y_bin"].to_numpy(), group["x_bin"].to_numpy()] = 1
+
+    # Find points containing values
     points = np.where(np.isfinite(grid))
     points_arr = np.array(points)
 
@@ -132,28 +134,6 @@ def get_trilinear_interpolation(group, nrows, ncols, args):
     return grids
 
 
-def load_metadata(args):
-    """
-    Load grid metadata from file or from epoch averaged metadata.
-
-    Args:
-        args (argparse.Namespace): Parsed command line arguments.
-
-    Returns:
-        dict: Grid metadata dictionary.
-    """
-
-    if args.gridmeta_file:
-        with open(Path(args.gridmeta_file), "r", encoding="utf-8") as f:
-            grid_metadata = json.load(f)
-    else:
-        with open(Path(args.input_dir) / "epoch_avg_meta.json", "r", encoding="utf-8") as f:
-            epoch_meta = json.load(f)
-        with open(Path(epoch_meta["griddir"]), "r", encoding="utf-8") as f:
-            grid_metadata = json.load(f)
-    return grid_metadata
-
-
 # pylint: disable=R0914
 def process_group(input_df, args, nrows, ncols):
     """
@@ -183,17 +163,23 @@ def process_group(input_df, args, nrows, ncols):
     groups = input_df.group_by(args.timestamp_column)
     dataframes = []
     for group_name, group_df in groups:
-        # Filter group to only include data in range for each variable
-        if args.lo_filter and args.hi_filter:
+        tbl = group_df.clone()
+
+        if args.lo_filter:
             for idx, var in enumerate(args.variables_in):
-                if args.lo_filter[idx] is None or args.hi_filter[idx] is None:
-                    tbl = group_df
-                else:
-                    tbl = group_df.filter(
-                        (pl.col(var) > args.lo_filter[idx]) & (pl.col(var) < args.hi_filter[idx])
+                if args.lo_filter[idx] is not None:
+                    lo_limit = float(args.lo_filter[idx])
+                    tbl = tbl.with_columns(
+                        pl.when(pl.col(var) < lo_limit).then(None).otherwise(pl.col(var)).alias(var)
                     )
-        else:
-            tbl = group_df
+
+        if args.hi_filter:
+            for idx, var in enumerate(args.variables_in):
+                if args.hi_filter[idx] is not None:
+                    hi_limit = float(args.hi_filter[idx])
+                    tbl = tbl.with_columns(
+                        pl.when(pl.col(var) > hi_limit).then(None).otherwise(pl.col(var)).alias(var)
+                    )
 
         # Interpolate missing grid cells for this group
         grids = get_trilinear_interpolation(tbl, nrows, ncols, args)
@@ -202,14 +188,14 @@ def process_group(input_df, args, nrows, ncols):
         valid_mask = np.all(flag_grids > 0, axis=-1)
         y_idx, x_idx = np.where(valid_mask)
 
-        exclude_cols = {args.timestamp_column, "x_bin", "y_bin"}
+        # exclude_cols = {args.timestamp_column, "x_bin", "y_bin"}
 
-        # Add back columns that are unique to the group (single value per group)
-        single_value_cols = {
-            col: group_df[col].unique()[0]
-            for col in group_df.columns
-            if col not in exclude_cols and group_df[col].n_unique() == 1
-        }
+        # # Add back columns that are unique to the group (single value per group)
+        # single_value_cols = {
+        #     col: group_df[col].unique()[0]
+        #     for col in group_df.columns
+        #     if col not in exclude_cols and group_df[col].n_unique() == 1
+        # }
 
         # Build output DataFrame for valid grid cells
         df = pl.DataFrame(
@@ -220,9 +206,9 @@ def process_group(input_df, args, nrows, ncols):
             }
         )
 
-        # Add single-value columns to output DataFrame
-        for col, value in single_value_cols.items():
-            df = df.with_columns(pl.lit(value).alias(col))
+        # # Add single-value columns to output DataFrame
+        # for col, value in single_value_cols.items():
+        #     df = df.with_columns(pl.lit(value).alias(col))
 
         # Add interpolated variable values and flags to output DataFrame
         for var in args.variables_in:
@@ -236,26 +222,19 @@ def process_group(input_df, args, nrows, ncols):
     return pl.concat(dataframes)
 
 
-def write_output(interpolated_df, args, grid_metadata, start_time):
+def write_output(interpolated_df, args, start_time):
     """
     Write interpolated results and metadata to output files.
 
     Args:
         interpolated_df (pl.DataFrame): Interpolated results for all epochs.
         args (argparse.Namespace): Parsed command line arguments.
-        grid_metadata (dict): Grid metadata dictionary.
         start_time (float): Script start time (seconds since epoch).
 
     Returns:
         Path: Path to the output parquet file.
     """
-
-    args.outdir = os.path.join(
-        args.outdir,
-        grid_metadata["mission"],
-        f"{grid_metadata['gridarea']}_{int(grid_metadata['binsize']/1000)}km_{grid_metadata['mission']}",
-    )
-    output_path = Path(args.outdir) / "epoch_average_interp.parquet"
+    output_path = Path(args.out_dir) / "epoch_average_interp.parquet"
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if args.variables_in != args.variables_out:
@@ -267,7 +246,9 @@ def write_output(interpolated_df, args, grid_metadata, start_time):
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
     try:
-        with open(Path(args.outdir) / "epoch_avg_meta.json", "w", encoding="utf-8") as f_meta:
+        with open(
+            Path(args.out_dir) / "epoch_avg_interp_meta.json", "w", encoding="utf-8"
+        ) as f_meta:
             json.dump(
                 {
                     **vars(args),
@@ -299,13 +280,14 @@ def main(args):
     parser = argparse.ArgumentParser()
     # Required arguments
     parser.add_argument(
-        "--indir",
-        help="Input filename, with path to thefile containing variables of interest",
+        "--in_dir",
+        help="Input directory, with path to the directory containing variables of interest. "
+        "E.g. epoch averaged grids",
         required=True,
     )
-    parser.add_argument("--outdir", help="Output directory", required=True)
+    parser.add_argument("--out_dir", help="Output directory", required=True)
     parser.add_argument(
-        "--gridmeta_file",
+        "--grid_info_json",
         help="Path to the grid metadata json file",
         required=False,
     )
@@ -320,7 +302,8 @@ def main(args):
     )
     parser.add_argument(
         "--variables_out",
-        help="Comma-separated list of output variable(s) names, if not passed will use variables_in",
+        help="Comma-separated list of output variable(s) names, "
+        "if not passed will use variables_in",
         required=False,
         nargs="+",
     )
@@ -341,13 +324,14 @@ def main(args):
     )
 
     args = parser.parse_args(args)
-    grid_metadata = load_metadata(args)
+    with open(Path(args.grid_info_json), "r", encoding="utf-8") as f:
+        grid_metadata = json.load(f)
     ga = GridArea(grid_metadata["gridarea"], grid_metadata["binsize"])
     ncols, nrows = ga.get_ncols_nrows()
-    input_df = pl.read_parquet(Path(args.indir) / "*.parquet")
+    input_df = pl.read_parquet(Path(args.in_dir) / "*.parquet")
 
-    interpolated_df = process_epochs(input_df, args, nrows, ncols)
-    write_output(interpolated_df, args, grid_metadata, start_time)
+    interpolated_df = process_group(input_df, args, nrows, ncols)
+    write_output(interpolated_df, args, start_time)
 
 
 if __name__ == "__main__":

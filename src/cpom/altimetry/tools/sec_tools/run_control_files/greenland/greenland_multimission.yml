@@ -1,0 +1,45 @@
+#####################
+# Multi-Mission Run Control File for Greenland # 
+#####################
+# Steps to be run for multi-mission processing
+algorithm_list:
+  - cross_calibrate_missions
+  - calculate_dhdt
+########################
+# Multi-Mission Processing Steps # 
+########################
+base_out : "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/"
+
+cross_calibrate_missions:
+  out_folder_name: "cross_calibrated"
+  mission_mapper: { 
+    "e1": "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/greenland_e1_5km/epoch_average/", # epoch_average_glaciers/ for subset
+    "e2": "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/greenland_e2_5km/epoch_average/",
+    "env": "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/greenland_env_5km/epoch_average/",
+    "cs2": "/home/willisc3/luna/CPOM/willisc3/EOCIS/altimetry/landice/greenland_cs2_5km/epoch_average/",
+  }
+  missions_sorted: ["e1", "e2", "env", "cs2"]
+  bias_threshold: 5.0  # meters (matches old cross-calibration code)
+  epoch_column: "epoch_number"
+  time_column: "epoch_hi_dt"
+  output_time_column: "epoch_midpoint_fractional_yr"
+  dh_column: "dh_ave"
+  sub_basins: ["None"]
+  min_observations: 5 
+  min_missions : 2
+
+calculate_dhdt:
+  in_step: "cross_calibrate_missions"
+  out_folder_name: cross_calibrated_dhdt
+  min_pts_in_period: 10
+  min_period_coverage: 50 
+  max_allowed_dhdt: 30 
+  dh_avg_varname: "biased_dh"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  xcal_stderr_varname : "stderr"
+  parquet_glob: "*corrected_epoch_average.parquet"
+  step_length: 1y
+  dhdt_period: 5y
+  sub_basins: ["None"]  
