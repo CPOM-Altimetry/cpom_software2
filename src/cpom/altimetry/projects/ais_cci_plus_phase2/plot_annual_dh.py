@@ -95,6 +95,9 @@ def main():
         out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter.lower()}')}"
         print(f"Output file base {out_file}")
 
+        if args.area == "ase":
+            out_file = f"{out_file}-ase"
+
         if args.parameter == "dH":
             param_long_name = "Cumulative Annual Height Change (dH) "
         elif args.parameter == "sec_uncertainty":
