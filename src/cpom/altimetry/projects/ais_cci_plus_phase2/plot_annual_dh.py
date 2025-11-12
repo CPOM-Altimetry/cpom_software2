@@ -155,6 +155,8 @@ def main():
             }
             if args.area == "ase":
                 dataset["plot_size_scale_factor"] = 1.0
+                dataset["min_plot_range"] = -30.0
+                dataset["max_plot_range"] = 30.0
 
             if args.parameter == "sec_uncertainty":
                 dataset["cmap_name"] = "RdBu_r"
@@ -256,7 +258,7 @@ def main():
 
             xpos = 0.02
             if args.area == "ase":
-                xpos = 0.01
+                xpos = 0.005
             ypos = 0.86
             ysep = 0.04
             xsep = 0.05

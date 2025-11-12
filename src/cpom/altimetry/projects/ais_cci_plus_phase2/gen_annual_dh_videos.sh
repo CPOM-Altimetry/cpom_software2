@@ -13,7 +13,7 @@ ffmpeg \
   -pattern_type glob -i "quicklooks/*${type}.webp" \
   -c:v libaom-av1 \
   -cpu-used 4 -row-mt 0 -tiles 1x1 -lag-in-frames 16 -aq-mode 1 \
-  -crf 22 \
+  -crf 28 \
   -b:v 0 \
   -g 2 \
   -keyint_min 2 \
@@ -26,7 +26,7 @@ ffmpeg \
 -pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libaom-av1 \
 -cpu-used 4 -row-mt 0 -tiles 1x1 -lag-in-frames 16 -aq-mode 1 \
--crf 22 \
+-crf 28 \
 -b:v 0 \
 -g 2 \
 -keyint_min 2 \
@@ -39,7 +39,7 @@ ffmpeg \
 -framerate 2 \
 -pattern_type glob -i "quicklooks/*${type}.webp" \
 -c:v libvpx-vp9  \
--crf 20 \
+-crf 26 \
 -b:v 0 \
 -g 2 \
 -keyint_min 2 \
@@ -52,7 +52,7 @@ ffmpeg \
 -framerate 2 \
 -pattern_type glob -i "quicklooks/*${type}-hs.webp" \
 -c:v libvpx-vp9  \
--crf 20 \
+-crf 26 \
 -b:v 0 \
 -g 2 \
 -keyint_min 2 \
