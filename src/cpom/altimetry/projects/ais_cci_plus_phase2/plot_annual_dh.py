@@ -153,6 +153,8 @@ def main():
                 "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
                 "cmap_extend": "both",  # Optional: Extend colormap
             }
+            if args.area == "ase":
+                dataset["plot_size_scale_factor"] = 1.0
 
             if args.parameter == "sec_uncertainty":
                 dataset["cmap_name"] = "RdBu_r"
@@ -253,6 +255,8 @@ def main():
             )  # [left, bottom, width, height]
 
             xpos = 0.02
+            if args.area == "ase":
+                xpos = 0.01
             ypos = 0.86
             ysep = 0.04
             xsep = 0.05
