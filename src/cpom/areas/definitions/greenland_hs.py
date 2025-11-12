@@ -1,7 +1,7 @@
 """
 # Area definition
 
-## Summary: 
+## Summary:
 Based on area: greenland
 **background_image: hillshade**
 
