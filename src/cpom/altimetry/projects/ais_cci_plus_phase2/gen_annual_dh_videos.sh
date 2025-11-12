@@ -18,7 +18,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-videos/multi_mission_av1.${type}.webm
+videos/annual_dh_av1.${type}.webm
 
 # Now generate AV1 with hillshade
 ffmpeg \
@@ -31,7 +31,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-videos/multi_mission_av1_hs.${type}.webm
+videos/annual_dh_av1_hs.${type}.webm
 
 # Generate VP9 format 
 
@@ -44,7 +44,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-videos/multi_mission_vp9.${type}.webm
+videos/annual_dh_vp9.${type}.webm
 
 # Now generate VP9 format with hillshade
 
@@ -57,7 +57,7 @@ ffmpeg \
 -g 24 \
 -keyint_min 24 \
 -pix_fmt yuv420p \
-videos/multi_mission_vp9_hs.${type}.webm
+videos/annual_dh_vp9_hs.${type}.webm
 
 # Generate MP4 format 
 
@@ -70,7 +70,7 @@ ffmpeg \
 -keyint_min 24 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-videos/multi_mission_h264.${type}.mp4
+videos/annual_dh_h264.${type}.mp4
 
 # Generate MP4 format with hillshade
 
@@ -83,7 +83,7 @@ ffmpeg \
 -keyint_min 24 \
 -pix_fmt yuv420p \
 -movflags +faststart \
-videos/multi_mission_h264_hs.${type}.mp4
+videos/annual_dh_h264_hs.${type}.mp4
 
 # find last frame
 cd quicklooks
