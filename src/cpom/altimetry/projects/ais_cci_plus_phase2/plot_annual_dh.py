@@ -158,7 +158,7 @@ def main():
                 dataset["min_plot_range"] = -50.0
                 dataset["max_plot_range"] = 50.0
 
-            if args.parameter == "sec_uncertainty":
+            if "uncertainty" in args.parameter:
                 dataset["cmap_name"] = "RdBu_r"
                 dataset["cmap_over_color"] = "#9E0005"
                 dataset["cmap_under_color"] = "#150685"
