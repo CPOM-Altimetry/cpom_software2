@@ -8,7 +8,7 @@ set -euo pipefail
 
 
 #---------------------------------------------------------------------------------
-# Transdfer annual dh videos from NU to UCL
+# Transfer annual dh videos from NU to UCL
 # this script must be called from UCL
 #---------------------------------------------------------------------------------
 
