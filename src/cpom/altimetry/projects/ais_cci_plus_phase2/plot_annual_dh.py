@@ -60,7 +60,7 @@ def main():
     parser.add_argument(
         "--parameter",
         "-p",
-        help=("parameter to plot: sec, sec_uncertainty, basin_id, surface_type"),
+        help=("parameter to plot: dH, uncertainty, basin_id, surface_type"),
         default="dH",
     )
 
@@ -95,7 +95,7 @@ def main():
         out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter.lower()}')}"
         print(f"Output file base {out_file}")
 
-        if args.area == "ase":
+        if "ase" in args.area:
             out_file = f"{out_file}-ase"
 
         if args.parameter == "dH":
@@ -153,10 +153,10 @@ def main():
                 "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
                 "cmap_extend": "both",  # Optional: Extend colormap
             }
-            if args.area == "ase":
+            if "ase" in args.area:
                 dataset["plot_size_scale_factor"] = 1.0
-                dataset["min_plot_range"] = -50.0
-                dataset["max_plot_range"] = 50.0
+                dataset["min_plot_range"] = -60.0
+                dataset["max_plot_range"] = 60.0
 
             if "uncertainty" in args.parameter:
                 dataset["cmap_name"] = "RdBu_r"
@@ -189,6 +189,9 @@ def main():
                         "red",
                     ],  # Optional: Colors for flags or colormap
                 }
+                if "ase" in args.area:
+                    dataset["plot_size_scale_factor"] = 0.8
+
             if args.parameter == "basin_id":
                 flag_colors = [
                     "#F2F7FF",
@@ -244,6 +247,9 @@ def main():
                     "flag_colors": flag_colors,
                 }
 
+                if "ase" in args.area:
+                    dataset["plot_size_scale_factor"] = 0.0
+
                 print(f"min {np.nanmin(plot_var)} max {np.nanmax(plot_var)}")
 
             logo_image = plt.imread("ais_cci_phase2_logo.png")
@@ -257,125 +263,257 @@ def main():
             )  # [left, bottom, width, height]
 
             xpos = 0.02
-            if args.area == "ase":
+            if "ase" in args.area:
                 xpos = 0.003
             ypos = 0.86
             ysep = 0.04
             xsep = 0.05
 
-            annot = Annotation(
-                0.269,
-                0.958,
-                f"{param_long_name}",
-                {
-                    "boxstyle": "round",  # Style of the box (e.g.,'round','square')
-                    "facecolor": "aliceblue",  # Background color of the box
-                    "alpha": 1.0,  # Transparency of the box (0-1)
-                    "edgecolor": "lightgrey",  # Color of the box edge
-                },
-                18,
-                fontweight="bold",
-            )
+            if "ase" in args.area:
+                annot = Annotation(
+                    0.23,
+                    0.958,
+                    f"{param_long_name}",
+                    {
+                        "boxstyle": "round",  # Style of the box (e.g.,'round','square')
+                        "facecolor": "aliceblue",  # Background color of the box
+                        "alpha": 1.0,  # Transparency of the box (0-1)
+                        "edgecolor": "lightgrey",  # Color of the box edge
+                    },
+                    18,
+                    fontweight="bold",
+                )
+            else:
+
+                annot = Annotation(
+                    0.269,
+                    0.958,
+                    f"{param_long_name}",
+                    {
+                        "boxstyle": "round",  # Style of the box (e.g.,'round','square')
+                        "facecolor": "aliceblue",  # Background color of the box
+                        "alpha": 1.0,  # Transparency of the box (0-1)
+                        "edgecolor": "lightgrey",  # Color of the box edge
+                    },
+                    18,
+                    fontweight="bold",
+                )
             annotation_list = [annot]
 
-            annotation_list.append(
-                Annotation(
-                    xpos,
-                    ypos + 0.01,
-                    "dh period:",
-                    None,
-                    10,
+            if "ase" in args.area:
+                annotation_list.append(
+                    Annotation(
+                        xpos + 0.05 + 0.1,
+                        ypos - 0.03 + 0.016,
+                        "dh period:",
+                        None,
+                        10,
+                    )
                 )
-            )
+            else:
+                annotation_list.append(
+                    Annotation(
+                        xpos,
+                        ypos + 0.01,
+                        "dH period:",
+                        None,
+                        10,
+                    )
+                )
 
-            annotation_list.append(
-                Annotation(
-                    xpos,
-                    ypos - ysep + 0.007,
-                    f"{dh_start_month}",
-                    None,
-                    16,
-                    fontweight="normal",
-                    color="grey",
+            if "ase" in args.area:
+                annotation_list.append(
+                    Annotation(
+                        xpos + 0.12 + 0.1,
+                        ypos - ysep + 0.003 + 0.02,
+                        f"{dh_start_month}",
+                        None,
+                        16,
+                        fontweight="normal",
+                        color="grey",
+                    )
                 )
-            )
-            annotation_list.append(
-                Annotation(
-                    xpos + xsep,
-                    ypos - ysep,
-                    f"{dh_start_year}",
-                    None,
-                    24,
-                    fontweight="bold",
+                annotation_list.append(
+                    Annotation(
+                        xpos + xsep + 0.1 + 0.1,
+                        ypos - ysep + 0.02,
+                        f"{dh_start_year}",
+                        None,
+                        24,
+                        fontweight="bold",
+                    )
                 )
-            )
 
-            annotation_list.append(
-                Annotation(
-                    xpos,
-                    ypos - ysep * 2 + 0.007,
-                    f"{dh_end_month}",
-                    None,
-                    16,
-                    fontweight="normal",
-                    color="grey",
+                annotation_list.append(
+                    Annotation(
+                        xpos + xsep + 0.21 + 0.1,
+                        ypos - ysep + 0.003 + 0.02,
+                        f"{dh_end_month}",
+                        None,
+                        16,
+                        fontweight="normal",
+                        color="grey",
+                    )
                 )
-            )
-            annotation_list.append(
-                Annotation(
-                    xpos + xsep,
-                    ypos - ysep * 2,
-                    f"{dh_end_year}",
-                    None,
-                    24,
-                    fontweight="bold",
+                annotation_list.append(
+                    Annotation(
+                        xpos + xsep + 0.24 + 0.1,
+                        ypos - ysep + 0.02,
+                        f"{dh_end_year}",
+                        None,
+                        24,
+                        fontweight="bold",
+                    )
                 )
-            )
+            else:
+                annotation_list.append(
+                    Annotation(
+                        xpos,
+                        ypos - ysep + 0.007,
+                        f"{dh_start_month}",
+                        None,
+                        16,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+                annotation_list.append(
+                    Annotation(
+                        xpos + xsep - 0.02,
+                        ypos - ysep,
+                        f"{dh_start_year}",
+                        None,
+                        24,
+                        fontweight="bold",
+                    )
+                )
 
-            annotation_list.append(
-                Annotation(
-                    0.246,
-                    0.08,
-                    f"{prod_name}",
-                    None,
-                    10,
-                    fontweight="normal",
+                annotation_list.append(
+                    Annotation(
+                        xpos,
+                        ypos - ysep * 2 + 0.007,
+                        f"{dh_end_month}",
+                        None,
+                        16,
+                        fontweight="normal",
+                        color="grey",
+                    )
                 )
-            )
+                annotation_list.append(
+                    Annotation(
+                        xpos + xsep - 0.02,
+                        ypos - ysep * 2,
+                        f"{dh_end_year}",
+                        None,
+                        24,
+                        fontweight="bold",
+                    )
+                )
 
-            annotation_list.append(
-                Annotation(
-                    0.237,
-                    0.235,
-                    "66S",
-                    None,
-                    8,
-                    fontweight="normal",
-                    color="grey",
+            if "ase" in args.area:
+                annotation_list.append(
+                    Annotation(
+                        0.23,
+                        0.89,
+                        f"{prod_name}",
+                        None,
+                        11,
+                        fontweight="normal",
+                    )
                 )
-            )
-            annotation_list.append(
-                Annotation(
-                    0.275,
-                    0.283,
-                    "70S",
-                    None,
-                    8,
-                    fontweight="normal",
-                    color="grey",
+            else:
+                annotation_list.append(
+                    Annotation(
+                        0.261,
+                        0.89,
+                        f"{prod_name}",
+                        None,
+                        12,
+                        fontweight="normal",
+                    )
                 )
-            )
-            annotation_list.append(
-                Annotation(
-                    0.315,
-                    0.33,
-                    "74S",
-                    None,
-                    8,
-                    fontweight="normal",
-                    color="grey",
+
+            if "ase" in args.area:
+
+                annotation_list.append(
+                    Annotation(
+                        0.07,
+                        0.475,
+                        "100W",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
                 )
-            )
+                annotation_list.append(
+                    Annotation(
+                        0.07,
+                        0.17,
+                        "110W",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+
+                annotation_list.append(
+                    Annotation(
+                        0.161,
+                        0.23,
+                        "72S",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+                annotation_list.append(
+                    Annotation(
+                        0.30,
+                        0.29,
+                        "74S",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+            else:
+                annotation_list.append(
+                    Annotation(
+                        0.237,
+                        0.235,
+                        "66S",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+                annotation_list.append(
+                    Annotation(
+                        0.275,
+                        0.283,
+                        "70S",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
+                annotation_list.append(
+                    Annotation(
+                        0.315,
+                        0.33,
+                        "74S",
+                        None,
+                        8,
+                        fontweight="normal",
+                        color="grey",
+                    )
+                )
 
             area_overrides = {
                 "show_bad_data_map": False,
@@ -388,9 +526,16 @@ def main():
                     0.05,
                 )  # [left,bottom, width] of axis. Note height is auto set
 
+            if args.parameter == "surface_type":
+                area_overrides["flag_perc_axis"] = (
+                    0.82,
+                    0.4,
+                    0.1,
+                )  # [left,bottom, width] of axis. Note height is auto set
+
             Polarplot(args.area, area_overrides).plot_points(
                 dataset,
-                map_only=True,
+                # map_only=True,
                 output_file=out_file,
                 use_default_annotation=False,
                 annotation_list=annotation_list,
@@ -410,7 +555,7 @@ def main():
 
             Polarplot(args.area, area_overrides).plot_points(
                 dataset,
-                map_only=True,
+                # map_only=True,
                 output_file=f"{out_file}-hs",
                 use_default_annotation=False,
                 annotation_list=annotation_list,

@@ -202,13 +202,13 @@ area_definition = {
     "show_histograms": True,  # Whether to show the histogram plots
     "histogram_plotrange_axes": [
         0.735,  # left
-        0.3,  # bottom
+        0.45,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
     "histogram_fullrange_axes": [
         0.89,  # left
-        0.3,  # bottom
+        0.45,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
@@ -218,7 +218,7 @@ area_definition = {
     "show_latitude_scatter": True,  # Whether to show the latitude scatter plot
     "latvals_axes": [
         0.77,  # left
-        0.05,  # bottom
+        0.2,  # bottom
         0.17,  # width (axes fraction)
         0.2,  # height (axes fraction)
     ],  # axis location of latitude vs values scatter plot
