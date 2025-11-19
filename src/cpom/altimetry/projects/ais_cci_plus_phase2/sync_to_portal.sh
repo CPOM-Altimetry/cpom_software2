@@ -6,6 +6,33 @@ set -euo pipefail
 # - multi-mission videos
 # - annual dh videos
 
+#---------------------------------------------------------------------------------
+# Sync annual dH products
+#---------------------------------------------------------------------------------
+
+nu_prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/annual_dh
+ucl_prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/annual_dh
+
+rm -f $ucl_prod_dir/*.zip
+rm -f $ucl_prod_dir/*.nc
+
+# Get the .zip file (containing all the multi-mission files)
+/usr/bin/rsync  -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
+ -avz  \
+ alanmuir@10.0.0.24:${nu_prod_dir}/*.zip \
+ $ucl_prod_dir
+ 
+ # choose newest ESA*.nc on the remote, then rsync just that one
+ssh -i ~/.ssh/id_rsa_northumbria \
+    -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999' \
+    alanmuir@10.0.0.24 \
+    "find $(printf %q "${nu_prod_dir}") -maxdepth 1 -name 'ESA*.nc' -printf '%T@ %p\n' \
+     | sort -n | tail -n 1 | cut -d' ' -f2-" \
+| xargs -I{} /usr/bin/rsync \
+    -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
+    -avz "alanmuir@10.0.0.24:{}" "${ucl_prod_dir}"
+
+exit 1
 
 #---------------------------------------------------------------------------------
 # Transfer annual dh videos from NU to UCL
@@ -20,7 +47,6 @@ rm -f /cpnet/www/cpom/ais_cci_phase2/annual_dh_quicklooks/*
  alanmuir@10.0.0.24:${dh_video_dir}/ \
  $portal_dir    
 
-exit 1
 #---------------------------------------------------------------------------------
 # Transfers single mission CCI products from NU to UCL
 # this script must be called from UCL
@@ -83,6 +109,8 @@ ssh -i ~/.ssh/id_rsa_northumbria \
 | xargs -I{} /usr/bin/rsync \
     -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
     -avz "alanmuir@10.0.0.24:{}" "${ucl_prod_dir}"
+
+
 
 
  
