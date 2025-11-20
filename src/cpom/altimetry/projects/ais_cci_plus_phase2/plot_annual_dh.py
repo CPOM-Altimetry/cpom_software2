@@ -53,7 +53,7 @@ def main():
     parser.add_argument(
         "--area",
         "-a",
-        help="Area of interest, greenland or antarctica. Default is antarctica.",
+        help="Area of interest, antarctica_cci or ase_cci.",
         default="antarctica_cci",
     )
 
@@ -248,7 +248,7 @@ def main():
                 }
 
                 if "ase" in args.area:
-                    dataset["plot_size_scale_factor"] = 0.0
+                    dataset["plot_size_scale_factor"] = 0.8
 
                 print(f"min {np.nanmin(plot_var)} max {np.nanmax(plot_var)}")
 

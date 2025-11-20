@@ -32,8 +32,6 @@ ssh -i ~/.ssh/id_rsa_northumbria \
     -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
     -avz "alanmuir@10.0.0.24:{}" "${ucl_prod_dir}"
 
-exit 1
-
 #---------------------------------------------------------------------------------
 # Transfer annual dh videos from NU to UCL
 # this script must be called from UCL
