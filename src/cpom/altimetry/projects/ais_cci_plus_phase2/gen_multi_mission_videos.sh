@@ -6,7 +6,7 @@ rm -f videos/*
 
 # Generate AV1 format 
 
-for type in sec-ase sec
+for type in sec-ase sec sec_uncertainty sec_uncertainty-ase basin_id basin_id-ase surface_type surface_type-ase 
 do
 ffmpeg \
 -framerate 12 \
