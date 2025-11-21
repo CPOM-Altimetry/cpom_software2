@@ -123,7 +123,7 @@ def main():
             lats = np.ma.filled(nc.variables["lat"][:], np.nan)
             lons = np.ma.filled(nc.variables["lon"][:], np.nan)
 
-            if args.parameter == "sec":
+            if "sec" in args.parameter:
                 plot_var = np.ma.filled(nc.variables[args.parameter][0][:], np.nan)
             else:
                 plot_var = np.ma.filled(nc.variables[args.parameter][:], np.nan)
