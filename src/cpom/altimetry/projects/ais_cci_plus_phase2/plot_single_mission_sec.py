@@ -412,6 +412,32 @@ def main():
                 0.1,
                 0.05,
             )  # [left,bottom, width] of axis. Note height is auto set
+        else:
+
+            # --------------------------------------------------------
+            # Histograms
+            # --------------------------------------------------------
+            area_overrides["histogram_plotrange_axes"] = [
+                0.735,  # left
+                0.35,  # bottom
+                0.08,  # width (axes fraction)
+                0.35,  # height (axes fraction)
+            ]  # axis location of plot range histogram for Polarplot.plot_points()
+            area_overrides["histogram_fullrange_axes"] = [
+                0.89,  # left
+                0.35,  # bottom
+                0.08,  # width (axes fraction)
+                0.35,  # height (axes fraction)
+            ]  # axis location of plot range histogram for Polarplot.plot_points()
+            # --------------------------------------------------------
+            # Latitude vs Values plot
+            # --------------------------------------------------------
+            area_overrides["latvals_axes"] = [
+                0.77,  # left
+                0.1,  # bottom
+                0.17,  # width (axes fraction)
+                0.2,  # height (axes fraction)
+            ]  # axis location of latitude vs values scatter plot
 
         Polarplot(args.area, area_overrides).plot_points(
             dataset,
