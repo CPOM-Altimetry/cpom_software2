@@ -101,7 +101,7 @@ def requires_grid_metadata(algo):
 
 def get_auto_path(algo):
     """Check if algorithm needs automatic in_dir/out_dir handling."""
-    return algo not in ["grid_for_elev_change_update_year", "cross_calibrate_missions"]
+    return algo not in ["grid_for_elev_change_update_year"]
 
 
 def build_args(algo, algo_config, config, mission=None):

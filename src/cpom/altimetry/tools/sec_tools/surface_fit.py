@@ -28,9 +28,7 @@ from scipy import stats
 from cpom.logging_funcs.logging import set_loggers
 
 
-def get_set_up_objects(
-    params: argparse.Namespace, confirm_regrid: bool = False
-):
+def get_set_up_objects(params: argparse.Namespace, confirm_regrid: bool = False):
     """
     Creates the output directory and logger for surface fit.
     Reads grid metadata, verifies and recreates the output directory,
@@ -178,6 +176,7 @@ def get_grid_data(
         params (argparse.Namespace): Configuration parameters
         min_secs (int): Minimum time in seconds
         max_secs (int): Maximum time in seconds
+        mission (str): Mission identifier (e.g., 'cs2', 'ev', 'e1', 'e2')
     Returns:
         tuple[pl.LazyFrame, dict[str, int]]: Filtered Polars DataFrame and status counts
     """
@@ -264,44 +263,57 @@ def get_grid_data(
 
 def filter_to_mode(lf: pl.LazyFrame) -> pl.LazyFrame:
     """
-    Filter the DataFrame to keep only the most common mode in each grid cell.
+    Filter the DataFrame to keep only the most common mode in cells with multiple modes.
+
+    Mission Mode Definitions:
+        - cs2: 1=LRM, 2=SAR, 3=SIN. Filter if both LRM and SIN present.
+        - ev: 0=320MHz, 1=80MHz, 2=20MHz. Filter if multiple bandwidth modes present.
+        - e1/e2: 2=ocean mode, 3=ice mode. Filter if both present.
+
     Args:
         lf (pl.LazyFrame): Input Polars LazyFrame with mode information.
+        mission (str): Mission identifier ('cs2', 'ev', 'e1', 'e2')
+
     Returns:
-        pl.LazyFrame: Filtered Polars LazyFrame with only the most common mode per cell.
+        pl.LazyFrame: Filtered LazyFrame with only most common mode per cell where multiple existed.
     """
 
-    # Count populated modes per cell
-    non_null_mode_counts = (
-        lf.filter(pl.col("mode").is_not_null())
-        .group_by(["x_bin", "y_bin", "mode"])
+    # Count observations per mode per cell (excluding null modes)
+    mode_counts = lf.filter(pl.col("mode").is_not_null()).group_by(["x_bin", "y_bin", "mode"]).len()
+
+    # Get cells with multiple modes
+    multimode_cells = (
+        mode_counts.group_by(["x_bin", "y_bin"])
         .len()
-        .with_columns(pl.col("mode").count().over(["x_bin", "y_bin"]).alias("n_modes_in_cell"))
+        .filter(pl.col("len") > 1)
+        .select(["x_bin", "y_bin"])
     )
 
-    cells_to_filter = non_null_mode_counts.filter(pl.col("n_modes_in_cell") > 1)
-    if cells_to_filter.collect().height > 0:
-        # Select most common mode for cells with multiple modes
-        mode_to_keep = (
-            cells_to_filter.with_columns(
-                pl.col("len").rank("dense", descending=True).over(["x_bin", "y_bin"]).alias("rank")
-            )
-            .filter(pl.col("rank") == 1)
-            .select(["x_bin", "y_bin", "mode"])
+    if multimode_cells.collect().height == 0:
+        return lf
+
+    mode_to_keep = (
+        mode_counts.join(multimode_cells, on=["x_bin", "y_bin"])
+        .with_columns(
+            pl.col("len").rank("dense", descending=True).over(["x_bin", "y_bin"]).alias("rank")
         )
+        .filter(pl.col("rank") == 1)
+        .select(["x_bin", "y_bin", "mode"])
+    )
 
-        # Get cells that need filtering (have multiple modes)
-        cells_with_multi_modes = mode_to_keep.select(["x_bin", "y_bin"]).unique()
-        single_mode_data = lf.join(
-            cells_with_multi_modes,
-            on=["x_bin", "y_bin"],
-            how="anti",  # Keep cells NOT in multi-mode list
-        )
-
-        multi_mode_data = lf.join(mode_to_keep, on=["x_bin", "y_bin", "mode"], how="inner")
-        lf = pl.concat([single_mode_data, multi_mode_data])
-
-    return lf
+    # For multi-mode cells: keep most common valid mode + all null modes
+    # For single-mode cells: keep everything
+    return pl.concat(
+        [
+            # Cells without multiple valid modes (keep all data)
+            lf.join(multimode_cells, on=["x_bin", "y_bin"], how="anti"),
+            # Multi-mode cells: filter to keep only most common mode OR null modes
+            lf.join(multimode_cells, on=["x_bin", "y_bin"]).join(
+                mode_to_keep, on=["x_bin", "y_bin", "mode"], how="semi"
+            ),
+            lf.join(multimode_cells, on=["x_bin", "y_bin"]).filter(pl.col("mode").is_null()),
+        ]
+    )
 
 
 def get_surface_fit_objects(
@@ -622,7 +634,7 @@ def _fit_power_correction_per_group(
         logger (logging.Logger): Logger Object
     Returns:
         dict[str, np.ndarray] | str: Dictionary with corrected data ("time", "time_years", "dH")
-                                     or error status string.
+                                    or error status string.
     """
 
     pc_timeok_indices = np.where(

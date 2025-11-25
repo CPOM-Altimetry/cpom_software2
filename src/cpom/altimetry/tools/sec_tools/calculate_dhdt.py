@@ -19,7 +19,52 @@ from pathlib import Path
 import duckdb
 import numpy as np
 import polars as pl
-from scipy.stats import stats
+from scipy.stats import linregress
+
+
+def get_sub_basins(params: argparse.Namespace) -> list[str]:
+    """
+    Get available sub-basins by scanning the directory structure.
+
+    - If params.sub_basins is None or ["None"], returns ["None"] and logs
+        that root-level data will be processed.
+    - If params.sub_basins is "all" or ["all"], returns a sorted list of
+        sub-basins that exist.
+        input_directory/
+            sub_basin_1/
+                *.parquet
+            sub_basin_2/
+                *.parquet
+    - Otherwise, returns the list provided in params.sub_basins as-is.
+
+    Args:
+        params (argparse.Namespace): Command Line Parameters
+            Includes:
+                - in_dir (str): Path to the top-level directory that contains sub-basin
+                    subdirectories.
+                - sub_basins (list[str] | str): List of sub-basins to process,
+                     "all" to auto-discover, 'None' to process root-level data.
+
+    Returns:
+        list[str]: list: Sorted list of sub-basin directory names to process.
+    """
+
+    if params.sub_basins in ("None", ["None"]):
+        return ["None"]
+
+    if params.sub_basins in ("all", ["all"]):
+        all_sub_basins = set()
+
+        if Path(params.in_dir).exists():
+            # Look for subdirectories that contain parquet files
+            for subdir in Path(params.in_dir).iterdir():
+                if subdir.is_dir():
+                    # Check if this subdirectory contains parquet files
+                    parquet_files = list(subdir.glob("*.parquet"))
+                    if parquet_files:
+                        all_sub_basins.add(subdir.name)
+        return sorted(all_sub_basins)
+    return params.sub_basins
 
 
 def get_start_end_dates_for_calculation(
@@ -27,7 +72,7 @@ def get_start_end_dates_for_calculation(
 ) -> tuple[datetime, datetime]:
     """
     Get time range to use for dh/dt calculation.
-    If time range start and/or end are not None, use them, otherwise use dataset time limits.
+    If time range start and/or end are provided, use them, otherwise use dataset time limits.
     Return the start and end dates as datetime objects.
 
     Args:
@@ -52,20 +97,15 @@ def get_start_end_dates_for_calculation(
         raise ValueError(f"Unrecognized date format: {timedt}, pass as YYYY/MM/DD or YYYY.MM.DD ")
 
     if dhdt_start is not None and dhdt_end is not None:
-        dhdt_start_dt = _get_date(dhdt_start)
-        dhdt_end_dt = _get_date(dhdt_end)
-    else:
-        result = input_df.select(
-            [
-                pl.col(dh_time_var).min().alias("min_time"),
-                pl.col(dh_time_var).max().alias("max_time"),
-            ]
-        ).collect()
+        return _get_date(dhdt_start), _get_date(dhdt_end)
+    result = input_df.select(
+        [
+            pl.col(dh_time_var).min().alias("min_time"),
+            pl.col(dh_time_var).max().alias("max_time"),
+        ]
+    ).collect()
 
-        dhdt_start_dt = result["min_time"][0]
-        dhdt_end_dt = result["max_time"][0]
-
-    return dhdt_start_dt, dhdt_end_dt
+    return result["min_time"][0], result["max_time"][0]
 
 
 def get_period_limits_df(
@@ -73,17 +113,24 @@ def get_period_limits_df(
 ) -> tuple[pl.DataFrame, float]:
     """
     Calculates the period limits and the dhdt_period (in fractional years) for dh/dt calculation.
-    If no dh/dt period is given, use the full time range in the dataset.
+
+    Takes a dh/dt window size (dhdt_period, e.g. "2y1m"), and step size (step_length, e.g. "1y")
+    and calculates a sequence of time intervals between `dhdt_start` and `dhdt_end`.
+    Each interval is assigned period_id.
+
+    If no dhdt_period and step_length are given,
+    use the full time range in the dataset as a single period.
+
     Args:
-        dhdt_period (str): Length of dh/dt period for calculation as a string (e.g. '2y1m').
-        step_length (str): Amount of time to step each succeeding dh/dt period forward by
-                            as a string (e.g. '1y')
+        dhdt_period (str): Duration of dh/dt window, e.g. '2y1m'.
+        step_length (str): The spacing between window start times, e.g. "1y"
         dhdt_start (datetime): Start datetime for dh/dt calculation.
         dhdt_end (datetime): End datetime for dh/dt calculation.
 
     Returns:
-        usable_periods (pl.DataFrame): Columns : period_lo, period_hi, period_id
-        dhdt_period (float): Length of dh/dt period in fractional years
+        tuple[pl.DataFrame, float]:
+            usable_periods (pl.DataFrame): DataFrame with columns [period_lo, period_hi, period_id].
+            dhdt_period (float): Length of dh/dt period in fractional years
     """
 
     def _parse_period_string(period_str: str, as_string: bool = False) -> float | str:
@@ -113,15 +160,13 @@ def get_period_limits_df(
                 SELECT 
                     period_lo, 
                     period_lo + INTERVAL {_parse_period_string(dhdt_period, True)} AS period_hi,
-                    ROW_NUMBER() OVER () AS period_id
+                    ROW_NUMBER() OVER (ORDER BY period_lo) AS period_id
                 FROM 
                 generate_series(DATE '{dhdt_start.strftime("%Y-%m-%d")}',
                 DATE '{dhdt_end.strftime("%Y-%m-%d")}', INTERVAL
                 {_parse_period_string(step_length, True)} ) AS t(period_lo)
             )
             SELECT * FROM periods
-            WHERE period_lo + INTERVAL 
-            {_parse_period_string(dhdt_period, True)} <= DATE '{dhdt_end.strftime("%Y-%m-%d")}'
         """
         ).pl()
 
@@ -136,16 +181,20 @@ def get_input_df(
     input_df: pl.LazyFrame, dhdt_periods_df: pl.DataFrame, dh_time_var: str
 ) -> pl.DataFrame:
     """
-    Joins input data (e.g. output from : epoch_average, interpolate_grids_of_dh) with
-    the calculated periods to be used for calculating dh/dt.
-    Joining key: dh_time (the midpoint of the epoch) between period_lo and period_hi
+    Join epoch-level input data with pre-computed dh/dt period windows.
+
+    Takes an input dataset (the output from epoch_average or interpolate_grids_of_dh)
+    and assigns each record to a dh/dt period based on its epoch midpoint time.
+
+    Filters out rows that do not fall inside a valid dh/dt period.
 
     Args:
         input_df (pl.LazyFrame): Input data.
-        dhdt_periods_df (pl.DataFrame): Period limits.
-        dh_time_var (str): Name of the time variable in the dataset.
+        dhdt_periods_df (pl.DataFrame): DataFrame defining the dh/dt windows.
+                                        Columsns: [period_lo, period_hi, period_id].
+        dh_time_var (str): Name of the time variable in input_df.
 
-    Returns (pl.DataFrame):  Joined DataFrame with input data and period information.
+    Returns (pl.DataFrame): DataFrame with input data joined to periods.
     """
     con = duckdb.connect()
     con.register("epoch_avg_df", input_df)
@@ -167,20 +216,43 @@ def get_input_df(
 
 
 # pylint: disable=R0914
-def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[dict], dict]:
+def get_dhdt(
+    dh_input: pl.DataFrame, dhdt_period: float, params: argparse.Namespace
+) -> tuple[list[dict], dict]:
     """
-    Calculates dh/dt and associated uncertainties for each grid cell and period.
-    Populates status counters for calculation outcomes.
+    Calculates dh/dt and uncertainties for each grid cell and dh/dt period.
+
+    Steps:
+    For each grid cell and period :
+        1. Validate input data against criteria (min points, time coverage)
+        2. Perform linear regression, to get :
+            - dh/dt (slope)
+            - intercept
+            - model uncertainty (standard error of the regression)
+        3. Calculate uncertainties :
+            - input uncertainty - based on input dh stddev
+            - cross-calibration uncertainty (if multi-mission)
+            - total uncertainty
 
     Args:
-        dh_input: Polars DataFrame containing joined epoch and period data.
-        dhdt_period: Length of dh/dt period in fractional years.
-        params: Namespace or dataclass with calculation thresholds.
+        dh_input (pl.DataFrame): Joined epoch level data assigned to a period.
+            Includes:
+                - params.dh_time_fractional_varname (float)
+                - params.dh_avg_varname (float)
+                - params.dh_stddev_varname (float)
+                - params.dh_time_varname (datetime)
+                - x_bin, y_bin, period_id
+                - period_lo, period_hi
+
+        dhdt_period (float): Length of dh/dt period in fractional years.
+        params (argparse.Namespace): Command Line Parameters
 
     Returns:
-        Tuple of:
-            - record_dhdt: List of dictionaries with dh/dt results and uncertainties.
-            - status: Dictionary with counts for each calculation status.
+        [(list[dict], dict)]:
+            -record_dhdt (list[dict]): List of dictionaries,
+              one per successful (x_bin, y_bin, period_id).
+                With, dh/dt results, uncertainties, period bounds, and metadata.
+            -status (dict): Dictionary counting the outcome of each group:
     """
 
     def _get_uncertainty(group, params, dhdt_period, input_uncertainty, model_uncertainty):
@@ -221,6 +293,7 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
         "calculation_successful": 0,
     }
 
+    # Loop through each grid cell and period
     grouped = dh_input.group_by(["x_bin", "y_bin", "period_id"])
     for (x_bin, y_bin, period), group in grouped:
 
@@ -244,7 +317,8 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
             status["time_coverage_less_than_min_period_coverage"] += 1
             continue
 
-        slope, icept, _, _, std_err = stats.linregress(
+        # Perform linear regression to calculate dh/dt
+        slope, icept, _, _, std_err = linregress(
             group[params.dh_time_fractional_varname], group[params.dh_avg_varname]
         )
 
@@ -274,6 +348,8 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
                 "total_uncertainty": total_uncertainty,
                 "input_dh_start_time": group[params.dh_time_varname].min(),
                 "input_dh_end_time": group[params.dh_time_varname].max(),
+                "period_lo": group["period_lo"].min(),
+                "period_hi": group["period_hi"].max(),
                 "num_pts_in_dhdt": num_pts_in_dhdt,
             }
         )
@@ -282,32 +358,6 @@ def get_dhdt(dh_input: pl.DataFrame, dhdt_period: float, params) -> tuple[list[d
 
         status["calculation_successful"] += 1
     return record_dhdt, status
-
-
-def get_sub_basins(input_directory: str) -> list[str]:
-    """
-    Discover available sub-basins by scanning the directory structure.
-    Used when no specific sub-basins are provided but sub-basins is set to "all".
-
-    Args:
-        input_directory (str): Base directory path to scan for sub-basin subdirectories.
-
-    Returns:
-        list[str]: Sorted list of sub-basin directory names that exist.
-                   Returns empty list if no sub-basins found.
-    """
-    all_sub_basins = set()
-
-    if Path(input_directory).exists():
-        # Look for subdirectories that contain parquet files
-        for subdir in Path(input_directory).iterdir():
-            if subdir.is_dir():
-                # Check if this subdirectory contains parquet files
-                parquet_files = list(subdir.glob("*.parquet"))
-                if parquet_files:
-                    all_sub_basins.add(subdir.name)
-
-    return sorted(all_sub_basins)
 
 
 # pylint: disable=R0914
@@ -322,13 +372,13 @@ def main(args: list[str]) -> None:
         1. Single mission: Uses input measurement and model fit uncertainties
         2. Multimission: Adds cross-calibration uncertainty component for bias-corrected data
 
-        Steps:
-        1. Load command line arguments
-        2. Load input fit dataframe and get start and end dates for calculation
-        3. Calculate period limits
-        4. Join periods with input data
-        5. Calculate dh/dt for each grid cell and period with appropriate uncertainties
-        6. Write output parquet file and metadata JSON
+    Steps:
+    1. Load command line arguments
+    2. Load input fit dataframe and get start and end dates for calculation
+    3. Calculate period limits
+    4. Join periods with input data
+    5. Calculate dh/dt for each grid cell and period with appropriate uncertainties
+    6. Write output parquet file and metadata JSON
 
     Args:
         args: List of command-line arguments.
@@ -440,18 +490,20 @@ def main(args: list[str]) -> None:
         default="biased_dh_xcal_stderr",
     )
     parser.add_argument(
-        "--sub_basins",
-        nargs="+",
-        default="all",
-        help="Specific list of sub-basins to process."
-        "If not provided : Will calculate for entire directory. "
-        "If set to 'all' will auto-discover sub-basins.",
-    )
-    parser.add_argument(
         "--parquet_glob",
         help="Glob pattern to match parquet files within each sub-basin directory.",
         type=str,
         default="*/epoch_average.parquet",
+    )
+
+    parser.add_argument(
+        "--sub_basins",
+        nargs="+",
+        default=["all"],
+        help="Specific list of sub-basins to process."
+        "If not provided : Will calculate for entire directory. "
+        "If set to 'all' will auto-discover sub-basins."
+        "To process root-level data, set to [None].",
     )
 
     start_time = time.time()
@@ -473,12 +525,7 @@ def main(args: list[str]) -> None:
     if params.multi_mission:
         base_columns.append(params.xcal_stderr_varname)
 
-    if params.sub_basins in ("None", ["None"]):
-        sub_basins_to_process = ["None"]
-    elif params.sub_basins in ("all", ["all"]):
-        sub_basins_to_process = get_sub_basins(params.in_dir)
-    else:
-        sub_basins_to_process = params.sub_basins
+    sub_basins_to_process = get_sub_basins(params)
 
     for sub_basin in sub_basins_to_process:
         if sub_basin == "None":

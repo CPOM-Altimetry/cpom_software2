@@ -20,7 +20,7 @@ Command line parameters:
     --partition_columns: Columns to partition data by, must include 'year', 'x_part', 'y_part'
     --partition_xy_chunking: Chunking factor for spatial partitioning
     --fill_missing_poca: Fill missing POCA lat/lons with nadir values.
-     Set True for FDR4ALT datasets.
+    Set True for FDR4ALT datasets.
 """
 
 import argparse
@@ -62,7 +62,6 @@ def get_set_up_objects(params, dataset, confirm_regrid=False):
     # Full regrid => remove entire directory, then create fresh
     if os.path.exists(params.out_dir):
         if params.out_dir != "/" and dataset.mission in params.out_dir:  # safety check
-            # logger.info("Removing previous grid dir: %s ...", params.out_dir)
             if confirm_regrid is True:
                 response = (
                     input("Confirm removal of previous grid archive? (y/n): ").strip().lower()
@@ -76,8 +75,6 @@ def get_set_up_objects(params, dataset, confirm_regrid=False):
                 shutil.rmtree(params.out_dir)
 
         else:
-
-            # logger.error("Invalid output_dir path: %s", params.out_dir)
             sys.exit(1)
     os.makedirs(params.out_dir, exist_ok=True)
 
