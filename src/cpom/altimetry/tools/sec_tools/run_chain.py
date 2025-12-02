@@ -95,7 +95,7 @@ def requires_grid_metadata(algo):
         "epoch_average",
         "interpolate_grids_of_dh",
         "single_mission_dhdt",
-        "clip_to_glaciers",
+        "clip_to_basins",
     ]
 
 

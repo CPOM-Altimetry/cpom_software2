@@ -1,11 +1,19 @@
 # pylint: disable=C0302
 """
-cpom.altimetry.tools.sec_tools.surface_fit.py
+cpom.altimetry.tools.sec_tools.surface_fit
 
 Purpose:
-  Perform planefit to get dh/dt time series from
-  gridded elevation and time data.
-  Output dh time series as parquet files
+    Fit surface models to elevation time series for each grid cell.
+
+    Applies least-squares plane fitting to gridded
+    elevation and time data, producing dh (elevation change) time series with
+    fitted values, residuals, and statistics.
+
+Output:
+    - Surface fit results: <out_dir>/grid_data.parquet
+    - Metadata: <out_dir>/metadata.json
+    - Info logs: <out_dir>/info.log
+    - Error logs: <out_dir>/errors.log
 """
 
 import argparse
@@ -66,8 +74,8 @@ def get_set_up_objects(params: argparse.Namespace, confirm_regrid: bool = False)
     os.makedirs(params.out_dir, exist_ok=True)
 
     logger = set_loggers(
-        log_file_info=Path(params.out_dir) / "info.log",
-        log_file_error=Path(params.out_dir) / "errors.log",
+        log_file_info=str(Path(params.out_dir) / "info.log"),
+        log_file_error=str(Path(params.out_dir) / "errors.log"),
     )
     logger.info("output_dir=%s", params.out_dir)
 

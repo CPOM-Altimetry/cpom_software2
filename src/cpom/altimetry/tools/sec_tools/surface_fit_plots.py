@@ -130,7 +130,7 @@ def main(args):
     plot(args, grid_data, area, "slope", "Slope", [0, 2])
     plot(args, grid_data, area, "dhdt", "dh/dt", [-1.0, 1.0])
     plot(args, grid_data, area, "rms", "RMS of linear fit", [0.0, 1.0])
-    plot(args, grid_data, area, "dhdt", "Sigma: std of linear fit", [0.0, 2.0])
+    plot(args, grid_data, area, "sigma", "Sigma: std of linear fit", [0.0, 2.0])
     return args
 
 

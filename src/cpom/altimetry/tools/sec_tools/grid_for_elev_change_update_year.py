@@ -1,9 +1,16 @@
 """
-cpom.altimetry.tools.sec_tools.grid_for_elevation_change_update_year.py
+cpom.altimetry.tools.sec_tools.grid_for_elev_change_update_year
 
 Purpose:
-    Update a single year of gridded elevation change data in a Parquet dataset
-    produced in cpom.altimetry.tools.sec_tools.grid_for_elev_change_regrid.py.
+    Update a single year of gridded elevation data in an existing Parquet dataset.
+
+    Reprocesses one year of altimetry data and updates the corresponding partitions
+    in a dataset previously created by grid_for_elev_change.py. Useful for adding
+    new data or reprocessing specific years without regenerating the entire dataset.
+
+Output:
+    - Updated partitions: <grid_dir>/year=YYYY/**/*.parquet
+    - Updated metadata: <grid_dir>/grid_meta.json
 """
 
 import argparse

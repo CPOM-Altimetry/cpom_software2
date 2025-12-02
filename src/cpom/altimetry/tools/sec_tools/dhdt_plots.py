@@ -1,36 +1,56 @@
 """
-src.cpom.altimetry.tools.sec_tools.dhdt_plots
-Generate plots from the output of calculate_dhdt.py (dhdt.parquet files)
+cpom.altimetry.tools.sec_tools.dhdt_plots
+
+Purpose:
+    Generate spatial plots of dh/dt (elevation change rate) data from calculate_dhdt.py output.
+
+    Creates scatter plots showing elevation change rates across ice sheet regions or basins,
+    with optional glacier boundary overlays from shapefiles.
+
+Output:
+    - Basin plots: Saved to <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
+    - Ice sheet plots: Saved to <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+
+Supports:
+    - Root-level (entire ice sheet) data
+    - Single-tier basin structure (e.g., individual glaciers)
+    - Two-tier region/subregion structure (e.g., Antarctic IMBIE2 basins)
 """
 
 import argparse
 import json
-import logging
+import os
 import sys
 from pathlib import Path
 
 import polars as pl
 from matplotlib import pyplot as plt
 
-from cpom.altimetry.tools.sec_tools.clip_to_glaciers import get_shapefile
-from cpom.altimetry.tools.sec_tools.cross_calibrate_missions import get_sub_basins
+from cpom.altimetry.tools.sec_tools.clip_to_basins import (
+    get_basin_geometry_from_shapefile,
+    get_shapefile,
+)
+from cpom.altimetry.tools.sec_tools.cross_calibrate_missions import (
+    get_basins_to_process,
+)
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
-
-log = logging.getLogger(__name__)
+from cpom.logging_funcs.logging import set_loggers
 
 
 def get_objects(args):
     """
-    Get Area object and GridArea from metadata file.
-    Get dhdt data as Polars DataFrame.
+    Load Area and GridArea objects for plotting.
 
-    Loads grid area and area name from either command line parameters
-    or from the metadata JSON file outputted at dhdt calculation step.
+    Retrieves grid area and area name from either:
+    1. Command line arguments (--grid_area, --binsize, --area_name), or
+    2. Metadata JSON file (--metadata_json)
 
     Args:
-        args (argparse.Namespace): Command line arguments
+        args (argparse.Namespace): Command line arguments with either:
+            - grid_area (str), binsize (float), area_name (str), or
+            - metadata_json (str): Path to dhdt_metadata.json
 
     Returns:
         tuple: A tuple containing:
@@ -56,17 +76,21 @@ def get_objects(args):
 
 def get_data(args, this_grid_area, sub_basin=None):
     """
-    Load dhdt data from parquet file.
-    Add lat/lon columns based on grid area.
+    Load dh/dt data from parquet file and add geographic coordinates.
+
+    Loads dhdt.parquet from either root directory or basin subdirectory,
+    then converts grid cell coordinates (x_bin, y_bin) to latitude/longitude.
 
     Args:
-        args (argparse.Namespace): Command line arguments with in_dir
+        args (argparse.Namespace): Command line arguments.
+            Includes:
+            - in_dir (str): Input directory containing dhdt.parquet file(s)
         this_grid_area (GridArea): Grid area object for coordinate conversion
-        sub_basin (str, optional): Sub-basin name. If None or "None", loads root-level data.
-            Defaults to None.
+        sub_basin (str, optional): Basin path (e.g., "basin1" or "West/H-Hp").
+            If None or "None", loads from root directory. Defaults to None.
 
     Returns:
-        pl.LazyFrame: The dhdt data as a Polars LazyFrame with latitude and longitude columns.
+        pl.LazyFrame: Elevation change rate data with added latitude and longitude columns.
     """
 
     if sub_basin is not None and sub_basin != "None":
@@ -87,15 +111,24 @@ def get_data(args, this_grid_area, sub_basin=None):
 
 def plot_basins(args: argparse.Namespace, this_grid_area: GridArea, sub_basins_to_process: list):
     """
-    Plot dhdt data for each sub-basin by period.
-    Load shapefile for glacier boundaries using get_shapefile function from clip_to_glaciers module.
+    Generate spatial scatter plots of dh/dt data for each basin and time period.
 
-    Save plots to args.out_dir/plots/dhdt_period_{period_id}_{start_time}-{end_time}.png
+    For each basin and period, creates a plot showing:
+    - Scatter points colored by dh/dt value
+    - Glacier/basin boundaries from shapefile overlay
+    - Color scale and axis labels
+
+    Output files: <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
 
     Args:
-        args (argparse.Namespace): Command Line Arguments
-        this_grid_area (GridArea): GridArea object
-        sub_basins_to_process (list): List of sub-basins to process
+        args (argparse.Namespace): Command line arguments.
+            Includes:
+            - in_dir (str): Input directory with dhdt.parquet files
+            - out_dir (str): Output directory for plots
+            - shapefile (str): Shapefile identifier for boundaries
+            - plot_range (list): [min, max] for color scale
+        this_grid_area (GridArea): CPOM Grid area object
+        sub_basins_to_process (list[str]): Basin paths to process (e.g., ["West/H-Hp", "East/A-Ap"])
     """
 
     def _plot(args, period_data, period_id, shp, outpath):
@@ -124,8 +157,6 @@ def plot_basins(args: argparse.Namespace, this_grid_area: GridArea, sub_basins_t
         )
 
         plt.colorbar(scatter, ax=ax, label="dh/dt (m/yr)")
-        # Overlay glacier boundaries
-        shp.boundary.plot(ax=ax, edgecolor="black", linewidth=1)
 
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
@@ -138,8 +169,11 @@ def plot_basins(args: argparse.Namespace, this_grid_area: GridArea, sub_basins_t
         data_end_str = str(data_end).split()[0] if " " in str(data_end) else str(data_end)
         ax.set_title(f"dhdt period {period_id}: {data_start_str} to {data_end_str}")
 
+        # Overlay glacier boundaries
+        shp.boundary.plot(ax=ax, edgecolor="black", linewidth=1)
         plt.tight_layout()
         plt.savefig(outpath)
+
         plt.close()
 
     def _filter_to_period(data, period_id):
@@ -183,11 +217,17 @@ def plot_basins(args: argparse.Namespace, this_grid_area: GridArea, sub_basins_t
 
         plot_dir = Path(args.out_dir) / sub_basin / "plots"
         plot_dir.mkdir(parents=True, exist_ok=True)
-        return plot_dir / f"{sub_basin}_dhdt_period_{period_id}_{start_str}-{end_str}.png"
+        return (
+            plot_dir
+            / f"{sub_basin.replace("/", "_")}_dhdt_period_{period_id}_{start_str}-{end_str}.png"
+        )
+
+    # Load shapefile once
+    full_shp, selector = get_shapefile(this_grid_area, args, logger=None)
 
     for sub_basin in sub_basins_to_process:
-        shp, col_name = get_shapefile(this_grid_area, args, logger=None)
-        shp = shp[shp[col_name] == sub_basin]
+        # Get geometry for this specific basin using the helper function
+        basin_shp = get_basin_geometry_from_shapefile(full_shp, selector, sub_basin)
         data = get_data(args, this_grid_area, sub_basin)
         period_ids = data.select(pl.col("period")).unique().collect().to_series().to_list()
 
@@ -197,20 +237,26 @@ def plot_basins(args: argparse.Namespace, this_grid_area: GridArea, sub_basins_t
                 continue
 
             outpath = _get_output_path(sub_basin, period_id, period_data)
-            _plot(args, period_data, period_id, shp, outpath)
+            _plot(args, period_data, period_id, basin_shp, outpath)
 
 
 def plot_icesheet(args: argparse.Namespace, this_area: Area, this_grid_area: GridArea):
     """
-    Plot dhdt data for the entire ice data input sheet by period,
-    using Polarplot from the Area module.
+    Generate ice sheet-wide spatial plots of dh/dt data .
 
-    Save plots to args.out_dir/plots/dhdt_period_{period_id}_{start_time}-{end_time}.png
+    Creates plots for each time period showing elevation change rates across the entire
+    ice sheet using the Polarplot class.
+
+    Output files: <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
 
     Args:
-        args (argparse.Namespace): Command Line Arguments
-        this_area (Area): Area object
-        this_grid_area (GridArea): GridArea object
+        args (argparse.Namespace): Command line arguments.
+            Includes:
+            - in_dir (str): Input directory with dhdt.parquet file
+            - out_dir (str): Output directory for plots
+            - plot_range (list): [min, max] for color scale (m/yr)
+        this_area (Area): CPOM Area object
+        this_grid_area (GridArea): CPOM Grid area object
     """
 
     data = get_data(args, this_grid_area, sub_basin=None)
@@ -238,7 +284,7 @@ def plot_icesheet(args: argparse.Namespace, this_area: Area, this_grid_area: Gri
                 "units": "m",
                 "cmap_name": "coolwarm",
             },
-            output_dir=plot_dir,
+            output_dir=str(plot_dir),
             output_file=f"dhdt_period_{period_id}_{start_time_str}-{end_time_str}.png",
         )
 
@@ -305,34 +351,50 @@ def main(args):
         default=[-1.0, 1.0],
     )
     parser.add_argument(
-        "--sub_basins",
-        nargs="+",
-        default=["all"],
-        help="Specific list of sub-basins to process."
-        "If not provided : Will calculate for entire directory. "
-        "If set to 'all' will auto-discover sub-basins."
-        "To process root-level data, set to [None].",
-    )
-    parser.add_argument(
         "--shapefile",
         default="mouginot_glaciers",
         help="Shapefile to use for clipping/plotting glacier boundaries.",
     )
+    parser.add_argument(
+        "--structure",
+        type=str,
+        default="root",
+        choices=["root", "single-tier", "two-tier"],
+        help="Directory structure: root (icesheet level data), "
+        "single-tier (basins), or two-tier (regions/subregions)",
+    )
+    parser.add_argument(
+        "--region_selector",
+        nargs="+",
+        default=["all"],
+        help="Select regions to process. Use 'all' to process all available regions. "
+        "Ignored for root level data.",
+    )
+    parser.add_argument(
+        "--subregion_selector",
+        nargs="+",
+        default=["all"],
+        help="For two-tier structure only (e.g., Antarctic IMBIE2 basins): "
+        "Select specific subregions within each region (e.g., H-Hp, F-G, A-Ap) "
+        "or 'all' for all subregions. "
+        "Ignored for single-tier structure.",
+    )
     args = parser.parse_args()
-
-    # Determine which sub-basins to proces
-    if args.sub_basins is None or args.sub_basins == ["None"]:
-        sub_basins_to_process = ["None"]
-    elif args.sub_basins in ("all", ["all"]):
-        sub_basins_to_process = get_sub_basins(args.mission_mapper, logger=None)
-    else:
-        sub_basins_to_process = args.sub_basins
+    os.makedirs(args.out_dir, exist_ok=True)
+    logger = set_loggers(
+        log_file_info=Path(args.out_dir) / "info.log",
+        log_file_error=Path(args.out_dir) / "errors.log",
+        log_file_warning=Path(args.out_dir) / "warnings.log",
+    )
 
     this_area, this_grid_area = get_objects(args)
 
-    if args.sub_basins is None or args.sub_basins == ["None"]:
+    if args.structure == "root":
+        logger.info("Processing root-level data")
         plot_icesheet(args, this_area, this_grid_area)
     else:
+        # Determine which sub-basins to process
+        sub_basins_to_process = get_basins_to_process(args, args.in_dir, logger=logger)
         plot_basins(args, this_grid_area, sub_basins_to_process)
 
 

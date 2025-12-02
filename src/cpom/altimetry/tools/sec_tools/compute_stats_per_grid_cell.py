@@ -36,7 +36,6 @@ from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
 log = logging.getLogger(__name__)
-
 SECONDS_PER_YEAR = 3600.0 * 24.0 * 365.25  # approximate
 
 

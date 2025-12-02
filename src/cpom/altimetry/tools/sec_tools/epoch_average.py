@@ -1,9 +1,16 @@
 """
-cpom.altimetry.tools.sec_tools.epoch_average.py
+cpom.altimetry.tools.sec_tools.epoch_average
 
 Purpose:
-  Compute epoch averages for gridded elevation and time data.
-  Output epoch average data as parquet files
+    Compute epoch-averaged elevation values from gridded altimetry data.
+
+    Divides the time series into epochs (time windows) and calculates mean elevation,
+    time, and other statistics for each grid cell within each epoch. Optionally applies
+    GIA (Glacial Isostatic Adjustment) corrections.
+
+Output:
+    - Epoch data: <out_dir>/epoch_average*.parquet (one or more files)
+    - Metadata: <out_dir>/metadata.json
 """
 
 import argparse

@@ -1,13 +1,16 @@
 """
-cpom.altimetry.tools.sec_tools.interpolate_grids_of_dh.py
+cpom.altimetry.tools.sec_tools.interpolate_grids_of_dh
 
 Purpose:
-Take epoch-averaged gridded surface fit data and interpolate missing grid cells as far as possible,
-for chosen variables using Delaunay triangulation (matplotlib linear tri-interpolator).
-Input datapoints are not changed.
+    Interpolate missing values in gridded elevation change data.
 
-The code was written to take files output by epoch_average or
-calculate_dhdt, but could take any other named variable.
+    Uses Delaunay triangulation (matplotlib LinearTriInterpolator) to fill gaps
+    in gridded data from epoch_average or calculate_dhdt outputs. Original input
+    values are preserved; only missing cells are interpolated.
+
+Output:
+    - Interpolated data: <out_dir>/interpolated_<variable>.parquet
+    - Includes 'interpolation_flag' column to distinguish original vs interpolated values
 """
 
 import argparse

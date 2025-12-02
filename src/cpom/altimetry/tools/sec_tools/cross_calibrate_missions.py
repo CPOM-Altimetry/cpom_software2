@@ -1,10 +1,24 @@
 """
-cpom.altimetry.tools.sec_tools.surface_fit.py
+cpom.altimetry.tools.sec_tools.cross_calibrate_missions
 
 Purpose:
-  Perform planefit to get dh/dt time series from
-  gridded elevation and time data.
-  Output dh time series as parquet files.
+    Cross-calibrate multiple altimetry missions to remove systematic biases.
+
+    Uses a reference mission to estimate and remove relative biases from other missions
+    in overlapping time periods and spatial regions. Applies least-squares model fitting
+    to estimate per-mission biases, with optional spatial interpolation for cells with
+    insufficient data.
+
+Supported Structures:
+    - root: Process all data at root level without subdirectories
+    - single-tier: Direct basin subdirectories (e.g., basin1/, basin2/)
+    - two-tier: Region/subregion hierarchy (e.g., West/H-Hp/, East/A-Ap/)
+
+Output:
+    - Corrected data: <out_dir>/<basin>/corrected_epoch_average.parquet
+    - Per-basin stats: <out_dir>/<basin>/outlier_stats.json
+    - Central metadata: <out_dir>/cross_calibration_metadata.json
+    - Optional plots: <out_dir>/<basin>/plots/
 """
 
 import argparse
@@ -26,74 +40,190 @@ from cpom.logging_funcs.logging import set_loggers
 log = logging.getLogger(__name__)
 
 
-def get_sub_basins(params, logger) -> list[str]:
+def parse_arguments(args: list[str]) -> argparse.Namespace:
     """
-    Get available sub-basins by scanning the directory structure.
+    Parse command line arguments for cross-calibration.
 
-        - If params.sub_basins is None or ["None"], returns ["None"] and logs
-          that root-level data will be processed.
-        - If params.sub_basins is "all" or ["all"], returns a sorted list of
-          sub-basins that exist across all missions and contain Parquet files.
-                input_directory/
-                    sub_basin_1/
-                        *.parquet
-                    sub_basin_2/
-                        *.parquet
-        - Otherwise, returns the list provided in params.sub_basins as-is.
+    Args:
+        args: List of command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description="Cross-calibrate multiple altimetry missions across grid cells",
+    )
+
+    parser.add_argument(
+        "--mission_mapper",
+        type=json.loads,  # Parse JSON string to dict
+        required=True,
+        help="JSON string mapping mission names to parquet file directories",
+    )
+    parser.add_argument(
+        "--out_dir",
+        type=str,
+        help="Output directory for results. If not provided, uses current directory.",
+    )
+    parser.add_argument(
+        "--missions_sorted",
+        nargs="+",
+        required=True,
+        default=["e1", "e2", "env", "cs2"],
+        help="List of missions to cross-calibrate, in order.",
+    )
+    parser.add_argument(
+        "--bias_threshold", type=float, default=100.0, help="Maximum allowable bias correction"
+    )
+    parser.add_argument(
+        "--epoch_column",
+        help="Name of the epoch column in the input data",
+        default="epoch_number",
+    )
+    parser.add_argument(
+        "--time_column",
+        help="Name of the fractional time column in the input data "
+        "(will be converted to absolute years)",
+        default="epoch_midpoint_fractional_yr",
+    )
+    parser.add_argument(
+        "--dh_column",
+        help="Name of the dh column in the input data",
+        default="dh_ave",
+    )
+    parser.add_argument(
+        "--structure",
+        type=str,
+        default="root",
+        choices=["root", "single-tier", "two-tier"],
+        help="Directory structure: root (no subdirectories), "
+        "single-tier (basins), or two-tier (regions/subregions)",
+    )
+    parser.add_argument(
+        "--region_selector",
+        nargs="+",
+        default=["all"],
+        help="Select regions to process. Use 'all' to process all available regions. "
+        "Ignored for root level data.",
+    )
+    parser.add_argument(
+        "--subregion_selector",
+        nargs="+",
+        default=["all"],
+        help="For two-tier structure only (e.g., Antarctic IMBIE2 basins): "
+        "Select specific subregions within each region (e.g., H-Hp) or 'all' for all subregions. "
+        "Ignored for single-tier structure.",
+    )
+    parser.add_argument(
+        "--min_observations",
+        type=int,
+        default=5,
+        help="Minimum number of observations required per grid cell",
+    )
+    parser.add_argument(
+        "--plot_results",
+        action="store_false",
+        help="Generate comparison plots of original vs cross-calibrated time series",
+    )
+
+    return parser.parse_args(args)
+
+
+def get_basins_to_process(
+    params: argparse.Namespace, directory: str | Path, logger: logging.Logger
+) -> list[str]:
+    """
+    Get available basins based on specified directory structure.
+
+    Supports two modes:
+    1. single-tier: Direct subdirectories (e.g., basin1/, basin2/)
+    2. two-tier: Region/subregion structure (e.g., West/H-Hp/, East/A-Ap/)
+
+    Note: For root-level processing, this function is not called.
 
     Args:
         params (argparse.Namespace): Command line arguments.
-            Includes : mission_mapper (dict), sub_basins (list or str)
+            Includes:
+            - structure (str): "single-tier" or "two-tier"
+            - region_selector (list): Regions to process
+            - subregion_selector (list): Subregions to process
+        directory (str or Path): Base directory to scan for basins
         logger (logging.Logger): Logger
 
     Returns:
-        list: Sorted list of sub-basin directory names to process.
+        list: Paths to process (e.g., ["basin1"], ["West/H-Hp", "East/A-Ap"])
     """
-    # Determine which sub-basins to proces
-    if params.sub_basins is None or params.sub_basins == ["None"]:
-        sub_basins_to_process = ["None"]
-        logger.info("Processing root level data")
-    elif params.sub_basins in ("all", ["all"]):
+    directory = Path(directory)
 
-        all_sub_basins = set()
-
-        # Get subdirectories from the first mission directory
-        first_mission = list(params.mission_mapper.keys())[0]
-        first_dir = Path(params.mission_mapper[first_mission])
-
-        if first_dir.exists():
-            # Look for subdirectories that contain parquet files
-            for subdir in first_dir.iterdir():
-                if subdir.is_dir():
-                    parquet_files = list(subdir.glob("*.parquet"))
-                    if parquet_files:
-                        all_sub_basins.add(subdir.name)
-        # Verify sub-basins exist across all missions
-        valid_sub_basins = []
-        for sub_basin in all_sub_basins:
-            exists_in_all = True
-            for _, mission_dir in params.mission_mapper.items():
-                sub_basin_path = Path(mission_dir) / sub_basin
-                if not sub_basin_path.exists() or not list(sub_basin_path.glob("*.parquet")):
-                    exists_in_all = False
-                    break
-
-            if exists_in_all:
-                valid_sub_basins.append(sub_basin)
-        sub_basins_to_process = sorted(valid_sub_basins)
-
-        logger.info("Processing sub-basins: %s", sub_basins_to_process)
+    # Get region for single and two tier selection
+    if params.region_selector == ["all"]:
+        logger.info("Finding basins")
+        basins_to_process = {
+            subdir.name
+            for subdir in directory.iterdir()
+            if subdir.is_dir()
+            and (params.structure != "single-tier" or any(subdir.glob("*.parquet")))
+        }
     else:
-        sub_basins_to_process = params.sub_basins
-        logger.info("Processing sub-basins: %s", sub_basins_to_process)
+        basins_to_process = set(params.region_selector)
 
-    return sub_basins_to_process
+    logger.info("Basins to process after region selection: %s", basins_to_process)
+
+    if params.structure == "two-tier":
+        if params.subregion_selector == ["all"]:
+            subregion_filter = None
+        else:
+            subregion_filter = set(params.subregion_selector)
+
+        basins_to_process = {
+            f"{region}/{sub_basin.name}"
+            for region in basins_to_process
+            for sub_basin in (directory / region).iterdir()
+            if sub_basin.is_dir()
+            and any(sub_basin.glob("*.parquet"))
+            and (subregion_filter is None or sub_basin.name in subregion_filter)
+        }
+        logger.info("Basins to process after subregion selection: %s", basins_to_process)
+
+    basins_sorted = sorted(basins_to_process)
+    logger.info("Final basins to process: %s", basins_sorted)
+    return basins_sorted
+
+
+def get_basins_for_all_missions(
+    params: argparse.Namespace, basins_to_process: list[str], logger: logging.Logger
+):
+    """
+    Filter sub-basin list to those that exist for all missions.
+
+    Args:
+        params (argparse.Namespace): Command line arguments.
+            Includes : mission_mapper (dict)
+        basins_to_process (list): List of sub-basins to verify
+        logger (logging.Logger): Logger for messages
+
+    Returns:
+        list: Valid sub-basins present in all missions
+    """
+    valid_sub_basins = []
+    for sub_basin in basins_to_process:
+        all_missions_have_basin = True
+        for mission, mission_dir in params.mission_mapper.items():
+            path = Path(mission_dir) / sub_basin
+            if not (path.exists() and list(path.glob("*.parquet"))):
+                logger.warning("Basin %s not found for mission %s at %s", sub_basin, mission, path)
+                all_missions_have_basin = False
+                break
+        if all_missions_have_basin:
+            valid_sub_basins.append(sub_basin)
+    logger.info("Processing valid sub-basins across all missions: %s", valid_sub_basins)
+    return valid_sub_basins
 
 
 def get_path(params, mission: str, sub_basin: str = "None") -> Path:
     """
     Get file path pointing to Parquet files for a specific mission
-    and (optionally) a specific sub-basin.
+    and (optionally) a specific region/sub-basin.
 
     Uses params.mission_mapper, mapping mission identifiers
     (e.g. "e1", "env", "cs2") to their corresponding base directory paths.
@@ -373,7 +503,7 @@ def apply_bias_thresholds(
     Set outlier biases to None.
 
     Args:
-        bias_tbl (pl.DataFrame): DataFrame containing bias corrections for each mission.
+        bias_tbl (pl.LazyFrame): DataFrame containing bias corrections for each mission.
         params (argparse.Namespace): Command line parameters.
             Includes :
             - bias_threshold (float): Maximum absolute bias value (meters)
@@ -585,39 +715,58 @@ def get_dh_timeseries(df: pl.LazyFrame, dh_column: str, epoch_time_column: str) 
     return timeseries_df
 
 
-def get_metadata_json(
-    params: argparse.Namespace,
+def write_outlier_stats(
     outlier_stats: dict,
     output_dir: Path,
-    start_time: float,
+    basin_name: str,
     logger: logging.Logger,
 ) -> None:
     """
-    Create and save crosscal_metadata.json in the output directory.
-    Metadata includes:
-        - Command line parameters
-        - Outlier statistics
-        - Execution time
+    Write outlier statistics for a specific basin to its output directory.
+
+    Args:
+        outlier_stats (dict): Outlier statistics from bias correction step.
+        output_dir (Path): Basin-specific output directory.
+        basin_name (str): Name of the basin being processed.
+        logger (logging.Logger): Logger
+    """
+    outlier_file = output_dir / "outlier_stats.json"
+    with open(outlier_file, "w", encoding="utf-8") as f:
+        json.dump(outlier_stats, f, indent=2)
+    logger.info("Wrote outlier statistics for %s to %s", basin_name, outlier_file)
+
+
+def write_central_metadata(
+    params: argparse.Namespace,
+    start_time: float,
+    processed_basins: list[str],
+    logger: logging.Logger,
+) -> None:
+    """
+    Write central metadata file with processing parameters and timing.
+
     Args:
         params (argparse.Namespace): Command line parameters.
-        outlier_stats (dict): Outlier statistics from bias correction step.
-        start_time (float): Processing start time
+        start_time (float): Processing start time.
+        processed_basins (list): List of basins that were successfully processed.
         logger (logging.Logger): Logger
     """
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
-    with open(output_dir / "metadata.json", "w", encoding="utf-8") as f_meta:
+    metadata_file = Path(params.out_dir) / "cross_calibration_metadata.json"
+    with open(metadata_file, "w", encoding="utf-8") as f_meta:
         json.dump(
             {
                 **vars(params),
-                **outlier_stats,
+                "processed_basins": processed_basins,
+                "total_basins_processed": len(processed_basins),
                 "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
             },
             f_meta,
             indent=2,
         )
-    logger.info("Wrote data_set metadata to %s", output_dir / "crosscal_metadata.json")
+    logger.info("Wrote central metadata to %s", metadata_file)
 
 
 def plot(
@@ -671,8 +820,8 @@ def plot(
     plt.ylabel("Δh (m)")
     plt.legend()
     plt.grid()
-    ax = plt.gca()
-    ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
+    # ax = plt.gca()
+    # ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
 
     # Plot cross-calibrated time series
     plt.subplot(2, 1, 2)
@@ -692,15 +841,15 @@ def plot(
     plt.ylabel("Δh (m)")
     plt.legend()
     plt.grid()
-    ax = plt.gca()
-    ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
+    # ax = plt.gca()
+    # ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
 
     plt.tight_layout()
     plt.savefig(output_dir / f"{suffix}_cross_calibration_comparison.png")
     plt.close()
 
 
-# pylint: disable=too-many-arguments
+# pylint: disable=R0917, R0913
 def write_results(
     params: argparse.Namespace,
     input_lf: pl.LazyFrame,
@@ -730,14 +879,14 @@ def write_results(
     Returns:
         Path: The output directory where results are saved.
     """
-
     # Set output directory and suffix based on sub_basin
     if sub_basin == "None":
         output_dir = Path(params.out_dir)
         suffix = ""
     else:
         output_dir = Path(params.out_dir) / sub_basin
-        suffix = f"{sub_basin}_"
+        # Use only the last part of the path for suffix (e.g., "Ep-F" from "West/Ep-F")
+        suffix = f"{Path(sub_basin).name}_"
     os.makedirs(output_dir, exist_ok=True)
 
     # Write Parquet files
@@ -750,139 +899,124 @@ def write_results(
     return output_dir
 
 
+def process_basin(
+    basin_path: str,
+    params: argparse.Namespace,
+    logger: logging.Logger,
+) -> tuple[Path | None, dict | None]:
+    """
+    Process a single basin for cross-calibration.
+
+    Args:
+        basin_path: Path to basin (or "None" for root level).
+        params: Command line parameters.
+        logger: Logger object.
+
+    Returns:
+        tuple: (output_dir, outlier_stats) or (None, None) if processing failed
+    """
+    logger.info("Processing: %s", basin_path)
+    input_lf = get_grid_cell_dataframe(params, sub_basin=basin_path)
+
+    if input_lf.select(pl.len()).collect().item() == 0:
+        logger.info("No data found for: %s", basin_path)
+        return None, None
+
+    valid_cells = get_valid_cells(input_lf, params)
+    if valid_cells.select(pl.len()).collect().item() == 0:
+        logger.info("No valid cells found for: %s", basin_path)
+        return None, None
+
+    bias_tbl = valid_cells.group_by(["x_bin", "y_bin"]).map_groups(
+        lambda df: fit_cell_biases(df, params),
+        schema={
+            "x_bin": pl.Float64,
+            "y_bin": pl.Float64,
+            "success": pl.Boolean,
+            "stderr": pl.Float64,
+            **{f"{m}_bias": pl.Float64 for m in params.missions_sorted},
+        },
+    )
+
+    bias_tbl, outlier_stats = apply_bias_thresholds(bias_tbl, params)
+    filled_df = interpolate_biases_spatially(input_lf, bias_tbl, params.missions_sorted)
+    cross_calibrated_lf, timeseries_lf = get_output_dataframe(
+        params, filled_df, sub_basin=basin_path
+    )
+    output_dir = write_results(
+        params, input_lf, cross_calibrated_lf, timeseries_lf, filled_df, basin_path
+    )
+
+    return output_dir, outlier_stats
+
+
 def main(args):
     """
     Main script for multi-mission cross-calibration.
 
     Loads and validates command line arguments, sets up logging,
-    loads input data, estimate mission biases, applies corrections,
-    saves results.
+    loads input data, estimates mission biases, applies corrections,
+    and saves results.
 
-    Modes :
-        - params.sub_basins = ['basin1', 'basin2'] : Process specified basins
-        - params.sub_basins = ['all'] : Auto-discover and process all basins
-        - params.sub_basins = ['None']: Process root-level data
+    Processing modes (determined by structure parameter):
+        - root: Process root-level data without subdirectories
+        - single-tier: Process individual basins (e.g., basin1/, basin2/)
+        - two-tier: Process region/subregion hierarchy (e.g., West/H-Hp/)
 
-    Steps :
-        1. Parse and validate command line arguments.
-        2. Get logger.
-        3. Get sub-basins to process.
-        4. For each sub-basin:
-            a. Load grid cell data from all missions.
-            b. Filter to valid cells.
-            c. Perform cross-calibration to estimate mission biases.
-            d. Interpolate biases spatially to fill missing values.
-            e. Apply bias corrections to original data.
-            f. Save corrected data and metadata.
+    Steps:
+        1. Parse and validate command line arguments
+        2. Set up logging
+        3. Discover basins to process based on structure
+        4. For each basin, call process_basin() to:
+            a. Load grid cell data from all missions
+            b. Filter to valid cells
+            c. Perform cross-calibration to estimate mission biases
+            d. Interpolate biases spatially to fill missing values
+            e. Apply bias corrections to original data
+            f. Save corrected data and outlier statistics
+        5. Write central metadata file
 
+    Args:
+        args: Command line arguments list
     """
 
-    parser = argparse.ArgumentParser(
-        description="Cross-calibrate multiple altimetry missions across grid cells",
-    )
-
-    parser.add_argument(
-        "--mission_mapper",
-        type=json.loads,  # Parse JSON string to dict
-        required=True,
-        help="JSON string mapping mission names to parquet file directories",
-    )
-    parser.add_argument(
-        "--out_dir",
-        type=str,
-        help="Output directory for results. If not provided, uses current directory.",
-    )
-    parser.add_argument(
-        "--missions_sorted",
-        nargs="+",
-        required=True,
-        default=["e1", "e2", "env", "cs2"],
-        help="List of missions to cross-calibrate, in order.",
-    )
-    parser.add_argument(
-        "--bias_threshold", type=float, default=100.0, help="Maximum allowable bias correction"
-    )
-    parser.add_argument(
-        "--epoch_column",
-        help="Name of the epoch column in the input data",
-        default="epoch_number",
-    )
-    parser.add_argument(
-        "--time_column",
-        help="Name of the fractional time column in the input data "
-        "(will be converted to absolute years)",
-        default="epoch_midpoint_fractional_yr",
-    )
-    parser.add_argument(
-        "--dh_column",
-        help="Name of the dh column in the input data",
-        default="dh_ave",
-    )
-    parser.add_argument(
-        "--sub_basins",
-        nargs="+",
-        default=["all"],
-        help="Specific list of sub-basins to process."
-        "If not provided : Will calculate for entire directory. "
-        "If set to 'all' will auto-discover sub-basins."
-        "To process root-level data, set to [None].",
-    )
-    parser.add_argument(
-        "--min_observations",
-        type=int,
-        default=5,
-        help="Minimum number of observations required per grid cell",
-    )
-    parser.add_argument(
-        "--plot_results",
-        action="store_false",
-        help="Generate comparison plots of original vs cross-calibrated time series",
-    )
-
     start_time = time.time()
-    params = parser.parse_args(args)
+    params = parse_arguments(args)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
         log_file_info=Path(params.out_dir) / "info.log",
         log_file_error=Path(params.out_dir) / "errors.log",
+        log_file_warning=Path(params.out_dir) / "warnings.log",
     )
 
-    sub_basins_to_process = get_sub_basins(params, logger)
+    processed_basins = []
 
-    # Process each sub-basin
-    for sub_basin in sub_basins_to_process:
-        logger.info("Processing sub-basin: %s", sub_basin)
-        input_lf = get_grid_cell_dataframe(params, sub_basin=sub_basin)
+    if params.structure == "root":
+        # Process root-level data without subdirectories
+        logger.info("Processing root-level data")
+        output_dir, outlier_stats = process_basin("None", params, logger)
 
-        if input_lf.select(pl.len()).collect().item() == 0:
-            logger.info("No data found for sub-basin: %s", sub_basin)
-            continue
-
-        valid_cells = get_valid_cells(input_lf, params)
-        if valid_cells.select(pl.len()).collect().item() == 0:
-            logger.info("No valid cells found for sub-basin: %s", sub_basin)
-            continue
-
-        bias_tbl = valid_cells.group_by(["x_bin", "y_bin"]).map_groups(
-            lambda df: fit_cell_biases(df, params),
-            schema={
-                "x_bin": pl.Float64,
-                "y_bin": pl.Float64,
-                "success": pl.Boolean,
-                "stderr": pl.Float64,
-                **{f"{m}_bias": pl.Float64 for m in params.missions_sorted},
-            },
+        if output_dir is not None and outlier_stats is not None:
+            write_outlier_stats(outlier_stats, output_dir, "root", logger)
+            processed_basins.append("root")
+    else:
+        # Get a the list of basins in the first missions directory
+        basins_to_process = get_basins_to_process(
+            params, Path(params.mission_mapper[list(params.mission_mapper.keys())[0]]), logger
         )
+        # Filter sub-basins to those present in all missions
+        valid_sub_basins = get_basins_for_all_missions(params, basins_to_process, logger)
 
-        bias_tbl, outlier_stats = apply_bias_thresholds(bias_tbl, params)
-        filled_df = interpolate_biases_spatially(input_lf, bias_tbl, params.missions_sorted)
-        cross_calibrated_lf, timeseries_lf = get_output_dataframe(
-            params, filled_df, sub_basin=sub_basin
-        )
-        output_dir = write_results(
-            params, input_lf, cross_calibrated_lf, timeseries_lf, filled_df, sub_basin
-        )
-        get_metadata_json(params, outlier_stats, output_dir, start_time, logger)
+        # Process each basin/region/subregion
+        for basin_path in valid_sub_basins:
+            output_dir, outlier_stats = process_basin(basin_path, params, logger)
+
+            if output_dir is not None and outlier_stats is not None:
+                write_outlier_stats(outlier_stats, output_dir, basin_path, logger)
+                processed_basins.append(basin_path)
+
+    # Write central metadata file after all processing
+    write_central_metadata(params, start_time, processed_basins, logger)
 
 
 if __name__ == "__main__":
