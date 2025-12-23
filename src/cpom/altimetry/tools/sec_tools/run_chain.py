@@ -37,8 +37,8 @@ def dict_to_cli_args(config):
     """
     Convert a dictionary of configuration parameters to command-line arguments.
 
-    Skips internal keys like 'out_folder_name' and 'in_step' which are
-    used for path construction but not passed to scripts.
+    Skips internal keys like 'out_folder_name', 'in_step', and 'shared_args'
+    which are used for configuration management but not passed to scripts.
 
     Args:
         config (dict): Configuration parameters dictionary.
@@ -49,7 +49,7 @@ def dict_to_cli_args(config):
     args = []
     for key, value in config.items():
         # Skip internal configuration keys
-        if key in ["out_folder_name", "in_step"]:
+        if key in ["out_folder_name", "in_step", "shared_args"]:
             continue
 
         # Handle different value types
@@ -93,9 +93,11 @@ def requires_grid_metadata(algo):
         "surface_fit",
         "surface_fit_plots",
         "epoch_average",
+        "epoch_average_plots",
         "interpolate_grids_of_dh",
-        "single_mission_dhdt",
+        "dhdt_plots",
         "clip_to_basins",
+        "clip_to_basins_from_shapefile",
     ]
 
 
@@ -108,6 +110,11 @@ def build_args(algo, algo_config, config, mission=None):
     """
     Build complete command-line arguments for an algorithm.
 
+    Config precedence (lowest → highest):
+    1. Global shared_args (if defined in YAML root)
+    2. Algorithm defaults (config[algo])
+    3. Mission-specific overrides (config[mission][algo])
+
     Args:
         algo (str): Algorithm name.
         algo_config (dict): Algorithm configuration.
@@ -117,24 +124,35 @@ def build_args(algo, algo_config, config, mission=None):
     Returns:
         list: Complete list of command-line arguments.
     """
-    args = dict_to_cli_args(algo_config)
+    # Merge configs in order: shared_args → algo defaults → mission overrides
+    merged_config = {}
+
+    # 1. Start with global shared_args (basin selection, common params)
+    if "shared_args" in config:
+        merged_config.update(config["shared_args"])
+
+    # 2. Override with algorithm-specific defaults
+    merged_config.update(algo_config)
+
+    # Convert to CLI args
+    args = dict_to_cli_args(merged_config)
     base_folder = config[mission]["base_folder"] if mission else None
 
     if get_auto_path(algo):
         # Input directory
-        if "in_dir" not in algo_config and "in_step" in algo_config:
-            in_dir = build_path(config["base_out"], base_folder, config[algo_config["in_step"]])
+        if "in_dir" not in merged_config and "in_step" in merged_config:
+            in_dir = build_path(config["base_out"], base_folder, config[merged_config["in_step"]])
             args.extend(["--in_dir", str(in_dir)])
 
         # Output directory
-        if "out_folder_name" in algo_config:
-            out_dir = build_path(config["base_out"], base_folder, algo_config)
+        if "out_folder_name" in merged_config:
+            out_dir = build_path(config["base_out"], base_folder, merged_config)
             args.extend(["--out_dir", str(out_dir)])
 
     # Grid metadata
-    if "grid_info_json" not in algo_config and requires_grid_metadata(algo):
-        if "in_dir" in algo_config:
-            metadata = Path(algo_config["in_dir"]) / "metadata.json"
+    if "grid_info_json" not in merged_config and requires_grid_metadata(algo):
+        if "in_dir" in merged_config:
+            metadata = Path(merged_config["in_dir"]) / "metadata.json"
         else:
             grid_path = build_path(
                 config["base_out"], config[mission]["base_folder"], config["grid_for_elev_change"]

@@ -8,7 +8,15 @@ Purpose:
     Each x_part/y_part is a group of grid cells. The size defined by
     partition_xy_chunking parameter.
 
-Command line parameters:
+Outputs:
+    - Partitioned Parquet files in out_dir, with ragged layout.
+    - Each partition stored in a single Parquet file:
+        <out_dir>/year=YYYY/x_part=XX/y_part=YY/data.parquet
+        or
+        <out_dir>/year=YYYY/month=MM/x_part=XX/y_part=YY/data.parquet
+    - Metadata: <out_dir>/metadata.json
+
+Parameters:
     --data_input_dir: Directory containing L2 files
     --dataset: Path to dataset definition YAML file
                 or inline dataset config as JSON string.
@@ -260,14 +268,21 @@ def get_coordinates_from_file(dataset: DatasetHelper, nc, fill_missing_poca: boo
     Returns:
         dict: A dictionary containing arrays of "latitude", "longitude", and optionally "beams".
     """
+    if dataset.latitude_param is None:
+        raise ValueError("dataset.latitude_param is required but None was provided")
+    latitude_param = dataset.latitude_param
+
     if dataset.beams != []:
-        lats = dataset.get_variable(nc, dataset.latitude_param)
-        beams = dataset.get_variable(nc, dataset.latitude_param, return_beams=True)
+        lats = dataset.get_variable(nc, latitude_param)
+        beams = dataset.get_variable(nc, latitude_param, return_beams=True)
     else:
-        lats = dataset.get_variable(nc, dataset.latitude_param)
+        lats = dataset.get_variable(nc, latitude_param)
         beams = None
 
-    lons = dataset.get_variable(nc, dataset.longitude_param) % 360.0
+    if dataset.longitude_param is None:
+        raise ValueError("dataset.longitude_param is required but None was provided")
+    longitude_param = dataset.longitude_param
+    lons = dataset.get_variable(nc, longitude_param) % 360.0
 
     if fill_missing_poca:
         lats, lons = _fill_missing_poca_with_nadir_fdr4alt(dataset, nc, lats, lons)
@@ -324,24 +339,35 @@ def get_variables_and_mask(
     dataset: DatasetHelper, nc, variable_dict: dict, offset: float, area_mask: np.ndarray
 ):
     """
-    Get variables from the netCDF or HDF5 file and construct a combined boolean mask.
+    Get elevation, time, and optional power/quality an open netCDF or HDF5 file.
+    Constructs a combined boolean mask.
+
     Args:
-        dataset (DatasetHelper): DatasetHelper object.
-        nc (netcdf Dataset or h5py.File): Opened NetCDF or HDF5 file.
-        variable_dict (dict): Dictionary containing arrays of latitudes and longitudes.
-        offset (float): Time offset to apply to time data.
-        area_mask (np.ndarray): Boolean mask array for points inside the area/mask.
+        dataset (DatasetHelper): CPOM DatasetHelper object.
+        nc: Opened NetCDF/HDF5 handle for the current file.
+        variable_dict (dict): Must already contain latitude/longitude and derived x/y.
+        offset (float): Seconds to add to the raw time variable.
+        area_mask (np.ndarray): Boolean mask marking points inside the area/mask.
+
     Returns:
-        tuple: A dictionary of variable arrays and the combined boolean mask.
+        tuple[dict, np.ndarray] | tuple[None, None]:
+            (updated variable_dict, combined_mask) when at least two valid points remain;
+            (None, None) when fewer than two points survive masking.
     """
     masks = [area_mask]
 
     # Construct the final mask and load variables
 
-    variable_dict["elevation"] = dataset.get_variable(nc, dataset.elevation_param)
+    if dataset.elevation_param is None:
+        raise ValueError("dataset.elevation_param is required but None was provided")
+    elevation_param = dataset.elevation_param
+    variable_dict["elevation"] = dataset.get_variable(nc, elevation_param)
     masks.append(np.isfinite(variable_dict["elevation"]))
 
-    variable_dict["time"] = dataset.get_variable(nc, dataset.time_param) + offset
+    if dataset.time_param is None:
+        raise ValueError("dataset.time_param is required but None was provided")
+    time_param = dataset.time_param
+    variable_dict["time"] = dataset.get_variable(nc, time_param) + offset
     masks.append(np.isfinite(variable_dict["time"]))
     if dataset.power_param is not None:
         variable_dict["power"] = dataset.get_variable(nc, dataset.power_param)
@@ -368,6 +394,8 @@ def get_variables_and_mask(
     )
     if dataset.uncertainty_param is not None:
         variable_dict["uncertainty"] = dataset.get_variable(nc, dataset.uncertainty_param)
+    if dataset.mode_param is not None:
+        variable_dict["mode"] = dataset.get_variable(nc, dataset.mode_param)
 
     return variable_dict, bool_mask
 
@@ -456,6 +484,8 @@ def process_file(
             return None
 
         for variable in variable_dict:
+            if variable_dict[variable] is None:
+                continue
             variable_dict[variable] = variable_dict[variable][bool_mask]
 
         variable_dict = get_grid_cells(variable_dict, this_grid)
@@ -535,12 +565,20 @@ def get_data_and_status_multiprocessed(params, file_and_dates: np.ndarray, worke
                 logger.info("Processing year: %s", year)
                 big_rows_list = []
                 file_and_date_year = file_and_dates[file_and_dates["year"] == year]
+                logger.info(
+                    f"Number of files to process for year {year}: {len(file_and_date_year)}"
+                )
                 results = executor.map(
                     worker,
                     file_and_date_year,
                     chunksize=max(15, len(file_and_date_year) // (10 * 4)),
                 )
-                big_rows_list = [r for r in results if r is not None]
+                try:
+                    big_rows_list = [r for r in results if r is not None]
+                except (ValueError, OSError, RuntimeError) as e:
+                    logger.error(f"Error collecting results for year {year}: {e}", exc_info=True)
+                    big_rows_list = []
+
                 logger.info(f"Collected {len(big_rows_list)} valid results for year {year}")
 
                 if len(big_rows_list) == 0:

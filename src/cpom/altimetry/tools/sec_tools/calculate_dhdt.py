@@ -2,21 +2,28 @@
 cpom.altimetry.tools.sec_tools.calculate_dhdt
 
 Purpose:
-    Calculate surface elevation change rates (dh/dt) from epoch-averaged elevation data.
+    Calculate surface elevation change rates (dh/dt) from epoch-averaged elevation data using
+    linear regression within specified time windows.
 
-    For each grid cell, computes dh/dt using linear regression within a moving time window.
-    The window slides through the time series based on specified start/stop times,
-    step length, and window size parameters.
+Processing Modes:
 
-Supported Structures:
-    - root: Process all data at root level without subdirectories
-    - single-tier: Direct basin subdirectories (e.g., basin1/, basin2/)
-    - two-tier: Region/subregion hierarchy (e.g., West/H-Hp/, East/A-Ap/)
+    Mission Modes:
+        - Single-mission: Processes data from one satellite mission
+          Uncertainty: input_uncertainty + model_uncertainty
 
-Output:
-    - dh/dt data: <out_dir>/<basin>/dhdt.parquet
-    - Per-basin stats: <out_dir>/<basin>/dhdt_statistics.json
-    - Central metadata: <out_dir>/dhdt_metadata.json
+        - Multimission: Processes bias-corrected data from multiple missions (--multi_mission flag)
+          Uncertainty: input_uncertainty + model_uncertainty + xcal_uncertainty
+          Requires cross-calibration standard error column in input data
+
+    Structural Modes:
+        - Icesheet-wide: Processes all data in a single root directory
+          Input: <in_dir>/epoch_average.parquet (or custom --parquet_glob)
+          Output: <out_dir>/dhdt.parquet
+
+        - Basin-structured: Processes subdirectories independently (--basin_structure flag)
+          Input: <in_dir>/<basin>/epoch_average.parquet
+          Output: <out_dir>/<basin>/dhdt.parquet
+          Supports region filtering (--region_selector)
 """
 
 import argparse
@@ -33,7 +40,8 @@ import numpy as np
 import polars as pl
 from scipy.stats import linregress
 
-from cpom.altimetry.tools.sec_tools.cross_calibrate_missions import (
+from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
+    add_basin_selection_arguments,
     get_basins_to_process,
 )
 from cpom.logging_funcs.logging import set_loggers
@@ -57,7 +65,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
             """
         )
     )
-
+    # I/O Arguments
     parser.add_argument(
         "--in_dir",
         help=("Path of the epoch average dir containing parquet files"),
@@ -70,6 +78,13 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         type=str,
         required=True,
     )
+    parser.add_argument(
+        "--parquet_glob",
+        help="Glob pattern to match parquet files in input directory.",
+        type=str,
+        default="*/epoch_average.parquet",
+    )
+    # dh/dt Calculation Parameters
     parser.add_argument(
         "--dhdt_start",
         help="Start time of first dh/dt period, format YYYY/MM/DD",
@@ -114,6 +129,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         type=int,
         default=30,
     )
+    # Column Name Arguments
     parser.add_argument(
         "--dh_avg_varname", help="Variable name for the dh average", type=str, default="dh_ave"
     )
@@ -135,6 +151,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         type=str,
         default="epoch_midpoint_fractional_yr",
     )
+    # Multimission cross-calibration arguments
     parser.add_argument(
         "--multi_mission",
         help="Flag to enable multimission cross-calibration uncertainty calculation",
@@ -147,129 +164,14 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         type=str,
         default="biased_dh_xcal_stderr",
     )
-    parser.add_argument(
-        "--parquet_glob",
-        help="Glob pattern to match parquet files within each sub-basin directory.",
-        type=str,
-        default="*/epoch_average.parquet",
-    )
+    # Shared basin/region selection arguments
+    add_basin_selection_arguments(parser)
     return parser.parse_args(args)
 
 
-def process_basin(
-    basin_path: str,
-    params: argparse.Namespace,
-    base_columns: list[str],
-    logger,
-):
-    """
-    Process a single basin to calculate dh/dt.
-
-    Steps :
-        1. Load input data for the basin.
-        2. Get start and end dates for dh/dt calculation.
-        3. Get period limits
-        4. Join input data with period limits
-        5. Calculate dh/dt for each grid cell and period
-        6. Write output parquet files and metadata json.
-    Args:
-        basin_path: Path to basin (or "None" for root level).
-        params: Command line parameters.
-        base_columns: List of required column names.
-        logger: Logger object.
-
-    """
-    basin_start_time = time.time()
-
-    if basin_path in ["None", ["None"], None]:
-        logger.info("Loading root-level data from: %s", Path(params.in_dir) / params.parquet_glob)
-        input_df = pl.scan_parquet(Path(params.in_dir) / params.parquet_glob).select(base_columns)
-        output_path = Path(params.out_dir)
-    else:
-        input_path = Path(params.in_dir) / basin_path / params.parquet_glob
-        logger.info("Loading data from: %s", input_path)
-        input_df = pl.scan_parquet(input_path).select(base_columns)
-        output_path = Path(params.out_dir) / basin_path
-
-    output_path.mkdir(parents=True, exist_ok=True)
-    logger.info("Output directory:  %s ", output_path)
-
-    dhdt_start, dhdt_end = get_start_end_dates_for_calculation(
-        input_df, params.dhdt_start, params.dhdt_end, params.dh_time_varname
-    )
-
-    usable_periods, dhdt_period = get_period_limits_df(
-        params.dhdt_period, params.step_length, dhdt_start, dhdt_end
-    )
-
-    record_dhdt, status = get_dhdt(
-        get_input_df(input_df, usable_periods, params.dh_time_varname), dhdt_period, params
-    )
-
-    logger.info("Writing %d dh/dt records to: %s", len(record_dhdt), output_path / "dhdt.parquet")
-    pl.DataFrame(record_dhdt).write_parquet(output_path / "dhdt.parquet", compression="zstd")
-
-    elapsed = int(time.time() - basin_start_time)
-    status["basin_execution_time"] = (
-        f"{elapsed // 3600:02}:" f"{(elapsed % 3600) // 60:02}:{elapsed % 60:02}"
-    )
-
-    write_basin_statistics(status, output_path, basin_path, logger)
-
-
-def write_basin_statistics(
-    status: dict,
-    output_path: Path,
-    basin_name: str,
-    logger,
-) -> None:
-    """
-    Write processing statistics for a specific basin to its output directory.
-
-    Args:
-        status (dict): Processing statistics (successful, failures, etc.).
-        output_path (Path): Basin-specific output directory.
-        basin_name (str): Name of the basin being processed.
-        logger: Logger object.
-    """
-    stats_file = output_path / "dhdt_statistics.json"
-    with open(stats_file, "w", encoding="utf-8") as f:
-        json.dump(status, f, indent=2)
-    logger.info(f"Wrote statistics for {basin_name} to {stats_file}")
-
-
-def write_central_metadata(
-    params: argparse.Namespace,
-    start_time: float,
-    processed_basins: list[str],
-    logger,
-) -> None:
-    """
-    Write central metadata file with processing parameters and timing.
-
-    Args:
-        params (argparse.Namespace): Command line parameters.
-        start_time (float): Processing start time.
-        processed_basins (list): List of basins that were successfully processed.
-        logger: Logger object.
-    """
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    metadata_file = Path(params.out_dir) / "dhdt_metadata.json"
-    with open(metadata_file, "w", encoding="utf-8") as f_meta:
-        json.dump(
-            {
-                **vars(params),
-                "processed_basins": processed_basins,
-                "total_basins_processed": len(processed_basins),
-                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-                "processing_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-            },
-            f_meta,
-            indent=2,
-        )
-    logger.info(f"Wrote central metadata to {metadata_file}")
+# ----------------------------------------------
+# SETUP FUNCTIONS - Dates, Periods, Input Data
+# ----------------------------------------------
 
 
 def get_start_end_dates_for_calculation(
@@ -420,6 +322,11 @@ def get_input_df(
     return dh_input
 
 
+# ----------------------------------------------
+# DH/DT Calculation
+# ----------------------------------------------
+
+
 # pylint: disable=R0914
 def get_dhdt(
     dh_input: pl.DataFrame, dhdt_period: float, params: argparse.Namespace
@@ -427,14 +334,11 @@ def get_dhdt(
     """
     Calculates dh/dt and uncertainties for each grid cell and dh/dt period.
 
-    Steps:
     For each grid cell and period :
         1. Validate input data against criteria (min points, time coverage)
-        2. Perform linear regression, to get :
-            - dh/dt (slope)
-            - intercept
-            - model uncertainty (standard error of the regression)
-        3. Calculate uncertainties :
+        2. Perform linear regression, to get dh/dt (slope), intercept and
+            the model uncertainty (standard error of the regression)
+        3. Calculate uncertainties
             - input uncertainty - based on input dh stddev
             - cross-calibration uncertainty (if multi-mission)
             - total uncertainty
@@ -565,6 +469,100 @@ def get_dhdt(
     return record_dhdt, status
 
 
+# ------------------------
+# Metadata JSON
+# ------------------------
+
+
+def get_metadata_json(
+    params: argparse.Namespace,
+    start_time: float,
+    processed_basins: list[str],
+    logger,
+) -> None:
+    """
+    Write metadata file with processing parameters and timing.
+
+    Args:
+        params (argparse.Namespace): Command line parameters.
+        start_time (float): Processing start time.
+        processed_basins (list): List of basins that were successfully processed.
+        logger: Logger object.
+    """
+    hours, remainder = divmod(int(time.time() - start_time), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    metadata_file = Path(params.out_dir) / "dhdt_metadata.json"
+    with open(metadata_file, "w", encoding="utf-8") as f_meta:
+        json.dump(
+            {
+                **vars(params),
+                "processed_basins": processed_basins,
+                "total_basins_processed": len(processed_basins),
+                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+                "processing_date": time.strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            f_meta,
+            indent=2,
+        )
+    logger.info(f"Wrote central metadata to {metadata_file}")
+
+
+# --------------------------
+# Main Processing Workflow
+# --------------------------
+
+
+def process_dhdt(
+    input_df: pl.LazyFrame,
+    params: argparse.Namespace,
+    out_path: Path,
+    logger,
+):
+    """
+    Process dh/dt for a basin/root dataset.
+
+    Steps:
+        1. Compute dh/dt start/end dates (get_start_end_dates_for_calculation).
+        2. Get dh/dt period limits (get_period_limits_df).
+        3. Join input data to period windows and compute dh/dt per grid cell.
+            (get_dhdt)
+        4. Write dh/dt parquet and per-basin statistics
+
+    Args:
+        input_df (pl.LazyFrame): Epoch-averaged input data for the basin/root.
+        params (argparse.Namespace): Command line parameters.
+        out_path (Path): Output directory path for the basin/root.
+        logger: Logger object.
+    """
+    basin_start_time = time.time()
+
+    dhdt_start, dhdt_end = get_start_end_dates_for_calculation(
+        input_df, params.dhdt_start, params.dhdt_end, params.dh_time_varname
+    )
+
+    usable_periods, dhdt_period = get_period_limits_df(
+        params.dhdt_period, params.step_length, dhdt_start, dhdt_end
+    )
+
+    record_dhdt, status = get_dhdt(
+        get_input_df(input_df, usable_periods, params.dh_time_varname), dhdt_period, params
+    )
+
+    logger.info("Writing %d dh/dt records to: %s", len(record_dhdt), out_path / "dhdt.parquet")
+    pl.DataFrame(record_dhdt).write_parquet(out_path / "dhdt.parquet", compression="zstd")
+
+    elapsed = int(time.time() - basin_start_time)
+    status["basin_execution_time"] = (
+        f"{elapsed // 3600:02}:" f"{(elapsed % 3600) // 60:02}:{elapsed % 60:02}"
+    )
+
+    stats_file = out_path / "dhdt_statistics.json"
+    with open(stats_file, "w", encoding="utf-8") as f:
+        json.dump(status, f, indent=2)
+    logger.info(f"Wrote statistics for {out_path} to {stats_file}")
+
+
 def main(args: list[str]) -> None:
     """
     Main entry point for single mission dh/dt calculation with optional multimission support.
@@ -609,20 +607,32 @@ def main(args: list[str]) -> None:
 
     processed_basins = []
 
-    if params.structure == "root":
-        # Process root-level data without subdirectories
-        logger.info("Processing root-level data")
-        process_basin("None", params, base_columns, logger)
-        processed_basins.append("root")
+    # Get input/output paths
+    in_dir_root = Path(params.in_dir)
+    out_dir_root = Path(params.out_dir)
+
+    if params.basin_structure is True:
+        paths = [
+            (in_dir_root / basin, out_dir_root / basin, basin)
+            for basin in get_basins_to_process(params, in_dir_root, logger)
+        ]
     else:
-        basins_to_process = get_basins_to_process(params, Path(params.in_dir), logger)
+        paths = [(in_dir_root, out_dir_root, "root")]
 
-        for basin_path in basins_to_process:
-            process_basin(basin_path, params, base_columns, logger)
-            processed_basins.append(basin_path)
+    # Loop through each basin/root and process dh/dt
+    for in_path, out_path, basin in paths:
+        logger.info(f"Processing data in: {in_path}")
+        input_df = pl.scan_parquet(in_path / params.parquet_glob).select(base_columns)
 
-    write_central_metadata(params, start_time, processed_basins, logger)
+        out_path.mkdir(parents=True, exist_ok=True)
+        logger.info("Output directory:  %s ", out_path)
+
+        process_dhdt(input_df, params, out_path, logger)
+        processed_basins.append(basin)
+
+    get_metadata_json(params, start_time, processed_basins, logger)
 
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+    

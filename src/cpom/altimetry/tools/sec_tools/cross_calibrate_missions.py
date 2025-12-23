@@ -9,11 +9,6 @@ Purpose:
     to estimate per-mission biases, with optional spatial interpolation for cells with
     insufficient data.
 
-Supported Structures:
-    - root: Process all data at root level without subdirectories
-    - single-tier: Direct basin subdirectories (e.g., basin1/, basin2/)
-    - two-tier: Region/subregion hierarchy (e.g., West/H-Hp/, East/A-Ap/)
-
 Output:
     - Corrected data: <out_dir>/<basin>/corrected_epoch_average.parquet
     - Per-basin stats: <out_dir>/<basin>/outlier_stats.json
@@ -35,6 +30,10 @@ import polars as pl
 from scipy.spatial import KDTree
 from sklearn.linear_model import LinearRegression
 
+from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
+    add_basin_selection_arguments,
+    get_basins_to_process,
+)
 from cpom.logging_funcs.logging import set_loggers
 
 log = logging.getLogger(__name__)
@@ -91,29 +90,8 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         help="Name of the dh column in the input data",
         default="dh_ave",
     )
-    parser.add_argument(
-        "--structure",
-        type=str,
-        default="root",
-        choices=["root", "single-tier", "two-tier"],
-        help="Directory structure: root (no subdirectories), "
-        "single-tier (basins), or two-tier (regions/subregions)",
-    )
-    parser.add_argument(
-        "--region_selector",
-        nargs="+",
-        default=["all"],
-        help="Select regions to process. Use 'all' to process all available regions. "
-        "Ignored for root level data.",
-    )
-    parser.add_argument(
-        "--subregion_selector",
-        nargs="+",
-        default=["all"],
-        help="For two-tier structure only (e.g., Antarctic IMBIE2 basins): "
-        "Select specific subregions within each region (e.g., H-Hp) or 'all' for all subregions. "
-        "Ignored for single-tier structure.",
-    )
+    # Shared basin/region selection arguments
+    add_basin_selection_arguments(parser)
     parser.add_argument(
         "--min_observations",
         type=int,
@@ -127,67 +105,6 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     )
 
     return parser.parse_args(args)
-
-
-def get_basins_to_process(
-    params: argparse.Namespace, directory: str | Path, logger: logging.Logger
-) -> list[str]:
-    """
-    Get available basins based on specified directory structure.
-
-    Supports two modes:
-    1. single-tier: Direct subdirectories (e.g., basin1/, basin2/)
-    2. two-tier: Region/subregion structure (e.g., West/H-Hp/, East/A-Ap/)
-
-    Note: For root-level processing, this function is not called.
-
-    Args:
-        params (argparse.Namespace): Command line arguments.
-            Includes:
-            - structure (str): "single-tier" or "two-tier"
-            - region_selector (list): Regions to process
-            - subregion_selector (list): Subregions to process
-        directory (str or Path): Base directory to scan for basins
-        logger (logging.Logger): Logger
-
-    Returns:
-        list: Paths to process (e.g., ["basin1"], ["West/H-Hp", "East/A-Ap"])
-    """
-    directory = Path(directory)
-
-    # Get region for single and two tier selection
-    if params.region_selector == ["all"]:
-        logger.info("Finding basins")
-        basins_to_process = {
-            subdir.name
-            for subdir in directory.iterdir()
-            if subdir.is_dir()
-            and (params.structure != "single-tier" or any(subdir.glob("*.parquet")))
-        }
-    else:
-        basins_to_process = set(params.region_selector)
-
-    logger.info("Basins to process after region selection: %s", basins_to_process)
-
-    if params.structure == "two-tier":
-        if params.subregion_selector == ["all"]:
-            subregion_filter = None
-        else:
-            subregion_filter = set(params.subregion_selector)
-
-        basins_to_process = {
-            f"{region}/{sub_basin.name}"
-            for region in basins_to_process
-            for sub_basin in (directory / region).iterdir()
-            if sub_basin.is_dir()
-            and any(sub_basin.glob("*.parquet"))
-            and (subregion_filter is None or sub_basin.name in subregion_filter)
-        }
-        logger.info("Basins to process after subregion selection: %s", basins_to_process)
-
-    basins_sorted = sorted(basins_to_process)
-    logger.info("Final basins to process: %s", basins_sorted)
-    return basins_sorted
 
 
 def get_basins_for_all_missions(
@@ -820,8 +737,6 @@ def plot(
     plt.ylabel("Δh (m)")
     plt.legend()
     plt.grid()
-    # ax = plt.gca()
-    # ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
 
     # Plot cross-calibrated time series
     plt.subplot(2, 1, 2)
@@ -841,8 +756,6 @@ def plot(
     plt.ylabel("Δh (m)")
     plt.legend()
     plt.grid()
-    # ax = plt.gca()
-    # ax.yaxis.set_major_locator(plt.MultipleLocator(0.25))
 
     plt.tight_layout()
     plt.savefig(output_dir / f"{suffix}_cross_calibration_comparison.png")
@@ -958,11 +871,8 @@ def main(args):
     loads input data, estimates mission biases, applies corrections,
     and saves results.
 
-    Processing modes (determined by structure parameter):
-        - root: Process root-level data without subdirectories
-        - single-tier: Process individual basins (e.g., basin1/, basin2/)
-        - two-tier: Process region/subregion hierarchy (e.g., West/H-Hp/)
-
+    Supports icesheet wide and basins parquet input. 
+    
     Steps:
         1. Parse and validate command line arguments
         2. Set up logging
@@ -991,7 +901,7 @@ def main(args):
 
     processed_basins = []
 
-    if params.structure == "root":
+    if params.basin_structure is False: 
         # Process root-level data without subdirectories
         logger.info("Processing root-level data")
         output_dir, outlier_stats = process_basin("None", params, logger)

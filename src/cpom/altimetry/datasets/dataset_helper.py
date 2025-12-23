@@ -87,23 +87,6 @@ class DatasetHelper(DatasetConfig):
         config_dict.update(config_params)
         super().__init__(**config_dict)  # type: ignore[arg-type]
 
-    def _require_param(self, param_name: str, param_value: Optional[str]) -> str:
-        """Validate and return a required parameter.
-
-        Args:
-            param_name: Name of the parameter for error message
-            param_value: The parameter value to validate
-
-        Returns:
-            str: The non-None parameter value
-
-        Raises:
-            ValueError: If the parameter is None
-        """
-        if param_value is None:
-            raise ValueError(f"{param_name} must be configured in dataset")
-        return param_value
-
     def _load_dataset_config(self, dataset_yaml: str | Path) -> dict[str, Any]:
         """Load dataset configuration from YAML file.
 
@@ -248,7 +231,7 @@ class DatasetHelper(DatasetConfig):
                 else:
                     region_codes = [10, 11, 12]
                 # Extract region code from filename and filter
-                mask = [int(Path(f).name[-12:-10]) in region_codes for f in file_and_dates["path"]]
+                mask = [int(Path(f).name[-12:-10]) in region_codes for f in file_and_dates['path']]
                 file_and_dates = file_and_dates[mask]
 
             return file_and_dates
@@ -301,9 +284,13 @@ class DatasetHelper(DatasetConfig):
             else:
                 continue
 
+        dtype = [("path", object), ("date", "O"), ("year", int), ("month", int)]
+        if return_cycle_number:
+            dtype.append(("cycle", object))
+            
         if hemisphere:
             valid_files = (
-                _get_file_by_hemisphere(self, hemisphere, valid_files)
+                _get_file_by_hemisphere(self, hemisphere, np.array(valid_files, dtype=dtype))
                 if hemisphere
                 else valid_files
             )
@@ -422,59 +409,30 @@ class DatasetHelper(DatasetConfig):
             )
         return asc_directions
 
-    def replace_fill_values_with_nan(self, data_array: np.ndarray, var: Any) -> np.ndarray:
-        """Replace fill values in a data array with NaN.
-
-        Args:
-            data_array (np.ndarray): The data array to process.
-            var (Any): The variable object from the dataset containing attributes.
-
-        Returns:
-            np.ndarray: The data array with fill values replaced by NaN.
-        """
-        scale_factor = getattr(var, "scale_factor", 0.0)
-        add_offset = getattr(var, "add_offset", 0.0)
-        fill_value = getattr(var, "_FillValue", None)
-        if fill_value is not None:
-            scaled_fill = fill_value * scale_factor + add_offset
-            data_array = np.where(
-                np.isclose(data_array, scaled_fill, atol=1e-6)
-                | np.isclose(data_array, -scaled_fill, atol=1e-6),
-                np.nan,
-                data_array,
-            )
-        return data_array
-
     def get_variable(
-        self,
-        nc: Dataset,
-        nc_var_path: str | None,
-        replace_fill: bool = True,
-        return_beams: bool = False,
+        self, nc: Dataset, nc_var_path: str, return_beams: bool = False, replace_fill: bool = True
     ) -> np.ndarray:
         """Retrieve a variable from a NetCDF file, handling groups if necessary.
 
-        For regular datasets, extracts and returns the specified variable.
-        For beam-based datasets (e.g., ICESat-2), concatenates data from all configured beams.
+        Can handle both regular variables and beam-specific variables for is2.
+        If class has attribute `beams`, it will return a concatenated array of data in the
+        passed beams.
 
         Args:
-            nc: The dataset object (netCDF4.Dataset or h5py.File)
-            nc_var_path: The path to the variable within the file, with groups separated by '/'.
-                For beam datasets, do not include the beam prefix (it will be added automatically).
-            return_beams: If True and beams are configured, returns only the beam identifier array
-                         instead of the variable data.
-            replace_fill: Whether to replace fill values with NaN
-
+            nc (Dataset or hdf5.Dataset): The dataset object
+            nc_var_path (str): The path to the variable within the file,
+                with groups separated by '/'.
+            return_beams (bool): Return an array of beam identifiers if True.
+            replace_fill (bool): Whether to replace fill values with NaN.
         Raises:
-            ValueError: If nc_var_path is None
-            KeyError: If the variable or group is not found in the file
-
+            KeyError: If the variable or group is not found in the file.
         Returns:
-            np.ndarray: Variable data (default behavior, or when return_beams=False)
-            np.ndarray: Beam identifier array (only when return_beams=True)
+            np.ndarray or tuple:
+                - If use_beams=False: The retrieved variable as an array.
+                - If use_beams=True and return_beams=False: Concatenated data from all beams.
+                - If use_beams=True and return_beams=True: Tuple of (data, beam_ids).
         """
-        if nc_var_path is None:
-            raise ValueError("nc_var_path cannot be None")
+        
 
         def _get_var(dataset, path):
             try:
@@ -498,17 +456,29 @@ class DatasetHelper(DatasetConfig):
                     if return_beams:
                         beam_list.append(np.full(var_data.shape[0], beam))
 
-            variable_data = np.concatenate(data_list, axis=0) if data_list else np.array([])
+            data_array = np.concatenate(data_list, axis=0) if data_list else np.array([])
             if return_beams:
                 beam_array = np.concatenate(beam_list, axis=0) if beam_list else np.array([])
                 return beam_array
-        else:
-            variable_data = _get_var(nc, nc_var_path)
+            return data_array
+
+        # No beams, just return the variable directly
+        var_data = _get_var(nc, nc_var_path)
 
         if replace_fill:
-            variable_data = self.replace_fill_values_with_nan(variable_data, nc[nc_var_path])
+            var = nc[nc_var_path]
+            scale_factor = getattr(var, "scale_factor", 0.0)
+            add_offset = getattr(var, "add_offset", 0.0)
+            fill_value = getattr(var, "_FillValue", None)
+            if fill_value is not None:
+                scaled_fill = fill_value * scale_factor + add_offset
+                var_data = np.where(
+                    np.isclose(var_data, scaled_fill, atol=1e-6)
+                    | np.isclose(var_data, -scaled_fill, atol=1e-6),
+                    np.nan,
+                    var_data,
+                )
 
-        if variable_data is None:
+        if var_data is None:
             return np.array([])
-
-        return variable_data
+        return var_data
