@@ -6,6 +6,7 @@ To do reminder:
 TODO: grid support
 """
 
+import io
 import logging
 import os
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import numpy as np
+
+# registers AVIF with Pillow
+import pillow_avif  # noqa pylint: disable=unused-import
 import shapefile as shp  # type: ignore
 from cartopy.mpl.geoaxes import GeoAxesSubplot  # type: ignore
 from matplotlib import colormaps
@@ -23,6 +27,7 @@ from matplotlib import pyplot as plt
 from matplotlib import ticker
 from matplotlib.figure import Figure
 from numpy import ma  # masked arrays
+from PIL import Image
 
 from cpom.areas.areas import Area
 from cpom.backgrounds.backgrounds import (  # background images functions for polar plots
@@ -152,6 +157,10 @@ class Polarplot:
         dpi: int = 85,
         transparent_background: bool = False,
         map_only: bool = False,
+        image_format: str = "png",
+        avif_settings: tuple[int, int] = (60, 4),
+        webp_settings: tuple[int, int] = (80, 6),
+        use_cmap_in_hist: bool = True,
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -178,7 +187,8 @@ class Polarplot:
               "cmap_name": "RdYlBu_r",          # Optional: Colormap name
               "cmap_over_color": "#A85754",     # Optional: Over color for colormap
               "cmap_under_color": "#3E4371",    # Optional: Under color for colormap
-              "cmap_extend": "both",            # Optional: Extend colormap
+              "cmap_extend": "both",            # Optional: Extend colormap with arrow head on
+                                                # colorbar : {'neither', 'both', 'min', 'max'}
               "min_plot_range": None,           # Optional: Min range for colorbar
               "max_plot_range": None,           # Optional: Max range for colorbar
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
@@ -218,6 +228,15 @@ class Polarplot:
 
         - `map_only` (bool, optional, default: `False`):
           Plot only the map and colorbar, without histograms or other elements.
+
+        - `format` (str, optional, default: `png`)
+          image file format to save to. Options are png, avif or webp
+
+        - `webp_settings` (tuple[int,int], default=(80,6)), : (quality,method),
+                                    where quality:0..100, method:0-6
+
+        - `use_cmap_in_hist` (bool, default: True) : if True colour first
+           histogram using plots cmap, otherwise just plot in single dark colour
 
         ### Raises
 
@@ -434,11 +453,9 @@ class Polarplot:
             background_resolutions = [background_resolution]
 
         if len(background_alphas) != len(backgrounds):
-            log.warning("Number of background_alphas does not match number of backgrounds.")
             background_alphas = np.full(len(backgrounds), background_alphas[0])
 
         if len(background_resolutions) != len(backgrounds):
-            log.warning("Number of background_resolutions does not match number of backgrounds.")
             background_resolutions = background_resolutions * len(backgrounds)
 
         # display each background in turn
@@ -490,11 +507,13 @@ class Polarplot:
 
                 if n_vals != len(lats):
                     raise ValueError(
-                        f"length of vals array must equal lats array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lats array {len(lats)} in "
+                        f"data set {ds_num}"
                     )
                 if n_vals != len(lons):
                     raise ValueError(
-                        f"length of vals array must equal lons array in data set {ds_num}"
+                        f"length of vals array {n_vals} must equal lons array {len(lons)} "
+                        f"in data set {ds_num}"
                     )
 
                 # convert to ndarray if a list
@@ -789,6 +808,7 @@ class Polarplot:
                                 data_set.get("max_plot_range", np.nanmax(vals)),
                                 data_set.get("units", "no units"),
                                 cmap,  # pylint: disable=used-before-assignment
+                                use_cmap=use_cmap_in_hist,
                             )
 
                         if self.thisarea.show_latitude_scatter:
@@ -862,14 +882,42 @@ class Polarplot:
                 plot_filename = f"{output_dir}/param_{_ds_name_0}_{self.area}.png"
             else:
                 raise ValueError("Neither outputdir or output_file provided")
-            if ".png" != plot_filename[-4:]:
-                plot_filename += ".png"
-            log.info("Saving plot to %s at %d dpi", plot_filename, dpi)
-            plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
+            print("Saving plot", plot_filename, image_format)
+            if f"{image_format}" not in plot_filename[-6:]:
+                plot_filename += f".{image_format}"
+            print("Saving plot to %s at %d dpi", plot_filename, dpi)
+            if image_format == "avif":
+                # Save to an in-memory PNG
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=dpi, transparent=transparent_background)
+                buf.seek(0)
 
+                # Open with Pillow and convert to AVIF
+                im = Image.open(buf)
+                im.save(
+                    plot_filename, format="AVIF", quality=avif_settings[0], speed=avif_settings[1]
+                )
+            elif image_format == "webp":
+                plt.savefig(
+                    plot_filename,
+                    dpi=dpi,
+                    transparent=transparent_background,
+                    format="webp",
+                    pil_kwargs={
+                        "quality": webp_settings[0],
+                        "method": webp_settings[1],
+                        # optional extras you might care about:
+                        # "lossless": False,
+                    },
+                )
+
+            elif image_format == "png":  # png
+                plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
+            else:
+                raise ValueError(f"image_format {image_format} not supported")
         else:
             plt.show()
-            plt.close()
+        plt.close()
 
     def gen_plot_points_figure_coordinates(
         self, x, y, figure_dpi, figsize=(12, 10), draw_axis_frame=True
@@ -1343,6 +1391,7 @@ class Polarplot:
         max_plot_range: float,
         varunits: str,
         cmap,
+        use_cmap=True,
     ):
         """draw two histograms of plot range and full range
 
@@ -1379,8 +1428,9 @@ class Polarplot:
         col = bin_centers - min(bin_centers)
         col /= max(col)
 
-        for c, p in zip(col, patches):
-            plt.setp(p, "facecolor", cmap(c))
+        if use_cmap:
+            for c, p in zip(col, patches):
+                plt.setp(p, "facecolor", cmap(c))
 
         hist_axes.set_xticklabels([])
         hist_axes.get_xaxis().set_visible(False)
@@ -1636,7 +1686,7 @@ class Polarplot:
                     self.thisarea.flag_perc_axis[0],
                     self.thisarea.flag_perc_axis[1],
                     0.02,
-                    0.04 * number_of_flags,
+                    0.026 * number_of_flags,
                 ],  # left, bottom, width, height (fractions of axes)
             )
             axis_flag_color_square.spines["top"].set_visible(False)
@@ -1665,7 +1715,7 @@ class Polarplot:
                     self.thisarea.flag_perc_axis[0],
                     self.thisarea.flag_perc_axis[1],
                     self.thisarea.flag_perc_axis[2],
-                    0.04 * number_of_flags,
+                    0.026 * number_of_flags,
                 ]
             )  # left, bottom, width, height (fractions of axes)
 

@@ -56,12 +56,14 @@ def get_variable(ncfile, param_path):
     fill_value = None
     if "_FillValue" in varobj.ncattrs():
         fill_value = varobj.getncattr("_FillValue")
+        print(f"{param_path} FillValue found {fill_value}")
     elif "missing_value" in varobj.ncattrs():
         fill_value = varobj.getncattr("missing_value")
 
+    data = np.array(data)
     # Replace all occurrences of fill_value with np.nan
     if fill_value is not None:
-        data[data == fill_value] = np.nan
+        data[np.isclose(data, fill_value.astype(float), atol=0.1)] = np.nan
 
     ds.close()
     return data
@@ -130,6 +132,12 @@ def main():
     if v1.shape != v2.shape:
         sys.exit(f"Error: shapes do not match: {v1.shape} vs {v2.shape}")
 
+    v1_n_finite = np.isfinite(v1).sum()
+    v2_n_finite = np.isfinite(v2).sum()
+
+    ok = np.isfinite(v1) & np.isfinite(v2)
+    v1 = v1[ok]
+    v2 = v2[ok]
     diff = v1 - v2
 
     if args.list:
@@ -253,6 +261,9 @@ def main():
         ha="center",
         va="bottom",
     )
+
+    if v1_n_finite != v2_n_finite:
+        print(f"Number not nan mismatch {v1_n_finite} {v2_n_finite}")
 
     plt.show()
 

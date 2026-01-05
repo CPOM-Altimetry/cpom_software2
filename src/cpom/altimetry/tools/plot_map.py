@@ -116,6 +116,7 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
             var = var[part]
         except (KeyError, IndexError):
             sys.exit(f"{RED}NetCDF parameter '{nc_var_path}' not found{NC}")
+
     return var
 
 
@@ -197,6 +198,12 @@ def get_default_param(
     if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
         # CRISTAL L1b LR
         return "data_20/ku/tracker_range_calibrated", "m"
+    if "CRA_IR_1B_FF__SAC" in basename[: len("CRA_IR_1B_FF__SAC")]:
+        return "data/ku/tracker_range_calibrated", "m"
+    # CRISTAL L2 Products
+    if "CRA_IR_GR_HR__SAC" in basename[: len("CRA_IR_GR_HR__SAC")]:
+        # CRISTAL L2 SAC
+        return "data/ku/surface_classification_flag", "m"
 
     print(
         f"{ORANGE}Format of {basename} not recognized - "
@@ -276,6 +283,11 @@ def get_default_latlon_names(filename: str) -> tuple[str, str]:
     if "CRA_IR_1B_LR__" in basename[: len("CRA_IR_1B_LR__")]:
         # CRISTAL L1b LR
         return "data_20/ku/latitude", "data_20/ku/longitude"
+    if "CRA_IR_1B_FF__SAC" in basename[: len("CRA_IR_1B_FF__SAC")]:
+        return "data/ku/latitude", "data/ku/longitude"
+    if "CRA_IR_GR_HR__SAC" in basename[: len("CRA_IR_GR_HR__SAC")]:
+        # CRISTAL L1b LR
+        return "data/ku/lat", "data/ku/lon"
     print(
         f"{ORANGE}Format of {basename} not recognized - "
         f"so not using defaults for lat/lon parameters{NC}"
@@ -692,6 +704,7 @@ def main(args):
 
     # Print a list of available area definitions
     if args.list_areas:
+        print("\nfinding area definitions...\n", flush=True)
         area_list = list_all_area_definition_names()
         mystr = f"{BLACK_BOLD}List of Available Area Names from CPOM Area Definitions{NC}"
         print("-" * (len(mystr) - 8))
@@ -915,6 +928,8 @@ def main(args):
                         vals = get_variable(nc, params[i])[:].data
                         if vals.ndim == 3:
                             vals = vals[0].flatten()
+                        elif vals.ndim == 2:
+                            vals = vals.flatten()
                         try:
                             fill_value = get_variable(  # pylint: disable=protected-access
                                 nc, params[i]
@@ -925,7 +940,7 @@ def main(args):
                                 vals[vals == fill_value] = None
                             log.info("FillValue found: %s", fill_value)
                         except AttributeError as exc:
-                            log.info("No FillValue found for %s : %s", params[i], exc)
+                            log.debug("No FillValue found for %s : %s", params[i], exc)
 
                         lats = get_variable(nc, latnames[i])[:].data
                         if lats.ndim == 2:

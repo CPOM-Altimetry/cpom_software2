@@ -15,8 +15,8 @@ area_definition = {
     "bounding_lat": None,  # limiting latitude for round areas or None
     #   --------
     "specify_by_centre": True,  # specify plot area by centre lat/lon, width, height (km)
-    "centre_lon": -116.067,  # degrees E
-    "centre_lat": 33.48,  # degrees N
+    "centre_lon": -115.95,  # degrees E
+    "centre_lat": 33.28,  # degrees N
     #   --------
     "specify_plot_area_by_lowerleft_corner": False,  # specify by lower left corner, w,h
     "llcorner_lat": 58.7,  # lower left corner latitude
@@ -24,8 +24,8 @@ area_definition = {
     #   --------
     "lon_0": 243.762,  # None or projection y-axis longitude (used for mercator)
     #   --------
-    "width_km": 20,  # width in km of plot area (x direction)
-    "height_km": 20,  # height in km of plot area (y direction)
+    "width_km": 130,  # width in km of plot area (x direction)
+    "height_km": 130,  # height in km of plot area (y direction)
     # --------------------------------------------
     # Area characteristics
     # --------------------------------------------
@@ -67,7 +67,7 @@ area_definition = {
     "background_color": None,  # background color of map
     "background_image": "google_satellite",  # background image. see cpom.backgrounds
     "background_image_alpha": 1.0,  # 0..1.0, default is 1.0, image transparency
-    "background_image_resolution": "vvhigh",  # None, 'low','medium', 'high','vhigh','vvhigh'
+    "background_image_resolution": "vhigh",  # None, 'low','medium', 'high','vhigh','vvhigh'
     "hillshade_params": None,  # hill shade parameter dict or None
     "show_polygon_overlay_in_main_map": True,  # Overlay the area polygon outline in the main map
     "grid_polygon_overlay_mask": None,

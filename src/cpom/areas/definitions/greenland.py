@@ -76,7 +76,7 @@ area_definition = {
     "draw_coastlines": True,  # Draw coastlines
     "coastline_color": "grey",  # Colour to draw coastlines
     "use_antarctica_medium_coastline": False,  # bool: Antarctic coastline including iceshelves
-    "use_cartopy_coastline": "medium",  # 'no', 'low','medium', 'high' resolution
+    "use_cartopy_coastline": "high",  # 'no', 'low','medium', 'high' resolution
     "show_gridlines": True,  # True|False, display lat/lon grid lines
     "area_long_name_position": (0.39, 0.91),  # for default annotation position of area long name
     "area_long_name_position_simple": (
