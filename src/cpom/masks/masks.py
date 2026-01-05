@@ -1,5 +1,6 @@
 """Class for area masking"""
 
+import csv
 import hashlib
 import logging
 from multiprocessing.shared_memory import SharedMemory
@@ -7,7 +8,6 @@ from os import environ
 from os.path import isfile
 from typing import Any, Optional
 
-import csv
 import numpy as np
 import polars as pl
 from netCDF4 import Dataset  # pylint: disable=E0611
@@ -42,7 +42,8 @@ mask_list = [
     "greenland_icesheet_2km_grid_mask_mouginot2019",
     # Greenland ice sheet grounded ice mask, from 2km grid, source: Mouginot 2019. Can select basins
     "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers",
-    # Greenland ice sheet grounded ice + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
+    # Greenland ice sheet grounded ice
+    # + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
 ]
 
 # pylint: disable=too-many-instance-attributes
@@ -503,9 +504,11 @@ class Mask:
             ]
 
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
-            self.shapefile_path = (f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/"
-                                   "antarctica/rignot_2016_imbie2_ant_grounded_icesheet_basins/data/"
-                                   "for_mask/ANT_Basins_IMBIE2_v1.6.shp")
+            self.shapefile_path = (
+                f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/"
+                "antarctica/rignot_2016_imbie2_ant_grounded_icesheet_basins/data/"
+                "/ANT_Basins_IMBIE2_v1.6.shp"
+            )
             self.shapefile_column_name = "SUBREGION1"
             self.mask_long_name = "Rignot (2016) 2km grid"
 
@@ -548,8 +551,10 @@ class Mask:
             self.grid_value_names[56] = "NO"
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
-            self.shapefile_path = (f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/"
-            "GRE_Basins_IMBIE2_v1.3/shpfiles/GRE_IceSheet_IMBIE2_v1.3.shp")
+            self.shapefile_path = (
+                f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/"
+                "GRE_Basins_IMBIE2_v1.3/shpfiles/GRE_IceSheet_IMBIE2_v1.3.shp"
+            )
             self.shapefile_column_name = "SUBREGION1"
             self.mask_long_name = "Rignot (2016) 2km grid"
         elif mask_name == "greenland_icesheet_2km_grid_mask_mouginot2019":
@@ -594,10 +599,10 @@ class Mask:
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
             self.shapefile_path = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "Mouginot/"
-                    "Greenland_Basins_PS_v1.4.2.shp"
-                )
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/"
+                "Greenland_Basins_PS_v1.4.2.shp"
+            )
             self.shapefile_column_name = "SUBREGION1"
 
             self.mask_long_name = "Mouginot (2019) 2km grid"
@@ -627,25 +632,26 @@ class Mask:
             self.bad_mask_value = 0  # value in unknown grid cells in mask
 
             self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
-            #Load glacier names from CSV
+            # Load glacier names from CSV
             glacier_csv = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/Mouginot/mouginot_subbasins/glacier_names.csv'
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/mouginot_subbasins/glacier_names.csv"
             )
             # Mask values are 1-260, CSV has 260 rows. Prepend entry for mask value 0.
             glacier_names = ["Unclassified"]
             with open(glacier_csv, mode="r") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        glacier_names.append(row["NAME"])
+                reader = csv.DictReader(f)
+                for row in reader:
+                    glacier_names.append(row["NAME"])
 
             self.grid_value_names = glacier_names
 
             self.mask_grid_possible_values = list(range(len(self.grid_value_names)))
             self.shapefile_path = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "Mouginot/mouginot_subbasins/"
-                    "Greenland_Basins_PS_v1.4.2.shp"
-                )
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/mouginot_subbasins/"
+                "Greenland_Basins_PS_v1.4.2.shp"
+            )
             self.shapefile_column_name = "NAME"
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
