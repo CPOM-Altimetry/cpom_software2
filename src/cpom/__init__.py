@@ -14,6 +14,12 @@ Make sure you have *git* installed on your target system.
 Clone the git public repository in to a suitable directory on your system.
 This will create a directory called **/cpom_software2** in your current directory.
 
+```
+Note: If installing at Lancaster University you should clone the repository
+in your home directory and not in a *luna* sub-directory. The installation script
+is likely to fail if you try to install within *luna* due to specific file system issues.
+```
+
 with https:
 `git clone https://github.com/CPOM-Altimetry/cpom_software2.git`
 
