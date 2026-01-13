@@ -25,6 +25,20 @@ or with the GitHub CLI:
 
 ## Quick Setup
 
+It is recommended to deactivate conda or any other python virtual environment
+before running the install script.
+
+```conda deactivate
+```
+
+Check that you have python 3.12 installed on your system by running:
+
+```which python3.12
+```
+
+If python3.12 is not found then you will need to install it first (although not
+within conda). On macOS you can use homebrew.
+
 This quick setup runs a script to do all the setup work.
 It is recommended in most cases (tested on macos, linux)
 
@@ -35,7 +49,7 @@ cd cpom_software2
 ./install.sh
 ```
 
-This will install 
+This will install
 
 - python 3.12
 - poetry
@@ -66,17 +80,17 @@ cpom software v2. This is in addition to in-code usage of the cpom v2 modules.
 - **plot_map.py**
   generic program to plot parameter(s) from netcdf files(s) on cryosphere maps.
   Works with any netcdf file(s) containing latitude, longitude and parameter data,
-  but also has knowledge of most common altimetry formats to self discover lat,lon names. 
+  but also has knowledge of most common altimetry formats to self discover lat,lon names.
   Contains command line options for many of the cpom Polarplot.plot_points() class function.
   See `cpom.altimetry.tools.plot_map` for all options.
 
-- **find_files_in_area.py** 
-  identify netcdf files within a directory (or recursive sub-dir) containing lat,lon 
-  locations within a cpom area mask or within a radius of a specified lat,lon point. 
-  For example you could use it to list CS2 L1b files passing over the Greenland ice 
-  sheet for validation purposes. Optionally plots the tracks as well. 
+- **find_files_in_area.py**
+  identify netcdf files within a directory (or recursive sub-dir) containing lat,lon
+  locations within a cpom area mask or within a radius of a specified lat,lon point.
+  For example you could use it to list CS2 L1b files passing over the Greenland ice
+  sheet for validation purposes. Optionally plots the tracks as well.
   For all the many search options see:
-  `cpom.altimetry.tools.find_files_in_area` 
+  `cpom.altimetry.tools.find_files_in_area`
 
 # Development
 
@@ -94,24 +108,24 @@ This section details the main development processes to contribute to the CPOM so
   ```
   git commit -a -m "commit description"
   ```
-  
-  During the git commit the automated code checks (lint, mypy, ruff, etc) should run 
-  (using the pre-installed **pre-commit** tool). These must pass in order for the 
-  commit to succeed. 
+
+  During the git commit the automated code checks (lint, mypy, ruff, etc) should run
+  (using the pre-installed **pre-commit** tool). These must pass in order for the
+  commit to succeed.
   If these checks do not run then your **pre-commit** setup (during installation) is not correct.
-  
+
 - push your branch to GitHub
   ```
   git push
   ```
 
 - Create a **Pull Request (PR)** on GitHub for your new branch.
-  
-  This just starts a dialog on your new feature. You can continue to develop the feature with 
+
+  This just starts a dialog on your new feature. You can continue to develop the feature with
   additional commits and pushes.
 
-  This will also automatically run the **GitHub Actions** tests on your full branch. 
-  This runs the static code checks (as per pre-commit and also all the pytests in the full branch). 
+  This will also automatically run the **GitHub Actions** tests on your full branch.
+  This runs the static code checks (as per pre-commit and also all the pytests in the full branch).
   The success or failure (including reasons) will be reported in the PR page.
 
 - Finally, once your feature is fully tested request a review on GitHub in your Pull Request page.
@@ -140,23 +154,23 @@ or
 
 # Automatic Documentation
 
-Documentation is automatically generated to this page 
-https://cpom-altimetry.github.io/cpom_software2 
-from docstrings in the code when the **main** branch is updated on GitHub. 
+Documentation is automatically generated to this page
+https://cpom-altimetry.github.io/cpom_software2
+from docstrings in the code when the **main** branch is updated on GitHub.
 A few things to note:
 
-- docstrings should use Markdown syntax for basic formatting. See 
+- docstrings should use Markdown syntax for basic formatting. See
   [markdownguide.org/basic-syntax](https://www.markdownguide.org/basic-syntax).
 - within each directory there should be a __init__.py file. The docstring in these files
     are displayed as the introduction page of that module or set of modules.
 - the top level page (ie this page) is in **src/cpom/__init__.py**
-- you can display images within docstrings by putting the images in 
+- you can display images within docstrings by putting the images in
     **docs/images/**some_image.png and then in the module's docstring put
     `![](/cpom_software2/images/some_image.png "")`. Note you should do a `git add docs/images`
     within your branch as well so that the image is included. See the docstring example in
     `cpom.altimetry.tools.plot_map`
-- you can create diagrams using **mermaid** syntax within the docstring. 
-  See this 
+- you can create diagrams using **mermaid** syntax within the docstring.
+  See this
   [link](https://github.blog/developer-skills/github/include-diagrams-markdown-files-mermaid/).
 - **documentation is only included in the web page when the main branch is updated** so
   you won't see any update when you modify a separate branch. Your docstrings will only be

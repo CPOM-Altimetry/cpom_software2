@@ -41,7 +41,7 @@ dh_video_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/annual_dh/vid
 portal_dir=/cpnet/www/cpom/ais_cci_phase2/annual_dh_quicklooks
 rm -f /cpnet/www/cpom/ais_cci_phase2/annual_dh_quicklooks/*
 /usr/bin/rsync  -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
- -avz --no-t --no-perms \
+ -avz --no-perms \
  alanmuir@10.0.0.24:${dh_video_dir}/ \
  $portal_dir    
 
@@ -52,10 +52,11 @@ rm -f /cpnet/www/cpom/ais_cci_phase2/annual_dh_quicklooks/*
 
 prod_dir=/cpnet/altimetry/landice/ais_cci_plus_phase2/products/single_mission
 
+# --no-t to avoid modifying timestamps, --no-perms to avoid permission issues   
 for filetype in nc webp avif ; do
 rm -f ${prod_dir}/ESACCI*.${filetype}
 /usr/bin/rsync  -e "ssh -i ~/.ssh/id_rsa_northumbria -o ProxyCommand='ssh -i ~/.ssh/id_rsa_northumbria -W %h:%p alanmuir@138.248.197.3 -p 10999'" \
- -avz --no-t --no-perms \
+ -avz  --no-perms \
  alanmuir@10.0.0.24:${prod_dir}/*.${filetype} \
  $prod_dir
  done
