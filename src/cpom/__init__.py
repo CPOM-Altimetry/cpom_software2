@@ -41,10 +41,26 @@ which python3.12
 If python3.12 is not found then you will need to install it first (although not
 within conda). On macOS you can use homebrew.
 
-This quick setup runs a script to do all the setup work.
-It is recommended in most cases (tested on macos, linux)
+Check that poetry is installed.
 
-Run the install script:
+```
+which poetry
+```
+
+If it is not installed.
+
+```
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+and then add the install path $HOME/.local/bin to your PATH environment. Typically
+you would add the following line to your $HOME/.bash_profile file.
+
+```
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Run the main install script:
 
 ```
 cd cpom_software2
