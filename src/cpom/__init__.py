@@ -16,8 +16,9 @@ This will create a directory called **/cpom_software2** in your current director
 
 ```
 Note: If installing at Lancaster University you should clone the repository
-in your home directory and not in a *luna* sub-directory. The installation script
-is likely to fail if you try to install within *luna* due to specific file system issues.
+in your home directory and not in a luna sub-directory. The installation script
+is likely to fail if you try to install within luna due to specific file system
+restrictions.
 ```
 
 with https:
