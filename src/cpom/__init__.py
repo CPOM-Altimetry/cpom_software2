@@ -28,12 +28,14 @@ or with the GitHub CLI:
 It is recommended to deactivate conda or any other python virtual environment
 before running the install script.
 
-```conda deactivate
+```
+conda deactivate
 ```
 
 Check that you have python 3.12 installed on your system by running:
 
-```which python3.12
+```
+which python3.12
 ```
 
 If python3.12 is not found then you will need to install it first (although not
