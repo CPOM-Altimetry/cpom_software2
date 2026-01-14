@@ -64,14 +64,11 @@ def get_objects(params: argparse.Namespace) -> tuple[Area, pl.DataFrame]:
     return this_area, grid_data
 
 
-# pylint: disable=too-many-arguments, too-many-positional-arguments
 def plot(
     params: argparse.Namespace,
     data: pl.DataFrame,
     area: Area,
-    value_column: str,
-    title: str,
-    plot_range: tuple[float, float],
+    plot_params: tuple[str, str, tuple[float, float]],
 ) -> None:
     """
     Generate and save a point plot for a grid value column.
@@ -83,11 +80,11 @@ def plot(
         params (argparse.Namespace): Command line arguments,
         data (pl.DataFrame): Surface fit grid data
         area (Area): CPOM Area object
-        value_column (str): Column name to plot.
-        title (str): Plot title.
-        plot_range (tuple[float, float]): Value range (min, max) used to
-            filter points prior to plotting.
+        plot_params:
+            (value_column, title, plot_range)
     """
+    value_column, title, plot_range = plot_params
+
     grid_data_f = data.filter(
         (pl.col(value_column) > plot_range[0]) & (pl.col(value_column) < plot_range[1])
     )
@@ -148,11 +145,10 @@ def main(args):
     os.makedirs(Path(params.out_dir) / "plots", exist_ok=True)
 
     area, grid_data = get_objects(params)
-
-    plot(params, grid_data, area, "slope", "Slope", (0.0, 2.0))
-    plot(params, grid_data, area, "dhdt", "dh/dt", (-1.0, 1.0))
-    plot(params, grid_data, area, "rms", "RMS of linear fit", (0.0, 1.0))
-    plot(params, grid_data, area, "sigma", "Sigma: std of linear fit", (0.0, 2.0))
+    plot(params, grid_data, area, ("slope", "Slope", (0.0, 2.0)))
+    plot(params, grid_data, area, ("dhdt", "dh/dt", (-1.0, 1.0)))
+    plot(params, grid_data, area, ("rms", "RMS of linear fit", (0.0, 1.0)))
+    plot(params, grid_data, area, ("sigma", "Sigma: std of linear fit", (0.0, 2.0)))
 
 
 if __name__ == "__main__":

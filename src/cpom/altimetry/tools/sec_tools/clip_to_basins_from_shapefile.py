@@ -2,31 +2,32 @@
 cpom.altimetry.tools.sec_tools.clip_to_basins_from_shapefile
 
 Purpose:
-    Clips altimetry data to glacier or basin boundaries defined in a shapefile.
 
-    Spatially subset altimetry data to user-defined regions
-    (e.g., glaciers, ice shelves, drainage basins) by clipping points to polygon geometries.
-    Supports both non-partitioned datasets
-        and large partitioned datasets processed incrementally.
+    Clips data to basin, glacier, or region boundaries defined by polygon geometries 
+    in a shapefile, based on whether the cell centre lies within a polygon boundary.
 
-Shapefile Requirements:
+    It supports both:
+        - Non-partitioned datasets, loaded and processed in memory. 
+        - Large partitioned datasets, processed incrementally using bounding-box
+        pre-filtering to reduce memory usage.
+
+    It is reccommended to use this tool after epoch_average.
+
+Shapefile requirements:
     - Polygon geometries defining basin/region boundaries
     - A column containing basin/region identifiers (name, ID, etc.)
 
-Configuration Options:
-    - Use a CPOM Mask class (if it includes shapefile metadata), or
-    - Provide custom shapefile path and column name directly
-
-Processing Modes:
-    - Non-partitioned: Load full dataset into memory and clip to each basin
-    - Partitioned: Process data one partition at a time (for large datasets saved
-      before the epoch_average step), with bounding box prefiltering.
+Shapefile configuration options:
+    - Use a CPOM Mask class that defines a shapefile and selector column.
+    - Provide a shapefile path and selector column explicitly via CLI arguments.
 
 Output:
-    - Clipped data: <out_dir>/<basin_name>/data.parquet
-                   (Non-partitioned: single file per basin)
-                   (Partitioned: multiple files per basin with x_part/y_part structure)
-    - Metadata: <out_dir>/metadata.json (processing parameters and timing)
+    - Clipped Parquet data written per basin:
+        * Non-partitioned:
+            <out_dir>/<basin_name>/data.parquet
+        * Partitioned:
+            <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
+    - metadata.json summarising processing parameters and execution time
 """
 
 import argparse
@@ -50,8 +51,7 @@ from cpom.masks.masks import Mask
 
 def parse_arguments(args: list[str]) -> argparse.Namespace:
     """
-    Parse command line arguments for clipping altimetry data to basins
-    using a shapefile.
+    Parse command-line arguments for clipping altimetry data to basin polygons.
 
     Args:
         args: List of command-line arguments.
@@ -60,17 +60,17 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         argparse.Namespace: Parsed command line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Clip altimetry data to glacier outlines from shapefile"
+        description="Clip altimetry data to basin polygons from shapefile"
     )
     parser.add_argument(
         "--in_dir",
         type=str,
         required=True,
-        help="Input gridded altimetry data" "e.g. from epoch_average.parquet",
+        help="Directory containing input altimetry data",
     )
     parser.add_argument(
         "--out_dir",
-        help="Path of output directory for clipped_epochs results",
+        help="Directory for output clipped results",
         type=str,
         required=True,
     )
@@ -78,7 +78,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="Glob pattern to match parquet files in input directory.",
+        help="File glob pattern for selecting input files."
     )
     parser.add_argument(
         "--grid_info_json",
@@ -114,60 +114,15 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
 
     return parser.parse_args(args)
 
-
-def clip_data_to_shape(
-    grid_area: GridArea,
-    subregion_shape: gpd.GeoDataFrame,
-    data: pl.LazyFrame | pl.DataFrame,
-) -> pl.LazyFrame:
-    """
-    Clip data to basin shape by filtering to bins whose centres lie
-    within the basin shapefile.
-
-    Args:
-        grid_area (GridArea): CPOM GridArea object for coordinate conversion.
-        subregion_shape (gpd.GeoDataFrame): GeoDataFrame of the basin or subregion shape.
-        data (pl.LazyFrame | pl.DataFrame): Data with x_bin, y_bin columns.
-
-    Returns:
-        pl.LazyFrame: Clipped data containing only bins whose centres are within the basin.
-    """
-    # Get unique bins in the data
-    unique_bins = data.select(["x_bin", "y_bin", "x", "y"]).unique(subset=["x_bin", "y_bin"])
-
-    # Always collect to DataFrame for pandas operations
-    unique_bins_df: pl.DataFrame = (
-        unique_bins.collect() if isinstance(unique_bins, pl.LazyFrame) else unique_bins
-    )
-
-    # Create GeoDataFrame of bin centres
-    bin_centres_gdf = gpd.GeoDataFrame(
-        unique_bins_df.to_pandas(),
-        geometry=gpd.points_from_xy(
-            unique_bins_df["x"].to_numpy(),
-            unique_bins_df["y"].to_numpy(),
-        ),
-        crs=grid_area.crs_bng,
-    )
-
-    # Spatial join to find bins whose centres are within the basin
-    bins_in_basin = gpd.sjoin(bin_centres_gdf, subregion_shape, how="inner", predicate="within")[
-        ["x_bin", "y_bin"]
-    ].drop_duplicates()
-
-    # Convert to Polars and filter original data
-    filter_df = pl.from_pandas(bins_in_basin)
-    if isinstance(data, pl.LazyFrame):
-        return data.join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
-    return data.lazy().join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
-
-
 def add_coordinates_to_data(
     data: pl.LazyFrame,
     grid_area: GridArea,
 ) -> pl.LazyFrame:
     """
-    Add cell centre x/y coordinates to data based on x_bin and y_bin columns.
+    Add projected x/y coordinates for grid-cell centres to a dataset.
+    
+    Coordinates are derived from x_bin and y_bin indices using the GridArea
+    definition and appended as new columns.
 
     Args:
         data (pl.LazyFrame): Data with x_bin and y_bin columns.
@@ -195,12 +150,13 @@ def load_partitioned_data_for_basin(
     logger: Logger,
 ):
     """
-    Load partitioned Parquet data and filter by a basin bounding box.
+    Incrementally load partitioned Parquet data filtered to a basin bounding box.
 
-    Iterates over partitioned Parquet files and yields one partition at a time,
-    filtering by the basin extent so only a single partition is held in memory.
-    If projected coordinates (`x`, `y`) are not present, they are derived from
-    grid indices (`x_bin`, `y_bin`) using `GridArea`.
+    Each partition is read independently, spatially filtered using the basin
+    bounding box, and yielded as a DataFrame. This avoids loading the full
+    dataset into memory.
+
+    If projected coordinates are not present, they are derived from grid indices.
 
     Args:
         grid_area (GridArea): CPOM GridArea object.
@@ -208,8 +164,8 @@ def load_partitioned_data_for_basin(
             Includes:
             - in_dir (str): Directory containing partitioned parquet files
             - parquet_glob (str): Glob pattern for parquet files
-        basin_shape (gpd.GeoDataFrame): Basin geometry to get bounds from.
-        logger (Logger): Logger for progress messages.
+        basin_shape (geopandas.GeoDataFrame): Basin geometry used to determine bounding-box limits.
+        logger (Logger): Logger for progress and status messages.
 
     Yields:
         pl.DataFrame: Each partition with x/y coordinates added and filtered by basin bounds.
@@ -256,6 +212,50 @@ def load_partitioned_data_for_basin(
 
         yield partition
 
+def clip_data_to_shape(
+    grid_area: GridArea,
+    subregion_shape: gpd.GeoDataFrame,
+    data: pl.LazyFrame | pl.DataFrame,
+) -> pl.LazyFrame:
+    """
+    Spatially clip data to a basin polygon using grid-cell centre locations.
+    
+    Args:
+        grid_area (GridArea): CPOM GridArea object for coordinate conversion.
+        subregion_shape ( geopandas.GeoDataFrame ):Basin or region polygon geometry.
+        data (pl.LazyFrame | pl.DataFrame): Input data containing [x_bin, y_bin, x , y] columns.
+
+    Returns:
+        pl.LazyFrame: Clipped data containing only bins whose centres are within the basin.
+    """
+    # Get unique bins in the data
+    unique_bins = data.select(["x_bin", "y_bin", "x", "y"]).unique(subset=["x_bin", "y_bin"])
+
+    # Always collect to DataFrame for pandas operations
+    unique_bins_df: pl.DataFrame = (
+        unique_bins.collect() if isinstance(unique_bins, pl.LazyFrame) else unique_bins
+    )
+
+    # Create GeoDataFrame of bin centres
+    bin_centres_gdf = gpd.GeoDataFrame(
+        unique_bins_df.to_pandas(),
+        geometry=gpd.points_from_xy(
+            unique_bins_df["x"].to_numpy(),
+            unique_bins_df["y"].to_numpy(),
+        ),
+        crs=grid_area.crs_bng,
+    )
+
+    # Spatial join to find bins whose centres are within the basin
+    bins_in_basin = gpd.sjoin(bin_centres_gdf, subregion_shape, how="inner", predicate="within")[
+        ["x_bin", "y_bin"]
+    ].drop_duplicates()
+
+    # Convert to Polars and filter original data
+    filter_df = pl.from_pandas(bins_in_basin)
+    if isinstance(data, pl.LazyFrame):
+        return data.join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
+    return data.lazy().join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
 
 def process_single_basin(
     params: argparse.Namespace,
@@ -265,14 +265,14 @@ def process_single_basin(
     logger: Logger,
 ):
     """
-    Clip altimetry data to a single basin and save results to parquet files.
+    Clip altimetry data to a single basin and write results to disk.
 
     Supports two processing modes:
-    - Non-partitioned: If params.partitioned is False, clips the entire dataset to the basin
-      and saves as a single parquet file.
-    - Partitioned: If params.partitioned is True, loads and processes data one partition at a time,
-      applying a bounding box filter before clipping, and saves each non-empty partition
-      to its own parquet file with x_part and y_part directory structure.
+    - Non-partitioned:
+        The full dataset is loaded, clipped, and written as a single Parquet file.
+    - Partitioned:
+        Data are processed one partition at a time, clipped to the basin,
+        and written to partitioned output directories. --partitioned flag must be set.
 
     Args:
         params: Command line parameters.
@@ -325,9 +325,8 @@ def get_metadata_json(params: argparse.Namespace, start_time, logger: Logger):
     Generate metadata JSON for clipped data.
     Args:
         params (argparse.Namespace): Command line parameters.
-            Includes:
-                Command line parameters
-                Processing time
+        start_time (float): Start time.
+        logger (Logger): Logger object.
     """
     meta_json_path = Path(params.out_dir) / "metadata.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
@@ -363,7 +362,7 @@ def main(args):
         8. Write metadata JSON
 
     Args:
-        args (list[str]): Command line arguments (typically sys.argv[1:]).
+        args (list[str]): Command line arguments.
     """
 
     start_time = time.time()

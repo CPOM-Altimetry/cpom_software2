@@ -2,18 +2,28 @@
 cpom.altimetry.tools.sec_tools.cross_calibrate_missions
 
 Purpose:
-    Cross-calibrate multiple altimetry missions to remove systematic biases.
+    Cross-calibrate multiple altimetry missions to remove systematic inter-mission biases.
 
-    Uses a reference mission to estimate and remove relative biases from other missions
-    in overlapping time periods and spatial regions. Applies least-squares model fitting
-    to estimate per-mission biases, with optional spatial interpolation for cells with
-    insufficient data.
+    This tool aligns elevation change measurements from multiple satellite altimetry missions
+    by estimating and removing relative biases between missions. It uses the first mission
+    in the sorted mission list as a reference (bias = 0) and estimates biases for all other
+    missions relative to this reference.
 
-Output:
-    - Corrected data: <out_dir>/<basin>/corrected_epoch_average.parquet
-    - Per-basin stats: <out_dir>/<basin>/outlier_stats.json
+    The cross-calibration process:
+        1. Fits a polynomial temporal trend plus per-mission bias terms to elevation data
+        2. Applies quality control to filter unrealistic bias estimates
+        3. Uses spatial interpolation to fill missing bias values
+        4. Applies corrections to produce bias-adjusted elevation time series
+
+    Supports both ice sheet-wide processing and basin-level processing with independent
+    calibration per basin.
+
+Output Files:
+    - Corrected grid data: <out_dir>/<basin>/corrected_epoch_average.parquet
+    - Time series: <out_dir>/<basin>/cross_calibrated_timeseries.parquet
+    - Outlier statistics: <out_dir>/<basin>/outlier_stats.json
     - Central metadata: <out_dir>/cross_calibration_metadata.json
-    - Optional plots: <out_dir>/<basin>/plots/
+    - Comparison plots: <out_dir>/<basin>/*_cross_calibration_comparison.png (optional)
 """
 
 import argparse
@@ -50,77 +60,107 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         argparse.Namespace: Parsed arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Cross-calibrate multiple altimetry missions across grid cells",
+        description="Cross-calibrate multiple altimetry missions to remove inter-mission biases",
     )
 
+    # I/O Arguments
     parser.add_argument(
         "--mission_mapper",
         type=json.loads,  # Parse JSON string to dict
         required=True,
-        help="JSON string mapping mission names to parquet file directories",
+        help="JSON string mapping mission identifiers to their data directories. "
+        "Example: '{\"e1\":\"/path/to/e1\", \"cs2\":\"/path/to/cs2\"}'. "
+        "Each directory should contain Parquet files with epoch-averaged elevation data.",
     )
     parser.add_argument(
         "--out_dir",
         type=str,
-        help="Output directory for results. If not provided, uses current directory.",
+        required=True,
+        help="Output directory for cross-calibrated results, statistics, and metadata. "
+        "Directory will be created if it does not exist.",
     )
+    
+    # Mission Configuration
     parser.add_argument(
         "--missions_sorted",
         nargs="+",
         required=True,
         default=["e1", "e2", "env", "cs2"],
-        help="List of missions to cross-calibrate, in order.",
+        help="Ordered list of mission identifiers to cross-calibrate. "
+        "The first mission is used as the reference (bias = 0). "
+        "All other missions will be adjusted relative to this reference. "
+        "Example: e1 e2 env cs2",
     )
+    
+    # Quality Control Parameters
     parser.add_argument(
-        "--bias_threshold", type=float, default=100.0, help="Maximum allowable bias correction"
+        "--bias_threshold", 
+        type=float, 
+        default=100.0, 
+        help="Maximum allowable absolute bias value in meters. "
+        "Bias corrections exceeding this threshold are considered outliers, "
+        "set to None, and filled via spatial interpolation. Default: 100.0m"
     )
-    parser.add_argument(
-        "--epoch_column",
-        help="Name of the epoch column in the input data",
-        default="epoch_number",
-    )
-    parser.add_argument(
-        "--time_column",
-        help="Name of the fractional time column in the input data "
-        "(will be converted to absolute years)",
-        default="epoch_midpoint_fractional_yr",
-    )
-    parser.add_argument(
-        "--dh_column",
-        help="Name of the dh column in the input data",
-        default="dh_ave",
-    )
-    # Shared basin/region selection arguments
-    add_basin_selection_arguments(parser)
     parser.add_argument(
         "--min_observations",
         type=int,
         default=5,
-        help="Minimum number of observations required per grid cell",
+        help="Minimum total number of observations required per grid cell across all missions. "
+        "Cells with fewer observations are excluded from cross-calibration. Default: 5",
     )
+    
+    # Column Name Arguments
+    parser.add_argument(
+        "--epoch_column",
+        type=str,
+        help="Name of the epoch number column in input Parquet files. "
+=        default="epoch_number",
+    )
+    parser.add_argument(
+        "--time_column",
+        type=str,
+        help="Name of the epoch time column in input Parquet files. "
+        "For datetime columns: converted to fractional years (year + day/365.25). "
+        "For numeric columns: interpreted as years since 1991.0. "
+        default="epoch_midpoint_fractional_yr",
+    )
+    parser.add_argument(
+        "--dh_column",
+        type=str,
+        help="Name of the elevation change (dh) column in input Parquet files. "
+        default="dh_ave",
+    )
+    
+    # Output Options
     parser.add_argument(
         "--plot_results",
         action="store_false",
-        help="Generate comparison plots of original vs cross-calibrated time series",
+        help="Disable generation of comparison plots showing original vs cross-calibrated "
+        "time series for each basin. Plots are enabled by default.",
     )
-
+    # Shared basin/region selection arguments
+    add_basin_selection_arguments(parser)
     return parser.parse_args(args)
 
 
 def get_basins_for_all_missions(
     params: argparse.Namespace, basins_to_process: list[str], logger: logging.Logger
-):
+) -> list[str]:
     """
-    Filter sub-basin list to those that exist for all missions.
+    Filter basin list to include only basins with data available for all missions.
+
+    Validates that each basin subdirectory exists and contains Parquet files for every
+    mission specified in params.mission_mapper. Basins missing data for any mission
+    are excluded. 
 
     Args:
-        params (argparse.Namespace): Command line arguments.
-            Includes : mission_mapper (dict)
-        basins_to_process (list): List of sub-basins to verify
-        logger (logging.Logger): Logger for messages
+        params (argparse.Namespace): Command line arguments containing:
+            - mission_mapper (dict): Maps mission identifiers to base directories
+        basins_to_process (list[str]): List of basin names to validate
+        logger (logging.Logger): Logger
 
     Returns:
-        list: Valid sub-basins present in all missions
+        list[str]: Validated basin names present in all missions
     """
     valid_sub_basins = []
     for sub_basin in basins_to_process:
@@ -137,26 +177,28 @@ def get_basins_for_all_missions(
     return valid_sub_basins
 
 
-def get_path(params, mission: str, sub_basin: str = "None") -> Path:
+def get_path(params: argparse.Namespace, mission: str, sub_basin: str = "None") -> Path:
     """
-    Get file path pointing to Parquet files for a specific mission
-    and (optionally) a specific region/sub-basin.
+    Construct file path pattern for locating mission Parquet files.
 
-    Uses params.mission_mapper, mapping mission identifiers
-    (e.g. "e1", "env", "cs2") to their corresponding base directory paths.
+    Builds a glob pattern to match Parquet files for a specific mission, with optional
+    basin-level subdirectory support. Uses params.mission_mapper to resolve the base
+    directory for each mission identifier.
 
-    If a sub-basin : <mission_root>/<sub_basin>/*.parquet
-    If sub_basin is "None" or ["None"]:  <mission_root>/*.parquet
+    Path patterns:
+        - With basin: <mission_root>/<sub_basin>/*.parquet
+        - Root level: <mission_root>/*.parquet
 
     Args:
-        params (argparse.Namespace): Command line arguments.
-                                    Includes : mission_mapper (dict)
-        mission (str): Mission identifier.
-        sub_basin (str): Name of a sub-basin directory. If "None" or ["None"], no sub-basin
-            directory is appended. Defaults to "None".
+        params (argparse.Namespace): Command line arguments containing:
+            - mission_mapper (dict): Maps mission identifiers (e.g., 'e1', 'cs2') to
+              base directory paths
+        mission (str): Mission identifier to look up in mission_mapper
+        sub_basin (str, optional): Basin subdirectory name. If "None" or None,
+            returns root-level pattern. Defaults to "None".
+
     Returns:
-        Path: Wildcard pattern to match all Parquet files for the selected mission
-        (and optionally sub-basin).
+        Path: Glob pattern (*.parquet) for matching mission data files
     """
     if sub_basin in ["None", ["None"], None]:
         return Path(params.mission_mapper[mission]) / "*.parquet"
@@ -165,24 +207,25 @@ def get_path(params, mission: str, sub_basin: str = "None") -> Path:
 
 def get_grid_cell_dataframe(params: argparse.Namespace, sub_basin: str = "None") -> pl.LazyFrame:
     """
-    Load and concatenate epoch-averaged altimetry data from multiple missions.
+    Load and concatenate epoch-averaged elevation data from all missions into a single LazyFrame.
 
-    For each mission in params.mission_mapper, load the corresponding Parquet files, concatinate
-    into a LazyFrame.
+    Scans Parquet files for each mission specified in params.missions_sorted, selects required
+    columns (grid coordinates, epoch info, elevation, time), adds a mission identifier column,
+    and concatenates all missions into a unified dataset for cross-calibration.
 
     Args:
-        params (argparse.Namespace): Parsed command line arguments.
-            Includes :
-            - mission_mapper (dict): Maps mission names to base directories
-            - missions_sorted (list): List of mission identifiers to process
-            - epoch_column (str): Epoch number column name
-            - time_column (str): Epoch time column. (Fractional midpoint year)
-            - dh_column (str): Elevation change column name
-        sub_basin (str, optional): Sub-basin directory name to process. If 'None',
-                                 processes root-level data. Defaults to 'None'.
+        params (argparse.Namespace): Parsed command line arguments containing:
+            - mission_mapper (dict): Maps mission identifiers to data directories
+            - missions_sorted (list[str]): Ordered list of missions to process
+            - epoch_column (str): Name of epoch number column
+            - time_column (str): Name of epoch time column (fractional year)
+            - dh_column (str): Name of elevation change column
+        sub_basin (str, optional): Basin subdirectory name. If 'None',
+            processes root-level data. Defaults to 'None'.
 
     Returns:
-        pl.LazyFrame: Concatenated LazyFrame
+        pl.LazyFrame: Concatenated lazy dataframe with columns:
+            x_bin, y_bin, epoch_column, time_column, dh_column, mission
     """
     lf = []
     for mission in params.missions_sorted:
@@ -203,18 +246,25 @@ def get_grid_cell_dataframe(params: argparse.Namespace, sub_basin: str = "None")
     return pl.concat(lf)
 
 
-def get_time_absolute_years(data: pl.LazyFrame, time_column: str, base_year=1991.0) -> pl.LazyFrame:
+def get_time_absolute_years(
+    data: pl.LazyFrame, time_column: str, base_year: float = 1991.0
+) -> pl.LazyFrame:
     """
-    Convert time column to absolute fractional years.
+    Convert epoch time column to absolute fractional years.
 
-    If datetime: year + (ordinal_day - 1) / 365.25
-    If not datetime, assume time is years since base_year (default 1991.0)
+    Handles two time formats:
+        - Datetime: Converts to fractional year using year + (ordinal_day - 1) / 365.25
+        - Numeric: Assumes values are years relative to base_year
 
     Args:
-        data (pl.LazyFrame): Input dataset containing time column.
-        time_column (str): Name of the time column
+        data (pl.LazyFrame): Input dataset containing time column
+        time_column (str): Name of the time column to convert
+        base_year (float, optional): Reference year for numeric time values.
+            Defaults to 1991.0.
+
     Returns:
-        pl.LazyFrame: Data with additional column 'time_absolute_years'
+        pl.LazyFrame: Input data with added 'time_absolute_years' column containing
+            absolute fractional years
     """
     time_col_dtype = data.collect_schema()[time_column]
 
@@ -232,23 +282,33 @@ def get_time_absolute_years(data: pl.LazyFrame, time_column: str, base_year=1991
 
 def get_valid_cells(data: pl.LazyFrame, params: argparse.Namespace) -> pl.LazyFrame:
     """
-    Filter out grid cells with insufficient data for cross-calibration.
-        - Less than the minimum number of observations (params.min_observations)
-    and convert time to absolute years.
+    Filter grid cells to retain only those suitable for cross-calibration.
+
+    Applies quality control filters to ensure each grid cell has:
+        1. Time values converted to absolute fractional years
+        2. Non-null elevation change values
+        3. At least params.min_observations total observations
+        4. Data from all missions in params.missions_sorted
+
+    Cells failing any criterion are excluded from cross-calibration.
 
     Args:
-        data (pl.LazyFrame): Input mission data containing columns:
+        data (pl.LazyFrame): Input elevation data with columns:
             - x_bin, y_bin: Grid cell coordinates
             - mission: Mission identifier
-            - dh: Elevation change values
-            - epoch_number, epoch_time: Temporal information
-        params (argparse.Namespace): Command line parameters.
-            Includes :
-            - min_observations (int): Minimum total observations required per cell
-            - missions_sorted (list): List of mission identifiers
+            - params.dh_column: Elevation change values
+            - params.epoch_column: Epoch numbers
+            - params.time_column: Epoch time values
+        params (argparse.Namespace): Command line parameters containing:
+            - min_observations (int): Minimum total observations per cell
+            - missions_sorted (list[str]): Required missions for each cell
+            - dh_column (str): Name of elevation change column
+            - epoch_column (str): Name of epoch column
+            - time_column (str): Name of time column
 
     Returns:
-        pl.LazyFrame: Filtered LazyFrame with valid cells
+        pl.LazyFrame: Filtered data containing only valid grid cells with grouped
+            observations per cell
     """
     data = get_time_absolute_years(data, params.time_column)
 
@@ -277,32 +337,32 @@ def get_valid_cells(data: pl.LazyFrame, params: argparse.Namespace) -> pl.LazyFr
 
 
 def fit_cross_calibrated_model_gridcell(
-    missions: np.ndarray, dh: np.ndarray, t: np.ndarray, missions_sorted: list, degree: int = 3
-) -> tuple:
+    missions: np.ndarray, 
+    dh: np.ndarray, 
+    t: np.ndarray, 
+    missions_sorted: list[str], 
+    degree: int = 3
+) -> tuple[np.ndarray | None, dict | None, LinearRegression | None]:
     """
-    Fit a cross-calibrated regression model for a single grid cell.
-    Capture the time trend of elevation change (dh) and estimate a bias for each mission.
-
-    The model includes :
-        - A polynomial trend in time (of specified degree)
-        - A per-mission bias term, the first mission in missions_sorted is used as the reference
-        and given a bias of 0.
+    Fit cross-calibration regression model to estimate temporal trend 
+    and inter-mission biases.
 
     Args:
-        missions (np.ndarray): Array of mission values for each data point.
-        dh (np.ndarray): Array of elevation change values for each data point.
-        t (np.ndarray): Array of epoch times (fractional years) for each data point.
-        missions_sorted (list): Ordered list of missions.
-        degree (int, optional): Degree of polynomial temporal trend. Defaults to 3.
+        missions (np.ndarray): Mission identifier for each observation 
+        dh (np.ndarray): Elevation change values in meters 
+        t (np.ndarray): Epoch times in absolute fractional years 
+        missions_sorted (list[str]): Ordered mission identifiers. First mission is reference.
+        degree (int, optional): Degree of polynomial temporal trend. Defaults to 3 
 
     Returns:
-        tuple:
-            - fitted_curve (np.ndarray or None): Fitted modelled time trend curve.
-            - biases (dict or None): Bias for each mission.
-                                Reference mission and missions not present in the data : bias = 0.
-                                Fit fails : bias = None.
-
-            - model (LinearRegression or None): Fitted sklearn LinearRegression model.
+        tuple: Three-element tuple containing:
+            - fitted_curve (np.ndarray | None): Modeled temporal trend (no bias terms).
+                Returns None if regression fails.
+            - biases (dict | None): Mission bias estimates in meters.
+                Reference mission has bias = 0. Missions not in data have bias = 0.
+                Returns None if regression fails or <2 missions present.
+            - model (LinearRegression | None): Fitted sklearn model object.
+                Returns None if regression fails.
     """
     # Check that all arrays have the same length
     if len(missions) != len(dh) or len(missions) != len(t):
@@ -344,27 +404,32 @@ def fit_cross_calibrated_model_gridcell(
 
 def fit_cell_biases(data: pl.DataFrame, params: argparse.Namespace) -> pl.DataFrame:
     """
-    Get cross-calibration bias for a single grid cell.
+    Estimate cross-calibration biases for a single grid cell. 
 
     Steps:
-    1. Fit temporal trend to get mission biases 'get_cross_calibrated_model_gridcell()'
-    2. Get standard error for cell
+        1. Fit temporal trend to estimate per-mission bias corrections
+           (fit_cross_calibrated_model_gridcell)
+        2. Calculate regression standard error from model residuals
+
+    If regression fails (insufficient data, singular matrix, etc.), all bias values
+    and standard error are set to None for later spatial interpolation.
 
     Args:
-        data (pl.DataFrame): Single grid cell DataFrame from group_by().map_groups().
-            Contains columns: x_bin, y_bin, missions (list), dh_column (list),
-            time_absolute_years (list)
-        params (argparse.Namespace): Command line parameters.
-            Includes :
-            - missions_sorted (list): Mission identifiers in processing order
+        data (pl.DataFrame): Single grid cell data with columns:
+            - x_bin, y_bin: Grid cell coordinates
+            - missions: List of mission identifiers for each observation
+            - params.dh_column: List of elevation change values
+            - time_absolute_years: List of absolute fractional years
+        params (argparse.Namespace): Command line parameters containing:
+            - missions_sorted (list[str]): Mission identifiers in processing order
             - dh_column (str): Name of elevation change column
 
     Returns:
-        pl.DataFrame: Single-row DataFrame with:
+        pl.DataFrame: Single-row DataFrame with columns:
             - x_bin, y_bin: Grid cell coordinates
-            - success: Boolean indicating successful model fitting
-            - {mission}_bias: Bias correction for each mission
-            - stderr: Standard error of regression model fit
+            - success (bool): True if regression succeeded, False otherwise
+            - {mission}_bias (float | None): Bias correction for each mission in meters
+            - stderr (float | None): Regression model standard error in meters
     """
     # Extract arrays from grouped DataFrame
     missions_col = data.select(pl.col("missions")).to_series()[0]
@@ -416,20 +481,27 @@ def apply_bias_thresholds(
     bias_tbl: pl.LazyFrame, params: argparse.Namespace
 ) -> tuple[pl.DataFrame, dict]:
     """
-    Filter out unrealistic bias values: values that > params.bias_threshold.
-    Set outlier biases to None.
+    Apply quality control to filter unrealistic bias values exceeding threshold.
+
+    Identifies and removes bias estimates that exceed params.bias_threshold.Outlier biases
+    are set to None and will be filled via spatial interpolation in the next processing step.
 
     Args:
-        bias_tbl (pl.LazyFrame): DataFrame containing bias corrections for each mission.
-        params (argparse.Namespace): Command line parameters.
-            Includes :
-            - bias_threshold (float): Maximum absolute bias value (meters)
-            - missions_sorted (list): List of mission identifiers
+        bias_tbl (pl.LazyFrame): Bias correction table with columns:
+            - x_bin, y_bin: Grid cell coordinates
+            - {mission}_bias: Bias value for each mission in meters
+        params (argparse.Namespace): Command line parameters containing:
+            - bias_threshold (float): Maximum absolute bias value in meters
+            - missions_sorted (list[str]): Mission identifiers
 
     Returns:
-        tuple:
-            - cleaned_bias_tbl (pl.DataFrame): Filtered bias table.
-            - bias_tbl_stats (dict): Statistics about outlier removal.
+        tuple: Two-element tuple containing:
+            - cleaned_bias_tbl (pl.DataFrame): Bias table with outliers set to None
+            - bias_tbl_stats (dict): Per-mission statistics with keys:
+                - n_outlier_bias: Count of bias values set to None
+                - n_total_bias: Count of valid (non-None) bias values
+                - cleaned_min_bias: Minimum valid bias value
+                - cleaned_max_bias: Maximum valid bias value
     """
 
     # Set outlier biases to None - they'll be interpolated later
@@ -466,25 +538,26 @@ def interpolate_biases_spatially(
     epoch_data: pl.LazyFrame, grid_cell_data: pl.DataFrame, missions_sorted: list[str]
 ) -> pl.DataFrame:
     """
-    Spatially interpolate bias corrections using nearest neighbor method using a KDTree.
+    Fill missing bias values using k-nearest neighbor spatial interpolation.
 
-    Fills missing bias values in two scenarios:
-        1. Grid cells where cross-calibration regression failed (bias = None)
-        2. Grid cells where bias was an outlier and set to None by threshold filtering
+    Fills missing bias values where: 
+        1. Regression failed due to insufficient data (bias = None)
+        2. Bias exceeded threshold and was flagged as outlier (bias set to None)
 
     Args:
-        epoch_data (pl.LazyFrame): Complete grid of epoch-averaged data (lazy).
-                                   Used to get all grid cell coordinates.
+        epoch_data (pl.LazyFrame): Epoch averaged data. 
         grid_cell_data (pl.DataFrame): Bias correction dataframe with columns:
             - y_bin, x_bin: Grid cell coordinates
-            - {mission}_bias: Bias values for each mission (None where failed/outlier)
-            - stderr: Standard error values (None where failed)
-        missions_sorted (list): List of missions
+            - {mission}_bias: Bias values (None where missing)
+            - stderr: Standard error values (None where missing)
+        missions_sorted (list[str]): Mission identifiers for bias column names
 
     Returns:
-        pl.DataFrame: Complete bias grid with all missing values filled by interpolation.
-                     Has same grid coverage as epoch_data input.
-    """
+        pl.DataFrame: Complete bias grid covering all cells in epoch_data with columns:
+            - y_bin, x_bin: Grid cell coordinates
+            - {mission}_bias: Interpolated bias for each mission
+            - stderr: Interpolated standard error
+        """
 
     all_points = epoch_data.select(["y_bin", "x_bin"]).unique().collect().to_numpy()
     df_data = {"y_bin": all_points[:, 0], "x_bin": all_points[:, 1]}
@@ -530,20 +603,23 @@ def get_output_dataframe(
 
     Args:
         params (argparse.Namespace): Command line parameters containing:
-            - missions_sorted (list): Mission identifiers to process
+            - missions_sorted (list[str]): Mission identifiers to process
             - mission_mapper (dict): Maps missions to data directories
-        filled_df (pl.DataFrame): Complete bias correction grid from interpolation:
+            - dh_column (str): Original elevation column name
+            - time_column (str): Time column name
+        filled_df (pl.DataFrame): Complete bias correction grid with columns:
             - y_bin, x_bin: Grid cell coordinates
             - {mission}_bias: Bias correction for each mission
-            - stderr: Uncertainty estimates
-        sub_basin (str, optional): Sub-basin name for data loading.
-                                 If None, processes root-level data. Defaults to "None".
+            - stderr: Cross-calibration uncertainty estimate
+        sub_basin (str, optional): Basin subdirectory name. If "None",
+            processes root-level data. Defaults to "None".
 
     Returns:
         tuple: Two-element tuple containing:
-            - final_df (pl.LazyFrame): Bias-corrected data for all missions and grid cells.
-            - timeseries_df (pl.LazyFrame):  Bias-corrected epoch-averaged time series.
-
+            - final_lf (pl.LazyFrame): Bias-corrected grid cell data with columns:
+                x_bin, y_bin, mission, biased_dh, biased_dh_xcal_stderr, time_absolute_years
+            - timeseries_lf (pl.LazyFrame): Basin-averaged time series with columns:
+                mission, time, mean_dh, std_dh, n_cells, error_dh
     """
 
     all_corrected_data = []
@@ -592,21 +668,27 @@ def get_output_dataframe(
 
 def get_dh_timeseries(df: pl.LazyFrame, dh_column: str, epoch_time_column: str) -> pl.LazyFrame:
     """
-    Get time series of elevation.
-    Average dh values across grid cells for each mission and epoch.
+    Aggregate elevation change data into mission-specific time series.
+
+    Groups data by mission and epoch time, then computes spatial statistics across all
+    grid cells for each time step. Standard error is calculated as std / sqrt(n_cells).
 
     Args:
-        df (pl.LazyFrame): Input LazyFrame containing elevation-change data.
-        dh_column (str): Name of the elevation change column.
-        epoch_time_column (str): Name of the epoch time column.
+        df (pl.LazyFrame): Elevation change data with columns:
+            - mission: Mission identifier
+            - epoch_time_column: Absolute fractional year
+            - dh_column: Elevation change values
+        dh_column (str): Name of the elevation change column to aggregate
+        epoch_time_column (str): Name of the time column for grouping
+
     Returns:
-        pl.LazyFrame: LazyFrame with columns:
-            - mission
-            - epoch_midpoint_fractional_yr
-            - mean_dh
-            - std_dh
-            - n_cells
-            - error_dh
+        pl.LazyFrame: Time series with columns:
+            - mission: Mission identifier
+            - epoch_time_column: Time value (also aliased as 'time')
+            - mean_dh: Mean elevation change across grid cells
+            - std_dh: Standard deviation of elevation change
+            - n_cells: Number of grid cells with data
+            - error_dh: Standard error (std / sqrt(n_cells))
     """
     timeseries_df = (
         df.group_by(["mission", epoch_time_column])
@@ -660,13 +742,18 @@ def write_central_metadata(
     logger: logging.Logger,
 ) -> None:
     """
-    Write central metadata file with processing parameters and timing.
+    Write central metadata file with processing parameters, timing, and basin list.
 
     Args:
-        params (argparse.Namespace): Command line parameters.
-        start_time (float): Processing start time.
-        processed_basins (list): List of basins that were successfully processed.
-        logger (logging.Logger): Logger
+        params (argparse.Namespace): All command line parameters including:
+            mission_mapper, missions_sorted, bias_threshold, min_observations, etc.
+        start_time (float): Processing start timestamp from time.time()
+        processed_basins (list[str]): Basin names successfully processed
+        logger (logging.Logger): Logger instance
+
+    Output:
+        Writes JSON file: <params.out_dir>/cross_calibration_metadata.json
+        Contains: all params + processed_basins + total_basins_processed + execution_time
     """
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -694,14 +781,20 @@ def plot(
     suffix: str,
 ) -> None:
     """
-    Get plot comparing the original time series to the cross-calibrated time series.
+    Generate two-panel comparison plot of original vs cross-calibrated time series.
 
     Args:
-        params (argparse.Namespace): Command line parameters.
-        input_lf (pl.LazyFrame): Original elevation change data.
-        bias_df (pl.DataFrame): Table of grid cells with bias corrections.
-        output_dir (Path): Directory to save plots.
-        suffix (str): Suffix to add to the output plot filenames.
+        params (argparse.Namespace): Command line parameters containing:
+            - missions_sorted (list[str]): Mission identifiers
+            - dh_column (str): Original elevation column name
+            - time_column (str): Time column name
+        input_lf (pl.LazyFrame): Original uncorrected elevation data
+        bias_df (pl.DataFrame): Bias correction grid (used to filter cells)
+        output_dir (Path): Directory to save plot file
+        suffix (str): Filename prefix (typically basin name)
+
+    Output:
+        Saves plot as: <output_dir>/<suffix>_cross_calibration_comparison.png
     """
 
     plt.figure(figsize=(12, 8))
@@ -762,71 +855,43 @@ def plot(
     plt.close()
 
 
-# pylint: disable=R0917, R0913
-def write_results(
-    params: argparse.Namespace,
-    input_lf: pl.LazyFrame,
-    cross_calibrated_lf: pl.LazyFrame,
-    timeseries_lf: pl.LazyFrame,
-    bias_df: pl.DataFrame,
-    sub_basin: str = "None",
-) -> Path:
-    """
-    Save cross-calibrated results to parquet files and generate plots.
-
-    Writes:
-        - Cross-calibrated grid cell data to :
-          <out_dir>/<sub_basin>/<sub_basin>_corrected_epoch_average.parquet
-        - Cross-calibrated time series to :
-          <out_dir>/<sub_basin>/<sub_basin>_cross_calibrated_timeseries.parquet
-        - Comparison plots if params.plot_results is True
-
-    Args:
-        params (argparse.Namespace): Command line parameters.
-        input_lf (pl.LazyFrame): Original input LazyFrame before cross-calibration.
-        cross_calibrated_lf (pl.LazyFrame): Cross-calibrated grid cell data.
-        bias_df (pl.DataFrame): Bias corrections table.
-        timeseries_lf (pl.LazyFrame): Cross-calibrated time series data.
-        sub_basin (str, optional): Sub-basin name for output directory.
-                                 If None, saves to root-level output. Defaults to "None".
-    Returns:
-        Path: The output directory where results are saved.
-    """
-    # Set output directory and suffix based on sub_basin
-    if sub_basin == "None":
-        output_dir = Path(params.out_dir)
-        suffix = ""
-    else:
-        output_dir = Path(params.out_dir) / sub_basin
-        # Use only the last part of the path for suffix (e.g., "Ep-F" from "West/Ep-F")
-        suffix = f"{Path(sub_basin).name}_"
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Write Parquet files
-    cross_calibrated_lf.sink_parquet(output_dir / f"{suffix}corrected_epoch_average.parquet")
-    timeseries_lf.sink_parquet(output_dir / f"{suffix}cross_calibrated_timeseries.parquet")
-
-    if params.plot_results:
-        plot(params, input_lf, bias_df, output_dir, suffix)
-
-    return output_dir
-
-
 def process_basin(
     basin_path: str,
     params: argparse.Namespace,
     logger: logging.Logger,
 ) -> tuple[Path | None, dict | None]:
     """
-    Process a single basin for cross-calibration.
+    Execute complete cross-calibration workflow for a single basin.
+
+    Processing steps:
+        1. Load grid cell data from all missions
+        2. Filter to cells meeting quality requirements (valid data from all missions)
+        3. Fit regression models to estimate mission-specific biases per grid cell
+        4. Apply threshold filtering to remove unrealistic bias outliers
+        5. Spatially interpolate bias values for cells with missing/outlier biases
+        6. Apply bias corrections to original elevation data
+        7. Generate basin-averaged time series
+        8. Write results to Parquet files
+        9. Optionally generate comparison plots
 
     Args:
-        basin_path: Path to basin (or "None" for root level).
-        params: Command line parameters.
-        logger: Logger object.
+        basin_path (str): Basin subdirectory name, or "None" for root-level processing
+        params (argparse.Namespace): Command line parameters
+        logger (logging.Logger): Logger 
 
     Returns:
-        tuple: (output_dir, outlier_stats) or (None, None) if processing failed
+        tuple: Two-element tuple:
+            - output_dir (Path | None): Basin output directory path if successful, None if failed
+            - outlier_stats (dict | None): Bias outlier statistics if successful, None if failed
+
+    Output Files (when successful):
+        - <output_dir>/<basin>_corrected_epoch_average.parquet: Bias-corrected grid data
+        - <output_dir>/<basin>_cross_calibrated_timeseries.parquet: Aggregated time series
+        - <output_dir>/<basin>_cross_calibration_comparison.png: Comparison plot (if enabled)
+
+    Returns (None, None) if:
+        - No data found for basin
+        - No cells meet quality requirements
     """
     logger.info("Processing: %s", basin_path)
     input_lf = get_grid_cell_dataframe(params, sub_basin=basin_path)
@@ -856,35 +921,52 @@ def process_basin(
     cross_calibrated_lf, timeseries_lf = get_output_dataframe(
         params, filled_df, sub_basin=basin_path
     )
-    output_dir = write_results(
-        params, input_lf, cross_calibrated_lf, timeseries_lf, filled_df, basin_path
-    )
+
+    if basin_path == "None":
+        output_dir = Path(params.out_dir)
+        suffix = ""
+    else:
+        output_dir = Path(params.out_dir) / basin_path
+        suffix = f"{Path(basin_path).name}_"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Write Parquet files
+    cross_calibrated_lf.sink_parquet(output_dir / f"{suffix}corrected_epoch_average.parquet")
+    timeseries_lf.sink_parquet(output_dir / f"{suffix}cross_calibrated_timeseries.parquet")
+
+    if params.plot_results:
+        plot(params, input_lf, bias_tbl, output_dir, suffix)
 
     return output_dir, outlier_stats
 
 
-def main(args):
+def main(args: list[str]) -> None:
     """
-    Main script for multi-mission cross-calibration.
+    Main entry point for multi-mission cross-calibration processing.
 
-    Loads and validates command line arguments, sets up logging,
-    loads input data, estimates mission biases, applies corrections,
-    and saves results.
+    Orchestrates the complete cross-calibration workflow including argument parsing,
+    logging setup, basin discovery, individual basin processing, and metadata generation.
 
-    Supports icesheet wide and basins parquet input. 
-    
-    Steps:
+    Processing Modes:
+        - Ice sheet-wide (--basin_structure False):
+            Processes all data in mission root directories as a single unit
+
+        - Basin-structured (--basin_structure True):
+            Processes each basin subdirectory independently, with separate bias
+            estimates per basin. Only processes basins present in ALL missions.
+
+    Workflow:
         1. Parse and validate command line arguments
-        2. Set up logging
-        3. Discover basins to process based on structure
-        4. For each basin, call process_basin() to:
-            a. Load grid cell data from all missions
-            b. Filter to valid cells
-            c. Perform cross-calibration to estimate mission biases
-            d. Interpolate biases spatially to fill missing values
-            e. Apply bias corrections to original data
-            f. Save corrected data and outlier statistics
-        5. Write central metadata file
+        2. Create output directory and configure logging
+        3. Determine processing mode and discover basins
+        4. For each basin/root:
+            a. Load multi-mission grid cell data
+            b. Filter cells 
+            c. Estimate per-cell mission biases 
+            d. Apply quality control and spatial interpolation
+            e. Generate bias-corrected outputs
+            f. Write results and statistics
+        5. Write central metadata file 
 
     Args:
         args: Command line arguments list
@@ -901,7 +983,7 @@ def main(args):
 
     processed_basins = []
 
-    if params.basin_structure is False: 
+    if params.basin_structure is False:
         # Process root-level data without subdirectories
         logger.info("Processing root-level data")
         output_dir, outlier_stats = process_basin("None", params, logger)

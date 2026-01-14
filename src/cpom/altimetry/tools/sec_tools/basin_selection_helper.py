@@ -1,22 +1,14 @@
 """
 cpom.altimetry.tools.sec_tools.basin_selection_helper
 
-Centralized basin/region selection logic for SEC processing tools.
+Module with cental utilities for basin/region selection in SEC tools.
 
-This module provides:
-1. Shared argument parsing for basin mode and region selection
-2. get_basins_to_process() used across SEC tools for directory discovery
+Includes : 
+    1. add_basin_selection_arguments() to add standard CLI args for basin selection
+        - basin_structure: bool flag for root vs basin mode
+        - region_selector: list of basin names to include
+    2. get_basins_to_process() 
 
-Usage in scripts:
-    from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
-        add_basin_selection_arguments,
-        get_basins_to_process,
-    )
-
-    parser = argparse.ArgumentParser(...)
-    add_basin_selection_arguments(parser)
-    params = parser.parse_args()
-    basins = get_basins_to_process(params, Path(params.in_dir), logger)
 """
 
 import argparse
@@ -64,16 +56,17 @@ def get_basins_to_process(
     params: argparse.Namespace, directory: str | Path, logger: logging.Logger
 ) -> list[str]:
     """
-    Determine which basins/regions to process based on directory structure and selection.
+    Determine which basins/regions should be processed.
 
     Modes:
-    - Root mode (`basin_structure=False`): returns `["None"]` indicating root-level processing.
-    - Basin mode (`basin_structure=True`): lists immediate subdirectories of `directory`.
-      If `region_selector` is `["all"]`, includes all basins; otherwise filters by names.
+    - Root mode (`basin_structure=False`): Returns `["None"]` indicating root-level processing.
+    - Basin mode (`basin_structure=True`): Basin/region names are determined from subdirectories
+        of `directory`.
+    If `region_selector` is `["all"]`, includes all basins; otherwise filters by names provided.
 
     Args:
-        params (argparse.Namespace): Must include `basin_structure` (bool) and
-            `region_selector` (list[str]).
+        params (argparse.Namespace): Command Line Arguments :
+            - Includes basin_structure and region_selector.
         directory (str | Path): Base directory to scan for basins.
         logger (logging.Logger): Logger for progress messages.
 

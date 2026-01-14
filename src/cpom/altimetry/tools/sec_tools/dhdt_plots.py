@@ -13,25 +13,35 @@ Output:
 """
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
 
 import polars as pl
-from epoch_average_plots import get_data, get_objects, get_shapefile
 from matplotlib import pyplot as plt
 
-from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
-    add_basin_selection_arguments,
-    get_basins_to_process,
-)
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
+from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
+    add_basin_selection_arguments,
+    get_basins_to_process,
+)
+from epoch_average_plots import get_data, get_objects, get_shapefile
+
 
 def parse_arguments(args):
+    """
+    Parse command line arguments for dhdt plotting script.
+    Args:
+        args (list): Command line arguments
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+
     parser = argparse.ArgumentParser(
         description="Generate plots from dhdt.parquet files produced by calculate_dhdt.py"
     )
@@ -48,16 +58,16 @@ def parse_arguments(args):
         required=True,
     )
     parser.add_argument(
+        "--parquet_glob",
+        type=str,
+        required=True,
+        help="Glob pattern to match parquet files in input directory. E.g. '**/dhdt.parquet'.",
+    )
+    parser.add_argument(
         "--grid_info_json",
         help="Path to the metadata JSON file from calculate_dhdt.",
         required=False,
         default=None,
-    )
-    parser.add_argument(
-        "--parquet_glob",
-        type=str,
-        default="*dhdt.parquet",
-        help="Glob pattern to match parquet files in input directory.",
     )
     # Plotting Arguments
     parser.add_argument(
@@ -123,6 +133,7 @@ def plot_basins(
     params: argparse.Namespace,
     this_grid_area: GridArea,
     sub_basins_to_process: list,
+    logger: logging.Logger,
 ):
     """
     Generate spatial scatter plots of dh/dt data for each basin and time period.
@@ -143,7 +154,8 @@ def plot_basins(
             - plot_range (list): [min, max] for color scale
         this_area (Area): CPOM Area object (used for fallback plotting)
         this_grid_area (GridArea): CPOM Grid area object
-        sub_basins_to_process (list[str]): Basin paths to process (e.g., ["West/H-Hp", "East/A-Ap"])
+        sub_basins_to_process (list[str]): Basin paths to process
+        logger (logging.Logger): Logger object
     """
 
     def _get_output_path(sub_basin, period_id, period_data):
@@ -169,24 +181,36 @@ def plot_basins(
         plot_dir.mkdir(parents=True, exist_ok=True)
         return (
             plot_dir
-            / f"{sub_basin.replace("/", "_")}_dhdt_period_{period_id}_{start_str}-{end_str}.png"
+            / f"{sub_basin.replace('/', '_')}_dhdt_period_{period_id}_{start_str}-{end_str}.png"
         )
+
+    def _get_plot_title(period_data):
+        # Get actual data date range
+        data_start = period_data.select(pl.col("input_dh_start_time").min()).item()
+        data_end = period_data.select(pl.col("input_dh_end_time").max()).item()
+        start_str = str(data_start).split()[0] if " " in str(data_start) else str(data_start)
+        end_str = str(data_end).split()[0] if " " in str(data_end) else str(data_end)
+        plot_title = f"dhdt period {period_id}: {start_str} to {end_str}"
+
+        return plot_title
 
     shp, selector = get_shapefile(params)
 
     for sub_basin in sub_basins_to_process:
         # Get geometry for this specific basin using the helper function
-        data = get_data(params, this_grid_area, sub_basin)
-        period_ids = (
-            data.select(pl.col(params.period_column)).unique().collect().to_series().to_list()
-        )
+        basin_lazy = get_data(params, this_grid_area, sub_basin, logger=logger)
+        if basin_lazy.select(pl.len()).collect().item() == 0:
+            logger.info("No data points found for basin %s; skipping", sub_basin)
+            continue
 
-        for period_id in period_ids:
-            period_data = data.filter(pl.col(params.period_column) == period_id).collect()
+        # Loop through unique periods
+        for period_id in (
+            basin_lazy.select(pl.col(params.period_column)).unique().collect().to_series().to_list()
+        ):
+            period_data = basin_lazy.filter(pl.col(params.period_column) == period_id).collect()
             if period_data.height == 0:
                 continue
 
-            outpath = _get_output_path(sub_basin, period_id, period_data)
             # Create plot
             _, ax = plt.subplots(figsize=(10, 8))
 
@@ -207,25 +231,21 @@ def plot_basins(
             ax.set_ylabel("y (m)")
             ax.set_aspect("equal")
 
-            # Get actual data date range
-            data_start = period_data.select(pl.col("input_dh_start_time").min()).item()
-            data_end = period_data.select(pl.col("input_dh_end_time").max()).item()
-            data_start_str = (
-                str(data_start).split()[0] if " " in str(data_start) else str(data_start)
-            )
-            data_end_str = str(data_end).split()[0] if " " in str(data_end) else str(data_end)
-            ax.set_title(f"dhdt period {period_id}: {data_start_str} to {data_end_str}")
+            ax.set_title(_get_plot_title(period_data))
 
             # Overlay glacier boundaries
             if shp is not None:
                 shp[shp[selector] == sub_basin].boundary.plot(ax=ax, edgecolor="black", linewidth=1)
+
             plt.tight_layout()
-            plt.savefig(outpath)
+            plt.savefig(_get_output_path(sub_basin, period_id, period_data))
 
             plt.close()
 
 
-def plot_icesheet(params: argparse.Namespace, this_area: Area, this_grid_area: GridArea):
+def plot_icesheet(
+    params: argparse.Namespace, this_area: Area, this_grid_area: GridArea, logger: logging.Logger
+):
     """
     Generate ice sheet-wide spatial plots of dh/dt data .
 
@@ -242,9 +262,16 @@ def plot_icesheet(params: argparse.Namespace, this_area: Area, this_grid_area: G
             - plot_range (list): [min, max] for color scale (m/yr)
         this_area (Area): CPOM Area object
         this_grid_area (GridArea): CPOM Grid area object
+        logger (logging.Logger): Logger object
     """
 
-    data = get_data(params, this_grid_area, sub_basin=None)
+    data = get_data(params, this_grid_area, sub_basin=None, logger=logger)
+    row_count = data.select(pl.len()).collect().item()
+    if row_count == 0:
+        logger.info("No root-level data found; skipping icesheet plots")
+        return
+
+    logger.info("Loaded %d rows for icesheet plots", row_count)
     period_ids = sorted(
         data.select(pl.col(params.period_column)).unique().collect().to_series().to_list()
     )
@@ -300,12 +327,12 @@ def main(params):
 
     if params.basin_structure is False:
         logger.info("Processing root-level data")
-        plot_icesheet(params, this_area, this_grid_area)
+        plot_icesheet(params, this_area, this_grid_area, logger=logger)
     else:
         logger.info("Processing basin/sub-basin level data")
         # Determine which sub-basins to process
         sub_basins_to_process = get_basins_to_process(params, params.in_dir, logger=logger)
-        plot_basins(params, this_grid_area, sub_basins_to_process)
+        plot_basins(params, this_grid_area, sub_basins_to_process, logger=logger)
 
 
 if __name__ == "__main__":

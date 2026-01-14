@@ -2,10 +2,9 @@
 cpom.altimetry.tools.sec_tools.compute_stats_per_gridcell.py
 
 Purpose:
-  - Works on either:
-     (A) A "compacted" Parquet dataset partitioned by x_part=NN/y_part=MM/data.parquet, or
-     (B) A "year-partitioned" dataset (possibly year=YYYY/month=MM/x_part=NN/y_part=MM/*.parquet),
-       i.e. multiple files per spatial chunk if they span multiple years/months.
+
+   An example script to compute statistics per grid cell from a partitioned Parquet dataset
+   using duckDB or Polars. 
 
   - Reads each spatial chunk in parallel with duckDB groups by (x_bin, y_bin) to compute both:
        - mean(elevation)

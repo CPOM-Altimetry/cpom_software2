@@ -371,7 +371,7 @@ def get_variables_and_mask(
     masks.append(np.isfinite(variable_dict["time"]))
     if dataset.power_param is not None:
         variable_dict["power"] = dataset.get_variable(nc, dataset.power_param)
-        masks.append(np.isfinite(variable_dict["power"]))
+        # masks.append(np.isfinite(variable_dict["power"]))
 
     # Fdr4alt quality mask
     if dataset.quality_param is not None:
@@ -422,7 +422,7 @@ def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
     return variable_dict
 
 
-# pylint: disable=R0913, R0917
+# pylint: disable=too-many-arguments
 def process_file(
     file_and_date: dict,
     dataset: DatasetHelper,
@@ -513,7 +513,9 @@ def process_file(
                 ]
             )
             .cast({"elevation": pl.Float32})
-            .filter((pl.col("elevation") < 6000) & (pl.col("elevation") > -500))
+            .filter(
+                (pl.col("elevation") < 6000) & (pl.col("elevation") > -500)
+            )  # old_grid.py line 913
         )
 
 
@@ -522,7 +524,9 @@ def process_file(
 # --------------------------------------#
 
 
-def get_data_and_status_multiprocessed(params, file_and_dates: np.ndarray, worker, logger):
+def get_data_and_status_multiprocessed(
+    params, file_and_dates: np.ndarray, worker, logger
+):  # pylint: disable=too-many-arguments
     """
     Extract and process data from altimetry netcdf or hdf5 files
     in parallel and write the results to disk as a partitioned parquet file.

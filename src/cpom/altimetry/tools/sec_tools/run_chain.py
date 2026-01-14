@@ -1,27 +1,29 @@
 """
-src.cpom.altimetry.tools.sec_tools.run_chain
+Run SEC processing chain from YAML configuration.
 
-Run the sec processing chain based on a configuration file.
+Executes multi-step workflow: reads config → runs algorithms in sequence → passes outputs as inputs.
 
-This script reads a configuration file that specifies
-the algorithms to run, along with their parameters.
-It then executes each algorithm in sequence, passing
-the appropriate command-line arguments.
+CONFIGURATION MODES:
+  Single-mission:
+    Set 'missions_to_run' + 'algorithm_list' per mission
+        e.g. example_single_mission_icesheet_wide.yml
+  Multi-mission:  
+    Set 'algorithm_list' at root
+        e.g. example_multi_mission_icesheet_wide.yml
 
-Supports two types of configuration files:
+PARAMETER PRIORITY (low → high):
+  1. Algorithm defaults (config[algo])
+  2. Mission overrides (config[mission][algo])
 
-1. Single-Mission Config:
-   - Has 'missions_to_run' list at root level
-   - Each mission has its own section with 'algorithm_list'
-   - Example: greenland_single_mission.yml
+AUTO PATH HANDLING:
+  - Input:  auto-detected from previous step's 'out_folder_name' (or use 'in_dir')
+  - Output: auto-built from 'base_out' + 'base_folder' + 'out_folder_name' (or use 'out_dir')
+  - Grid metadata: priority order (high → low):
+      1. Algorithm params: config[mission][algo]['grid_info_json'] or config[algo]['grid_info_json']
+      2. Mission level: config[mission]['grid_info_json']
+      3. Auto-computed: grid_for_elev_change output or in_dir/metadata.json
 
-2. Multi-Mission Config:
-   - Has 'algorithm_list' at root level (no missions)
-   - Used for cross-calibration and multi-mission analysis
-   - Example: greenland_multimission.yml
-
-Args:
-    --config (Path): Path to the configuration file.
+Usage: python run_chain.py --config path/to/config.yml
 """
 
 import argparse
@@ -35,21 +37,18 @@ import yaml  # type: ignore[import-untyped]
 
 def dict_to_cli_args(config):
     """
-    Convert a dictionary of configuration parameters to command-line arguments.
+    Convert config dict to CLI argument list.
 
-    Skips internal keys like 'out_folder_name', 'in_step', and 'shared_args'
-    which are used for configuration management but not passed to scripts.
-
-    Args:
-        config (dict): Configuration parameters dictionary.
-
-    Returns:
-        list: List of command-line argument strings.
+    Skips internal keys: 'out_folder_name', 'in_step', 'grid_info_json', 'base_folder'
+    Serializes to JSON:
+        'dataset' : See grid_for_elev_change.py
+        'mission_mapper' : See multi_mission_cross_cal.py
+    Example: {'verbose': True, 'bands': [1, 2]} → ['--verbose', '--bands', '1', '2']
     """
     args = []
     for key, value in config.items():
         # Skip internal configuration keys
-        if key in ["out_folder_name", "in_step", "shared_args"]:
+        if key in ["out_folder_name", "in_step", "base_folder"]:
             continue
 
         # Handle different value types
@@ -71,15 +70,21 @@ def dict_to_cli_args(config):
 
 def build_path(base_out, base_folder, algo_config):
     """
-    Build directory path from configuration.
+    Build complete directory path for algorithm output.
+
+    Constructs: base_out/[base_folder]/algo_config[out_folder_name]
 
     Args:
-        base_out (str): Base output directory.
+        base_out (str): Base output directory path.
         base_folder (str): Mission-specific base folder (or None for multi-mission).
-        algo_config (dict): Algorithm configuration with 'out_folder_name'.
+        algo_config (dict): Algorithm configuration dictionary containing 'out_folder_name' key.
 
     Returns:
-        Path: Complete directory path.
+        Path: Complete directory path for algorithm output.
+
+    Example:
+        build_path('/output', 'CS2', {'out_folder_name': 'grid_300m'})
+        → /output/CS2/grid_300m
     """
     if base_folder:
         return Path(base_out) / base_folder / algo_config["out_folder_name"]
@@ -87,7 +92,7 @@ def build_path(base_out, base_folder, algo_config):
 
 
 def requires_grid_metadata(algo):
-    """Check if algorithm requires grid metadata JSON file."""
+    """Return True if algorithm needs grid metadata.json."""
     return algo in [
         "grid_for_elev_change_update_year",
         "surface_fit",
@@ -102,98 +107,106 @@ def requires_grid_metadata(algo):
 
 
 def get_auto_path(algo):
-    """Check if algorithm needs automatic in_dir/out_dir handling."""
+    """Return True if algorithm uses automatic in_dir/out_dir."""
     return algo not in ["grid_for_elev_change_update_year"]
 
 
-def build_args(algo, algo_config, config, mission=None):
+def build_args(algo, config, mission=None):
     """
-    Build complete command-line arguments for an algorithm.
+    Build complete command-line arguments for an algorithm from merged configuration.
 
-    Config precedence (lowest → highest):
-    1. Global shared_args (if defined in YAML root)
-    2. Algorithm defaults (config[algo])
-    3. Mission-specific overrides (config[mission][algo])
+    Merges configuration parameters with priority order, then converts to CLI args.
+    Automatically handles input/output directory paths and grid metadata if needed.
+
+    Configurations (lowest → highest priority):
+    1. Algorithm defaults from config[algo] section
+    2. Mission-specific overrides from config[mission][algo] (single-mission mode only)
+
+    Automatic path management:
+    - Input directory: Built from previous algorithm's output ('in_step' reference), or
+                        use 'in_dir' if specified.
+    - Output directory: Built from 'out_folder_name' and base_folder structure or
+                        use 'out_dir' if specified.
+    - Grid metadata: Automatically located and passed if algorithm requires it,
+                        unless 'grid_info_json' is explicitly provided to the mission
+                        or algorithm configuration.
 
     Args:
-        algo (str): Algorithm name.
-        algo_config (dict): Algorithm configuration.
-        config (dict): Full configuration dictionary.
+        algo (str): Algorithm name (must match key in config file).
+        config (dict): Full configuration dictionary (root level + all sections).
         mission (str, optional): Mission name for single-mission processing.
+                               If None, assumes multi-mission mode.
 
     Returns:
-        list: Complete list of command-line arguments.
+        list: Complete list of command-line argument strings.
     """
-    # Merge configs in order: shared_args → algo defaults → mission overrides
-    merged_config = {}
 
-    # 1. Start with global shared_args (basin selection, common params)
-    if "shared_args" in config:
-        merged_config.update(config["shared_args"])
-
-    # 2. Override with algorithm-specific defaults
-    merged_config.update(algo_config)
+    # Get algorithm configuration
+    algo_config = config[algo].copy()
+    # Get the mission overrides for the algorithm if they exist
+    if mission and algo in config[mission]:
+        print(mission)
+        print(algo)
+        print(config[mission][algo])
+        # Add / Replace with mission-specific parameters
+        algo_config.update(config[mission][algo])
+        print(algo_config)
+        # Add grid_info_json if specified at mission level
+        if "grid_info_json" in config[mission]:
+            algo_config["grid_info_json"] = config[mission]["grid_info_json"]
 
     # Convert to CLI args
-    args = dict_to_cli_args(merged_config)
-    base_folder = config[mission]["base_folder"] if mission else None
+    args = dict_to_cli_args(algo_config)
+    print(args)
 
+    base_folder = config[mission]["base_folder"] if mission else None
     if get_auto_path(algo):
         # Input directory
-        if "in_dir" not in merged_config and "in_step" in merged_config:
-            in_dir = build_path(config["base_out"], base_folder, config[merged_config["in_step"]])
+        if "in_dir" not in algo_config and "in_step" in algo_config:
+            in_dir = build_path(config["base_out"], base_folder, config[algo_config["in_step"]])
             args.extend(["--in_dir", str(in_dir)])
 
         # Output directory
-        if "out_folder_name" in merged_config:
-            out_dir = build_path(config["base_out"], base_folder, merged_config)
+        if "out_dir" not in algo_config and "out_folder_name" in algo_config:
+            out_dir = build_path(config["base_out"], base_folder, algo_config)
             args.extend(["--out_dir", str(out_dir)])
 
     # Grid metadata
-    if "grid_info_json" not in merged_config and requires_grid_metadata(algo):
-        if "in_dir" in merged_config:
-            metadata = Path(merged_config["in_dir"]) / "metadata.json"
-        else:
+    if "grid_info_json" not in algo_config and requires_grid_metadata(algo):
+        metadata = None
+        if "in_dir" in algo_config:
+            metadata = Path(algo_config["in_dir"]) / "metadata.json"
+        elif mission and "grid_for_elev_change" in config:
             grid_path = build_path(
                 config["base_out"], config[mission]["base_folder"], config["grid_for_elev_change"]
             )
             metadata = grid_path / "metadata.json"
-        args.extend(["--grid_info_json", str(metadata)])
+
+        # Only add if metadata file exists
+        if metadata and metadata.exists():
+            args.extend(["--grid_info_json", str(metadata)])
 
     return args
-
-
-def run_algorithm(algo, config, mission=None):
-    """
-    Execute a single algorithm.
-
-    Args:
-        algo (str): Algorithm name.
-        config (dict): Full configuration dictionary.
-        mission (str, optional): Mission name for single-mission processing.
-    """
-    print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
-
-    # Get algorithm configuration with mission overrides
-    algo_config = config[algo].copy()
-    if mission and algo in config[mission]:
-        algo_config.update(config[mission][algo])
-
-    # Build and execute
-    args = build_args(algo, algo_config, config, mission)
-    print(f"Running {algo}.py with args: {args}")
-    subprocess.run(["python", f"{algo}.py"] + args, check=True)
 
 
 def main(args):
     """
     Run the processing chain.
 
-    Parses command-line arguments, loads configuration, and executes
-    the appropriate processing workflow (single-mission or multi-mission).
+    STEPS:
+    1. Parse --config command-line argument
+    2. Load YAML configuration file
+    3. Detect processing mode:
+       - Single-mission: 'missions_to_run' key exists in config
+       - Multi-mission: No 'missions_to_run' key, 'algorithm_list' at root
+    4. Execute algorithms:
+       - Single-mission: For each mission in missions_to_run:
+         For each algorithm in mission['algorithm_list']: run_algorithm()
+       - Multi-mission: For each algorithm in root-level algorithm_list: run_algorithm()
 
     Args:
-        args (list): Command-line arguments.
+        args (list): Command-line arguments (from sys.argv[1:]).
+                    Must contain: ['--config', '/path/to/config.yml']
     """
     parser = argparse.ArgumentParser(description="Run the processing chain")
     parser.add_argument("--config", type=Path, required=True, help="Path to the config file")
@@ -206,10 +219,15 @@ def main(args):
     if "missions_to_run" in config:
         for mission in config["missions_to_run"]:
             for algo in config[mission]["algorithm_list"]:
-                run_algorithm(algo, config, mission)
+                print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
+                args = build_args(algo, config, mission)
+                print(f"Running {algo}.py with args: {args}")
+                subprocess.run(["python", f"{algo}.py"] + args, check=True)
     else:
         for algo in config["algorithm_list"]:
-            run_algorithm(algo, config)
+            args = build_args(algo, config)
+            print(f"Running {algo}.py with args: {args}")
+            subprocess.run(["python", f"{algo}.py"] + args, check=True)
 
 
 if __name__ == "__main__":

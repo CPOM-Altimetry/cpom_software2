@@ -1,0 +1,163 @@
+#-------------------------------------------------------------------------------------#
+# Example Run Control file to produce single mission ice sheet wide 
+# dhdt estimates and plots. 
+#
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process all configured missions (sequential):
+#     python run_chain.py --config example_single_mission_icesheet_wide.yml
+#-------------------------------------------------------------------------------------#
+
+# Define which mission(s) to process
+missions_to_run: 
+  - cs2
+  - env
+
+# Base output directory where all results will be stored
+# Individual missions create subdirectories within this path
+base_out: "/example/name/SEC/"
+
+#-------------------------------------------------------------------------------------#
+# MISSION-SPECIFIC PARAMETERS
+# These override the common parameters below for each mission
+#
+# INPUT DIRECTORY OVERRIDE:
+# You can override input directories in the config by adding 'in_dir' 
+# to any step. This allows reusing intermediate outputs from previous runs.
+#
+# GRID METADATA MANAGEMENT:
+# When grids are pre-computed and stored externally, specify 'grid_info_json' at 
+# the mission level. This path is then automatically passed to all steps that need it.
+#-------------------------------------------------------------------------------------#
+
+# Defining the first mission: cs2 steps to be run
+cs2:
+  # Algorithm chain: No grid_for_elev_change because grid already exists
+  algorithm_list:
+    - surface_fit                # Step 1: Use existing grid metadata
+    - epoch_average              # Step 2: Compute epoch-averaged values
+    - calculate_dhdt             # Step 3: Calculate rate of change
+    - dhdt_plots                 # Step 4: Generate visualizations
+
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Data will be written to {base_out}/{base_folder}/
+  base_folder: "greenland_cs2"
+
+  # Path to grid metadata
+  grid_info_json: "/data/grids/greenland/cs2_5km/metadata.json"
+
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Surface fitting parameters
+  surface_fit:
+    in_dir : "example/name/SEC/greenland_cs2/gridded_altimetry/" # Override input directory
+    mintime: "20/10/2010"
+    maxtime: "28/02/2025"
+    pcmintime: "20/10/2010"
+    pcmaxtime: "28/02/2025"
+    mode_values: [1, 3]
+
+env:
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+    - surface_fit                # Step 2: Fit surfaces to grid
+    - epoch_average              # Step 3: Compute epoch-averaged values
+    - calculate_dhdt             # Step 4: Calculate rate of change
+    - dhdt_plots                 # Step 5: Generate visualizations
+
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Base folder name for this mission's outputs
+  base_folder: "greenland_env"
+  
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "/data/ENV/L2/FDR4ALT/TDP/greenland/land_ice"
+    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+
+  # Surface fitting parameters
+  # No in_dir override here - uses output from grid step
+  surface_fit:
+    mintime: "01/07/2002"
+    maxtime: "20/10/2010"
+
+#-------------------------------------------------------------------------#
+# COMMON PROCESSING PARAMETERS
+# Applied to all missions; mission-specific params above override these
+#-------------------------------------------------------------------------#
+
+########################
+# Grid Creation
+########################
+grid_for_elev_change:
+  out_folder_name: gridded_altimetry
+  area: 'greenland'
+  gridarea: "greenland"
+  binsize: 5000                      
+  mask_name: 'greenland_icesheet_2km_grid_mask'
+  standard_epoch: "1991-01-01T00:00:00"
+  partition_xy_chunking: 200
+
+########################
+# Surface Fitting
+########################
+surface_fit:  
+  in_step: "grid_for_elev_change"     # Uses output from Step 1
+  out_folder_name: surface_fit
+  min_vals_in_cell: 20                
+  min_percent_timespan_in_cell: 70.0  
+  n_sigma: 2.0                        
+  max_surfacefit_iterations: 30
+  max_linearfit_iterations: 3
+  weighted_surface_fit: false
+  powercorrect: true
+
+########################
+# Epoch Averaging
+########################
+epoch_average:
+  in_step: surface_fit             # Uses output from Step 2
+  out_folder_name: epoch_average
+  epoch_length: 140                   
+  gia_model: "ice5g"                
+
+########################
+# Calculate dhdt
+########################
+calculate_dhdt:
+  in_step: epoch_average              # Uses output from Step 3
+  out_folder_name: single_mission_dhdt
+  min_pts_in_period: 10               
+  min_period_coverage: 50             
+  max_allowed_dhdt: 30               
+  dh_avg_varname: "dh_ave"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  parquet_glob: "epoch_average.parquet"
+  basin_structure: False              
+
+########################
+# Visualization
+########################
+dhdt_plots:
+  in_step: calculate_dhdt           # Uses output from Step 4
+  out_folder_name: dhdt_plots
+  basin_structure: False              
+  mask: 'greenland_icesheet_2km_grid_mask'
+  parquet_glob: "dhdt.parquet"
+

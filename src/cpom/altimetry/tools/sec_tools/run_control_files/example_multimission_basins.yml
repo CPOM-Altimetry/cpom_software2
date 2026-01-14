@@ -1,0 +1,70 @@
+#-------------------------------------------------------------------------#
+# Example Run Control file to produce multimission cross calibrated basin scale 
+# dhdt estimates and plots. 
+# 
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process all configured missions (sequential):
+#     python run_chain.py --config example_multimission_basins.yml
+#-------------------------------------------------------------------------#
+
+# Define which steps to run 
+algorithm_list:
+  - cross_calibrate_missions
+  - calculate_dhdt
+  - dhdt_plots
+
+# Base output directory
+base_out : "example/name/SEC/"
+
+#--------------------------------#
+# COMMON PROCESSING PARAMETERS   # 
+#--------------------------------#
+cross_calibrate_missions:
+  out_folder_name: "cross_calibrated"
+  mission_mapper: { # Paths to pre-computed epoch_average_basins outputs
+    "e1": "example/name/SEC/greenland_e1_5km/epoch_average_basins/",
+    "e2": "example/name/SEC/greenland_e2_5km/epoch_average_basins/",
+    "env": "example/name/SEC/greenland_env_5km/epoch_average_basins/",
+    "cs2": "example/name/SEC/greenland_cs2_5km/epoch_average_basins/",
+  }
+  missions_sorted: ["e1", "e2", "env", "cs2"] # Order to cross-calibrate. First mission is reference.
+  bias_threshold: 100
+  epoch_column: "epoch_number"
+  time_column: "epoch_hi_dt"
+  dh_column: "dh_ave"
+  min_observations: 5 
+  basin_structure: True
+  region_selector: ['PETERMANN_GLETSCHER']
+
+calculate_dhdt:
+  in_step: "cross_calibrate_missions"
+  out_folder_name: cross_calibrated_dhdt
+  min_pts_in_period: 10
+  min_period_coverage: 50 
+  max_allowed_dhdt: 30 
+  dh_avg_varname: "biased_dh"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  xcal_stderr_varname : "stderr"
+  parquet_glob: "*corrected_epoch_average.parquet"
+  step_length: 1y
+  dhdt_period: 5y
+  region_selector: ['PETERMANN_GLETSCHER']
+  basin_structure: True
+
+dhdt_plots: 
+  in_step: calculate_dhdt
+  out_folder_name: cross_calibrated_dhdt
+  plot_range: [-1, 1]
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+  region_selector: ['PETERMANN_GLETSCHER']
+  basin_structure: True
+  parquet_glob: "*dhdt.parquet"
+  area_name: "greenland"
+  grid_area: "greenland"
+  binsize: 5000

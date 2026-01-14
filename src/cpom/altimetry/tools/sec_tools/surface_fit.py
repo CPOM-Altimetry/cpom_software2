@@ -50,7 +50,6 @@ import duckdb
 import numpy as np
 import polars as pl
 import statsmodels.api as sm
-from scipy import linalg as scipy_linalg
 from scipy import stats
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
@@ -59,7 +58,7 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
 )
 from cpom.logging_funcs.logging import set_loggers
 
-INV_SECONDS_PER_YEAR = 1.0 / 31557600.0
+SECONDS_PER_YEAR = 31557600
 
 
 # ----------------------------------------------------------------------------
@@ -136,7 +135,7 @@ def parse_arguments(args):
     )
     parser.add_argument(
         "--max_surfacefit_iterations",
-        default=50,
+        default=30,
         type=int,
         help="Maximum number of iterations of surface fit",
     )
@@ -543,11 +542,11 @@ def filter_to_mode(lf: pl.LazyFrame) -> pl.LazyFrame:
         [
             # Cells without multiple valid modes (keep all data)
             lf.join(multimode_cells, on=["x_bin", "y_bin"], how="anti"),
-            # Multi-mode cells: filter to keep only most common mode OR null modes
+            # Multi-mode cells: keep only the most common non-null mode
             lf.join(multimode_cells, on=["x_bin", "y_bin"]).join(
                 mode_to_keep, on=["x_bin", "y_bin", "mode"], how="semi"
             ),
-            lf.join(multimode_cells, on=["x_bin", "y_bin"]).filter(pl.col("mode").is_null()),
+            # lf.join(multimode_cells, on=["x_bin", "y_bin"]).filter(pl.col("mode").is_null()),
         ]
     )
 
@@ -592,6 +591,15 @@ def get_grid_data(
         "n_cells_with_data_loaded": cells_before,
         "n_measurements_loaded": total_measurements,
     }
+    schema = lf.collect_schema()
+
+    # Filter to mode values if specified
+    if params.mode_values is not None:
+        lf = lf.filter(pl.col(params.mode_column).is_in(params.mode_values))
+
+    # Filter to most common mode per cell (using ALL time data)
+    if params.mode_column and params.mode_column in schema:
+        lf = filter_to_mode(lf)
 
     # Filter out data outside time range
     lf = lf.filter(
@@ -616,7 +624,7 @@ def get_grid_data(
             (pl.col(params.x_column) * pl.col(params.y_column)).alias("xy"),
             (pl.col(params.elevation_column).alias("height")),
             (pl.col(params.heading_column).cast(pl.Int32).alias("heading")),
-            (pl.col(params.time_column) * INV_SECONDS_PER_YEAR).alias("time_years"),
+            (pl.col(params.time_column) / SECONDS_PER_YEAR).alias("time_years"),
         ]
     )
     schema = lf.collect_schema()
@@ -641,12 +649,6 @@ def get_grid_data(
         columns.append(params.mode_column)
     if params.weight_column and params.weight_column in schema:
         columns.append(params.weight_column)
-    # Filter to mode
-    if params.mode_values is not None:
-        lf = lf.filter(pl.col(params.mode_column).is_in(params.mode_values))
-
-    if params.mode_column in schema:
-        lf = filter_to_mode(lf)
 
     return lf.select([pl.col(col) for col in columns]), status
 
@@ -733,10 +735,9 @@ def _get_fit_params(
             - fit_params: ndarray of params if successful, else None
             - error_status: None on success, or "n_cells_fit_failed" on failure
     """
-    # Build design matrix using np.column_stack (cleaner, same speed)
     iv = np.column_stack(
         (
-            np.ones(ref_time.size),
+            np.ones(ref_time.size),  # constant column
             group_np["x"],
             group_np["y"],
             group_np["x2"],
@@ -749,11 +750,11 @@ def _get_fit_params(
 
     # --------------------------
     # Weighted surface fit
-    #   ---------------------------
+    # ---------------------------
     if params.weighted_surface_fit:
 
         weights = group_np[params.weight_column]
-        w = 1.0 / (weights**2)
+        w = np.where(weights > 0, 1.0 / (weights**2), 0.0)
         wt = w / np.nansum(w)
         try:
             res = sm.WLS(group_np["height"], iv, weights=wt, missing="drop").fit()
@@ -778,10 +779,9 @@ def _get_fit_params(
     # Least Squares fit to a surface function
     # -----------------------------------------------------
     try:
-        fit_params, *_ = scipy_linalg.lstsq(iv, group_np["height"])
-
+        fit_params, *_ = np.linalg.lstsq(iv, group_np["height"], rcond=None)
         return fit_params, None
-    except (scipy_linalg.LinAlgError, ValueError) as e:
+    except np.linalg.LinAlgError as e:
         logger.warning(f"lstsq failed with: {e}")
         return None, "n_cells_fit_failed"
 
@@ -829,18 +829,17 @@ def fit_surface_model_per_group(
     # --------------------------------------------------------------------------
     # Iterate a surface model fit to the cell
     # --------------------------------------------------------------------------
-    for _ in range(params.max_surfacefit_iterations):
 
-        if np.ptp(group_np["time"]) < params.min_timespan_in_cell_in_secs:
-            return "n_cells_with_timespan_too_short"
+    if np.ptp(group_np["time"]) < params.min_timespan_in_cell_in_secs:
+        return "n_cells_with_timespan_too_short"
+
+    for _ in range(params.max_surfacefit_iterations):
 
         if group_np["height"].size < params.min_vals_in_cell:
             return "n_cells_with_too_few_measurements"
 
         # Reference time for surface fit is centred on the mid-point of the time window
-        ref_time = group_np["time_years"] - (
-            (min_seconds + max_seconds) * INV_SECONDS_PER_YEAR / 2.0
-        )
+        ref_time = group_np["time_years"] - ((min_seconds + max_seconds) / (2.0 * SECONDS_PER_YEAR))
         # Perform surface fit
         fit_params, error_status = _get_fit_params(params, group_np, ref_time, logger)
         if error_status is not None:
@@ -919,16 +918,16 @@ def fit_power_correction_per_group(
         (group_np["time"] >= time_params["pc_min_secs"])
         & (group_np["time"] <= time_params["pc_max_secs"])
     )[0]
-    ref_time = group_np["time_years"] - (
-        (time_params["mintime"] + time_params["maxtime"]) * INV_SECONDS_PER_YEAR / 2.0
-    )
 
     if pc_timeok_indices.size >= params.min_vals_in_cell:
+        ref_time = group_np["time_years"] - (
+            (time_params["mintime"] + time_params["maxtime"]) / (2.0 * SECONDS_PER_YEAR)
+        )
+
         # ----------------------------------------------------------------------------------------
         # Fit a model to power as a function of time and heading, p = a + bt + ch
         # ----------------------------------------------------------------------------------------
         iv = np.column_stack((np.ones(ref_time.size), ref_time, group_np["heading"]))
-
         # Check if weighted power fit is enabled and weight_column is available
         if (
             hasattr(params, "weighted_power_fit")
@@ -944,8 +943,8 @@ def fit_power_correction_per_group(
                 return "n_cells_fit_failed"
         else:
             try:
-                power_res, *_ = scipy_linalg.lstsq(iv, group_np["power"])
-            except (scipy_linalg.LinAlgError, ValueError) as e:
+                power_res, *_ = np.linalg.lstsq(iv, group_np["power"], rcond=None)
+            except np.linalg.LinAlgError as e:
                 logger.warning(f"lstsq failed with: {e}")
                 return "n_cells_fit_failed"
         # -----------------------------------------------------------------
@@ -960,12 +959,17 @@ def fit_power_correction_per_group(
         group_np["dH"] -= m * dp
 
         # Return appropriate keys based on whether weights are available
-        return_keys = ["time", "time_years", "dH"]
+        return_keys = ["time", "time_years", "dH", "heading"]
         if params.weight_column and params.weight_column in group_np:
             return_keys.append(params.weight_column)
 
         return {key: value for key, value in group_np.items() if key in return_keys}
-    return "n_cells_too_few_vals_after_pctime_filter"
+
+    # Return uncorrected data if insufficient time points (matches old_sf.py behavior)
+    return_keys = ["time", "time_years", "dH", "heading"]
+    if params.weight_column and params.weight_column in group_np:
+        return_keys.append(params.weight_column)
+    return {key: value for key, value in group_np.items() if key in return_keys}
 
 
 # ------------------------
@@ -1023,11 +1027,16 @@ def fit_linear_fit_per_group(
         sigma = np.std(differences, ddof=1)
         mask = np.absolute(differences) <= rms * 2.0
 
+        if np.count_nonzero(mask) == 0:
+            break
         if np.count_nonzero(mask) <= 3:
-            return "n_too_few_values_in_linear_fit"
+            break
 
         for key in group_np:  # Apply mask to all arrays in group dictionary
             group_np[key] = group_np[key][mask]
+
+    if group_np["time"].size <= 3:
+        return "n_too_few_values_in_linear_fit"
 
     return {
         "m": m,
@@ -1176,14 +1185,15 @@ def surface_fit(
     Perform surface fit on grid data per grid cell.
 
     Steps:
-        1. Loop though chunks and load data using 'get_grid_data'
-        2. Loop through grid cells :
-            - Convert gridcell data to a numpy array
-            - Perform surface fit 'fit_surface_model_per_group'
-            - Perform power correction 'fit_power_correction_per_group'
-            - Perform linear fit 'fit_linear_fit_per_group'
-            - Construct output dictionaries
-        3. Write parquet files
+        1. Loop though chunks
+        2. Load grid data for chunk using 'get_grid_data'
+        3. Loop through grid cells :
+            a. Convert gridcell data to a numpy arrays
+            b. Perform surface / plane fit 'fit_surface_model_per_group'
+            c. Perform power correction 'fit_power_correction_per_group'
+            d. Perform linear fit 'fit_linear_fit_per_group'
+            e. Construct output dictionaries
+        4. Write parquet files
             - A parquet of grid cells metadata
             - A timeseries grid
 
@@ -1202,13 +1212,14 @@ def surface_fit(
     pc_max_secs = sf_objects["pc_max_secs"]
     chunk_id = 0
 
+    # 1. Loop through grid chunks
     for row in sf_objects["part_df"].iter_rows(named=True):
         grid_records = []
         timeseries_records = []
         chunk_id = chunk_id + 1
         logger.info(f"Processing chunk : {chunk_id} / {len(sf_objects['part_df'])}")
 
-        # 1. Get grid data for chunk
+        # 2. Load gridded data for this chunk
         gridcell_lazy, chunk_status = get_grid_data(
             f"{params.in_dir}/**/x_part={row['x_part']}/y_part={row['y_part']}/*.parquet",
             params,
@@ -1222,8 +1233,9 @@ def surface_fit(
 
         grouped = gridcell_lazy.collect().group_by(["x_bin", "y_bin", "x_part", "y_part"])
 
-        # 2. Execute surface fit process
+        # 3. Loop through grid cells in this chunk
         for (x_bin, y_bin, x_part, y_part), gridcell in grouped:
+            # 3a. Construct numpy arrays of grid cell data used in fitting
             gridcell_np = {
                 col: gridcell[col].to_numpy()
                 for col in [
@@ -1242,7 +1254,7 @@ def surface_fit(
                 if col in gridcell.columns
             }
 
-            # Perform a Least Squares fit to a surface function
+            # 3b. Plane fit to surface
             surface_result = fit_surface_model_per_group(
                 params=params,
                 group_np=gridcell_np,
@@ -1255,9 +1267,8 @@ def surface_fit(
                 status[surface_result] += 1
                 continue
             res, group_np = surface_result
-            #  Apply a Power Correction if --apply_power_correction is set
-            #  power correction can be performed using the whole time period, or
-            #  a short period (ie 60 months) set by pcmintime,pcmaxtime
+
+            # 3c. Power Correction (if enabled)
             if params.powercorrect:
 
                 power_result = fit_power_correction_per_group(
@@ -1278,54 +1289,51 @@ def surface_fit(
                 status["n_cells_power_corrected"] += 1
                 group_np = power_result
 
-            # Get modelled dh/dt
+            # 3d. Linear fit to get dhdt
             linear_result = fit_linear_fit_per_group(params, group_np)
             if isinstance(linear_result, str):
                 status[linear_result] += 1
                 continue
 
-            if len(linear_result["mask"]) > 3:
-                grid_record = {
+            # 3e. Construct output record for grid cell
+            grid_record = {
+                "x_part": x_part,
+                "y_part": y_part,
+                "x_bin": x_bin,
+                "y_bin": y_bin,
+                "dhdt": linear_result["m"],
+                "slope": (180.0 / np.pi) * np.sqrt((res[1] ** 2) + (res[2] ** 2)),
+                "sigma": linear_result["sigma"],
+                "rms": linear_result["rms"],
+            }
+            if linear_result.get("std_err") is not None:
+                grid_record["std_err"] = linear_result.get("std_err")
+            grid_records.append(grid_record)
+
+            for idx, (ts_val, ty_val, dh_val) in enumerate(
+                zip(
+                    linear_result["group_np"]["time"],
+                    linear_result["group_np"]["time_years"],
+                    linear_result["group_np"]["dH"],
+                )
+            ):
+                ts_record = {
                     "x_part": x_part,
                     "y_part": y_part,
                     "x_bin": x_bin,
                     "y_bin": y_bin,
-                    "dhdt": linear_result["m"],
-                    "slope": (180.0 / np.pi) * np.sqrt(res[1] ** 2 + res[2] ** 2),
-                    "sigma": linear_result["sigma"],
-                    "rms": linear_result["rms"],
+                    "time": ts_val,
+                    "time_years": ty_val,
+                    "dh": dh_val,
                 }
 
-                if linear_result.get("std_err") is not None:
-                    grid_record["std_err"] = linear_result.get("std_err")
-                grid_records.append(grid_record)
+                if params.weight_column in linear_result["group_np"]:
+                    ts_record[params.weight_column] = linear_result["group_np"][
+                        params.weight_column
+                    ][idx]
+                timeseries_records.append(ts_record)
 
-                for idx, (ts_val, ty_val, dh_val) in enumerate(
-                    zip(
-                        linear_result["group_np"]["time"],
-                        linear_result["group_np"]["time_years"],
-                        linear_result["group_np"]["dH"],
-                    )
-                ):
-                    ts_record = {
-                        "x_part": x_part,
-                        "y_part": y_part,
-                        "x_bin": x_bin,
-                        "y_bin": y_bin,
-                        "time": ts_val,
-                        "time_years": ty_val,
-                        "dh": dh_val,
-                    }
-
-                    if params.weight_column in linear_result["group_np"]:
-                        ts_record[params.weight_column] = linear_result["group_np"][
-                            params.weight_column
-                        ][idx]
-                    timeseries_records.append(ts_record)
-
-                status["n_cells_fitted"] += 1
-            else:
-                status["n_too_few_values_in_linear_fit"] += 1
+            status["n_cells_fitted"] += 1
 
         # 3. Write Parquet Files per chunk
         write_chunk_output(params, timeseries_records, row, grid_records, chunk_id)

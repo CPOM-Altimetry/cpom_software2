@@ -2,26 +2,21 @@
 cpom.altimetry.tools.sec_tools.clip_to_basins
 
 Purpose:
-    Clips altimetry data to glacier or basin boundaries defined in a CPOM Mask class
-    grid mask.
-
-    Spatially subset altimetry data to user-defined regions
-    (e.g., glaciers, ice shelves, drainage basins)
+    
+    Clips data to basin, glacier, or region defined by a CPOM Mask class grid mask,
     by clipping points to mask label based on a 2km grid.
-    Supports both non-partitioned datasets after epoch_average.
+
+    Supports non-partitioned datasets after epoch_average.
     To process large partitioned datasets saved before epoch_average, use
     clip_to_basins_from_shapefile.py.
-
-    For data clipped before Epoch Average, use clip_to_basins_from_shapefile.py
-    which uses shapefiles for clipping and can process grid chunks independently.
 
 Supported Masks:
     Any grid mask from cpom.masks.mask_list that has grid_value_names defined.
 
 Output:
-    - Clipped data: <out_dir>/<basin_name>/data.parquet
-                    (Non-partitioned: single file per basin)
-    - Metadata: <out_dir>/metadata.json (processing parameters and timing)
+    - Clipped Parquet data written per basin:
+            <out_dir>/<basin_name>/data.parquet
+    - metadata.json summarising processing parameters and execution time
 """
 
 import argparse
@@ -60,11 +55,11 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--in_dir",
         type=str,
         required=True,
-        help="Input gridded altimetry data" "e.g. from epoch_average.parquet",
+        help="Directory containing input altimetry data",
     )
     parser.add_argument(
         "--out_dir",
-        help="Path of output directory for clipped_epochs results",
+        help="Directory for output results",
         type=str,
         required=True,
     )
@@ -72,11 +67,11 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="Glob pattern to match parquet files in input directory.",
+        help="File glob pattern for selecting input files.",
     )
     parser.add_argument(
         "--grid_info_json",
-        help="Path to the grid metadata JSON file.",
+        help="Path to the grid metadata JSON file, if not passed is inferred",
         required=True,
     )
     parser.add_argument(
@@ -95,9 +90,10 @@ def get_data(grid_area: GridArea, infile: str, logger: Logger) -> pl.LazyFrame:
     """
     Load data and add geographic coordinates.
 
-    Loads all parquet files matching the glob pattern from input directory and
-    converts grid cell coordinates (x_bin, y_bin) to latitude/longitude using
-    the grid area's coordinate system.
+    Add latitude/longitude coordinates for grid-cell centres to a dataset.
+    
+    Coordinates are derived from x_bin and y_bin indices using the GridArea
+    definition and appended as new columns.
 
     Args:
         grid_area (GridArea): CPOM GridArea object for coordinate transformations.
@@ -110,16 +106,14 @@ def get_data(grid_area: GridArea, infile: str, logger: Logger) -> pl.LazyFrame:
     logger.info(f"Loading data from: {Path(infile)}")
     epoch_data = pl.scan_parquet(Path(infile))
 
-    # Get unique cells - collect once to ensure consistent row ordering
+    # Get unique cells
     unique_cells = epoch_data.select(["x_bin", "y_bin"]).unique().collect()
 
-    # Compute lat/lon from the collected DataFrame
+    # Compute lat/lon
     lats, lons = grid_area.get_cellcentre_lat_lon_from_col_row(
         unique_cells.get_column("x_bin").to_numpy(),
         unique_cells.get_column("y_bin").to_numpy(),
     )
-
-    # Create coordinate lookup DataFrame
     coords_df = unique_cells.with_columns(
         [
             pl.Series("lat", lats),
@@ -140,11 +134,12 @@ def clip_data_to_shape(
     basin_name: str,
     data: pl.LazyFrame,
 ) -> pl.LazyFrame:
-    """Clip data to specified mask region by filtering rows matching the mask label.
+    """
+    Clip point data to a specific region defined by a CPOM Mask.
 
-    Evaluates each row's lat/lon against the mask grid, assigns the corresponding
-    mask label from grid_value_names, and filters to keep only rows matching
-    the specified basin_name.
+    Each row in the input data is assigned a mask label based on its latitude
+    and longitude. Only rows corresponding to the specified basin_name
+    (from mask.grid_value_names) are kept.
 
     Args:
         mask (Mask): CPOM Mask object for mask value lookup.
@@ -194,7 +189,7 @@ def process_single_basin(
     logger: Logger,
 ):
     """
-    Clip altimetry data to a single basin and save results to parquet files.
+    Clip altimetry data to a single basin and write results to disk.
 
     Args:
         params: Command line parameters.
@@ -210,7 +205,7 @@ def process_single_basin(
     Output:
         - Non-partitioned: <out_dir>/<basin_name>/data.parquet
         - Partitioned: <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
-                      (one file per non-empty partition)
+                    (one file per non-empty partition)
     """
     logger.info(f"Clipping to: {basin_name}")
     output_dir = Path(params.out_dir) / basin_name
@@ -225,12 +220,12 @@ def process_single_basin(
 
 def get_metadata_json(params: argparse.Namespace, start_time, logger: Logger):
     """
-    Generate and save metadata JSON for the clipping operation.
+    Generate metadata JSON for clipped data.
 
     Args:
-        params (argparse.Namespace): Command line parameters to save in metadata.
-        start_time (float): Start time (from time.time()) for execution time calculation.
-        logger (Logger): Logger object for progress and error messages.
+        params (argparse.Namespace): Command line parameters.
+        start_time (float): Start time.
+        logger (Logger): Logger object.
     """
     meta_json_path = Path(params.out_dir) / "metadata.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
@@ -258,15 +253,15 @@ def main(args):
     Mask class grid.
 
     Steps:
-    1. Parse command line arguments
-    2. Set up output directory and logging
-    3. Load grid metadata from JSON file
-    4. Initialize GridArea and Mask objects
-    5. Process and clip data by mask regions
-    6. Write metadata JSON
+        1. Parse command line arguments
+        2. Set up output directory and logging
+        3. Load grid metadata from JSON file
+        4. Initialize GridArea and Mask objects
+        5. Process and clip data by mask regions
+        6. Write metadata JSON
 
     Args:
-        args (list[str]): Command line arguments (typically sys.argv[1:]).
+        args (list[str]): Command line arguments.
     """
 
     start_time = time.time()

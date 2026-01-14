@@ -1,0 +1,98 @@
+#-------------------------------------------------------------------------#
+# Example Run Control file to produce single mission basin scale 
+# dhdt estimates and plots. 
+# 
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process all configured missions (sequential):
+#     python run_chain.py --config example_single_mission_basins.yml
+#-----------------------------------------------------
+
+# Define which mission(s) to process
+missions_to_run: 
+  - cs2
+  - env
+
+# Base output directory
+base_out: "/example/name/SEC/"
+
+#-------------------------------------#
+# MISSION-SPECIFIC PARAMETERS
+#-------------------------------------#
+cs2:
+  algorithm_list:
+    - clip_to_basins             # Extract basin subsets from pre-computed epoch_average
+    - epoch_average_plots        # Visualize epoch averages time series per basin
+    - calculate_dhdt             # Calculate rate of change per basin
+    - dhdt_plots                 # Generate dhdt plots
+
+  # Base folder name for this mission
+  # If points to the same location as epoch_average output, there is no need 
+  # to pass a custom in_dir to clip_to_basins
+  base_folder: "greenland_cs2"
+  grid_info_json: "/data/grids/greenland/cs2_5km/metadata.json"
+
+  clip_to_basins:
+    in_dir: "path/to/existing/epoch_average/output" # Optional 
+
+env : 
+  algorithm_list :
+    - clip_to_basins_from_shapefile # Faster clipping using shapefile (Uses more memory)
+    - epoch_average_plots
+    - calculate_dhdt
+    - dhdt_plots
+
+  base_folder: "greenland_env"
+  grid_info_json: "/data/grids/greenland/env_5km/metadata.json"
+
+  clip_to_basins_from_shapefile:
+    in_dir: "path/to/existing/epoch_average/output" # Optional 
+
+#-------------------------------------------------------------------------#
+# COMMON PROCESSING PARAMETERS
+# Applied to all missions; mission-specific params above override these
+#-------------------------------------------------------------------------#
+
+clip_to_basins:
+  in_step: "epoch_average"
+  out_folder_name: epoch_average_basins
+  region_selector: ['all'] # Will Clip to all basins defined in mask
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+
+clip_to_basins_from_shapefile:
+  in_step: "epoch_average"
+  out_folder_name: epoch_average_basins/shapefile_clipped/
+  region_selector: ['all'] 
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+
+epoch_average_plots:
+  in_step: "clip_to_basins"
+  out_folder_name: epoch_average_plots
+  basin_structure: True
+  region_selector: ['all'] # Will plot all basins defined in mask
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+
+calculate_dhdt: 
+  in_step: clip_to_basins
+  out_folder_name: single_mission_dhdt
+  min_pts_in_period: 10
+  min_period_coverage: 50 
+  max_allowed_dhdt: 30 
+  dh_avg_varname: "dh_ave"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  parquet_glob: "data.parquet"
+  basin_structure: True 
+  region_selector: ['PETERMANN_GLETSCHER'] # Can specify comma seperated list of basins
+
+dhdt_plots: 
+  in_step: calculate_dhdt
+  out_folder_name: dhdt_plots
+  basin_structure: True
+  region_selector: ['PETERMANN_GLETSCHER']
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+  parquet_glob: "dhdt.parquet"
