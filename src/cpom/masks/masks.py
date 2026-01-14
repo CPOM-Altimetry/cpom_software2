@@ -1,5 +1,6 @@
 """Class for area masking"""
 
+# pylint: disable=C0302
 import csv
 import hashlib
 import logging
@@ -639,7 +640,7 @@ class Mask:
             )
             # Mask values are 1-260, CSV has 260 rows. Prepend entry for mask value 0.
             glacier_names = ["Unclassified"]
-            with open(glacier_csv, mode="r") as f:
+            with open(glacier_csv, mode="r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     glacier_names.append(row["NAME"])
@@ -975,7 +976,7 @@ class Mask:
     ######################################################
     # Function to Mask to a polars LazyFrame or DataFrame #
     ######################################################
-
+    # pylint: disable=R0917
     def points_inside_polars(
         self,
         df: pl.LazyFrame | pl.DataFrame,

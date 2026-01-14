@@ -3,11 +3,11 @@ cpom.altimetry.tools.sec_tools.clip_to_basins_from_shapefile
 
 Purpose:
 
-    Clips data to basin, glacier, or region boundaries defined by polygon geometries 
+    Clips data to basin, glacier, or region boundaries defined by polygon geometries
     in a shapefile, based on whether the cell centre lies within a polygon boundary.
 
     It supports both:
-        - Non-partitioned datasets, loaded and processed in memory. 
+        - Non-partitioned datasets, loaded and processed in memory.
         - Large partitioned datasets, processed incrementally using bounding-box
         pre-filtering to reduce memory usage.
 
@@ -78,7 +78,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="File glob pattern for selecting input files."
+        help="File glob pattern for selecting input files.",
     )
     parser.add_argument(
         "--grid_info_json",
@@ -114,13 +114,14 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
 
     return parser.parse_args(args)
 
+
 def add_coordinates_to_data(
     data: pl.LazyFrame,
     grid_area: GridArea,
 ) -> pl.LazyFrame:
     """
     Add projected x/y coordinates for grid-cell centres to a dataset.
-    
+
     Coordinates are derived from x_bin and y_bin indices using the GridArea
     definition and appended as new columns.
 
@@ -212,6 +213,7 @@ def load_partitioned_data_for_basin(
 
         yield partition
 
+
 def clip_data_to_shape(
     grid_area: GridArea,
     subregion_shape: gpd.GeoDataFrame,
@@ -219,7 +221,7 @@ def clip_data_to_shape(
 ) -> pl.LazyFrame:
     """
     Spatially clip data to a basin polygon using grid-cell centre locations.
-    
+
     Args:
         grid_area (GridArea): CPOM GridArea object for coordinate conversion.
         subregion_shape ( geopandas.GeoDataFrame ):Basin or region polygon geometry.
@@ -256,6 +258,7 @@ def clip_data_to_shape(
     if isinstance(data, pl.LazyFrame):
         return data.join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
     return data.lazy().join(filter_df.lazy(), on=["x_bin", "y_bin"], how="inner").drop(["x", "y"])
+
 
 def process_single_basin(
     params: argparse.Namespace,

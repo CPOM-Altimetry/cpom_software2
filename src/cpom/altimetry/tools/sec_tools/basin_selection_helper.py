@@ -3,11 +3,11 @@ cpom.altimetry.tools.sec_tools.basin_selection_helper
 
 Module with cental utilities for basin/region selection in SEC tools.
 
-Includes : 
+Includes :
     1. add_basin_selection_arguments() to add standard CLI args for basin selection
         - basin_structure: bool flag for root vs basin mode
         - region_selector: list of basin names to include
-    2. get_basins_to_process() 
+    2. get_basins_to_process()
 
 """
 

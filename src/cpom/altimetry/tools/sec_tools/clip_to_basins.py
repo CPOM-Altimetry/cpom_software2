@@ -2,7 +2,7 @@
 cpom.altimetry.tools.sec_tools.clip_to_basins
 
 Purpose:
-    
+
     Clips data to basin, glacier, or region defined by a CPOM Mask class grid mask,
     by clipping points to mask label based on a 2km grid.
 
@@ -91,7 +91,7 @@ def get_data(grid_area: GridArea, infile: str, logger: Logger) -> pl.LazyFrame:
     Load data and add geographic coordinates.
 
     Add latitude/longitude coordinates for grid-cell centres to a dataset.
-    
+
     Coordinates are derived from x_bin and y_bin indices using the GridArea
     definition and appended as new columns.
 

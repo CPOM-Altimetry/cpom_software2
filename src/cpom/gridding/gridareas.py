@@ -8,7 +8,7 @@ Each area is defined by projection, bottom left corner x,y coordinates in m, wid
 
 Author: Alan Muir (CPOM/UCL)
 Date: 2019
-Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author 
+Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author
 
 History:
 Updated 24/09/21 by Lin Gilbert to use pyproj CRS rather than Proj

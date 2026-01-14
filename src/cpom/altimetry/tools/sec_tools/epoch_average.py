@@ -364,7 +364,9 @@ def get_gia_correction_lf(
     gia = GIA(gia_model)
     grid = GridArea(json_config["gridarea"], json_config["binsize"])
     grid_x, grid_y = np.meshgrid(grid.cell_x_centres, grid.cell_y_centres)
-    uplift_grid = gia.interp_gia(grid.crs_bng, grid.crs_wgs, grid_x, grid_y)
+    uplift_grid = gia.interp_gia(
+        grid_x, grid_y, {"crs_bng": grid.crs_bng, "crs_wgs": grid.crs_wgs}, method="linear"
+    )
     y_idx, x_idx = np.indices(uplift_grid.shape)
 
     uplift_grid = pl.LazyFrame(

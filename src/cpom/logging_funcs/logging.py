@@ -1,24 +1,18 @@
 """cpom.logging_funcs.logging.py
 
-# Purpose
+Providing standardised functions for logging functionality.
 
-Logging functions for providing logging functionality for tools.
-These uses the standard python logging interface
+Example :
 
-# Usage Example
+from cpom.logging_funcs.logging import get_logger
 
-```
-       from cpom.logging_funcs.logging import get_logger
-
-
-       log = get_logger(
-              log_file_info=logfile,
-              log_file_error=logfile[:-3] + "errors.log",
-              log_file_debug=logfile[:-3] + "debug.log",
-              log_format="%(levelname)s : %(asctime)s %(name)s : %(message)s",
-              default_log_level=logging.INFO,
-              )
-```
+log = get_logger(
+        log_file_info=logfile,
+        log_file_error=logfile[:-3] + "errors.log",
+        log_file_debug=logfile[:-3] + "debug.log",
+        log_format="%(levelname)s : %(asctime)s %(name)s : %(message)s",
+        default_log_level=logging.INFO,
+        )
 
 """
 
@@ -27,6 +21,7 @@ from types import TracebackType
 from typing import Type
 
 
+# pylint: disable = R0913, R0917
 def set_loggers(
     log_format: str = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     log_name: str = "",
@@ -89,12 +84,6 @@ def set_loggers(
         file_handler_debug.setFormatter(log_formatter)
         file_handler_debug.setLevel(logging.DEBUG)
         log.addHandler(file_handler_debug)
-
-    # set the allowed log level
-    #   - logging.DEBUG will allow all levels (DEBUG, INFO, WARNING, ERROR)
-    #   - logging.INFO will allow all levels (INFO, WARNING, ERROR)
-    #   - logging.WARNING will allow all levels (WARNING, ERROR)
-    #   - logging.ERROR will allow all levels (ERROR)
 
     log.setLevel(default_log_level)
 

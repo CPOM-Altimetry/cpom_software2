@@ -7,7 +7,7 @@ CONFIGURATION MODES:
   Single-mission:
     Set 'missions_to_run' + 'algorithm_list' per mission
         e.g. example_single_mission_icesheet_wide.yml
-  Multi-mission:  
+  Multi-mission:
     Set 'algorithm_list' at root
         e.g. example_multi_mission_icesheet_wide.yml
 

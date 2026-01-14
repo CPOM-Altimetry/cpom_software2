@@ -689,7 +689,7 @@ class Area:
 
         return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
 
-    # pylint: disable=R0913
+    # pylint: disable=R0913, R0917
     def latlon_to_xy_polars(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -735,6 +735,7 @@ class Area:
 
         return df.collect() if isinstance(df, pl.LazyFrame) & return_pl_dataframe else df
 
+    # pylint: disable=R0913, R0917
     def xy_to_latlon_polars(
         self,
         df: pl.DataFrame | pl.LazyFrame,
@@ -816,6 +817,7 @@ class Area:
 
         return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
 
+    # pylint: disable=R0913, R0917
     def inside_area_polars(
         self,
         df: pl.DataFrame | pl.LazyFrame,

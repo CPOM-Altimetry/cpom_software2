@@ -1,10 +1,9 @@
 """cpom.gia.gia.py
 
-Gia class to load glacial isostatic adjustment (GIA) data and 
-interpolation latitude and longitude.
+GIA class to load glacial isostatic adjustment (GIA) data and
+interpolate latitude and longitude.
 """
 
-import importlib
 import os
 
 import numpy as np
@@ -25,18 +24,41 @@ gia_definitions = {
 }
 
 
+# pylint: disable=too-many-instance-attributes
 class GIA:
     """class to load and interpolate GIA data."""
 
     def __init__(self, gia_name: str):
         self.gia_name = gia_name
+        # Initialize mesh and grid attributes
+        self.lonmesh = None
+        self.latmesh = None
+        self.input_x = None
+        self.input_y = None
+        self.minx = None
+        self.maxx = None
+        self.miny = None
+        self.maxy = None
+        self.x = None
+        self.y = None
+        self.xmesh = None
+        self.ymesh = None
+        self.gia_grid = None
+        # Attributes set in load_gia
+        self.lat = None
+        self.lon = None
+        self.gia = None
+        self.crs_wgs = None
+        self.crs_bng = None
+        self.xy_to_lonlat_transformer = None
+        self.lonlat_to_xy_transformer = None
         try:
             self.load_gia()
         except ImportError as exc:
             raise ImportError(f"{gia_name} not in supported area list") from exc
 
     def load_gia(self):
-        """Load gia settings for current gia name"""
+        """Load GIA settings for current GIA name."""
 
         this_gia = np.load(
             os.environ["CPDATA_DIR"] + gia_definitions[self.gia_name]["file"], allow_pickle=True
@@ -58,16 +80,21 @@ class GIA:
 
         self._prepare_gia_grid()
 
-    def _prepare_gia_grid(self, ncols=1000, nrows=1000, method="cubic"):
+    def _prepare_gia_grid(self, grid_config=None):
         """Construct 2D mesh grid from 1D longitude and latitude arrays.
-            Create a regular grid. (6.5km resolution by default)
-            Interpolate GIA data onto regular grid using scipy griddata.
+
+        Create a regular grid with 6.5km resolution by default.
+        Interpolate GIA data onto regular grid using scipy griddata.
 
         Args:
-            ncols (int, optional): _description_. Defaults to 1000.
-            nrows (int, optional): _description_. Defaults to 1000.
-            method (str, optional): _description_. Defaults to 'cubic'.
+            grid_config (dict, optional): Configuration dict with keys 'ncols', 'nrows', 'method'.
+                Defaults to {'ncols': 1000, 'nrows': 1000, 'method': 'cubic'}.
         """
+        if grid_config is None:
+            grid_config = {"ncols": 1000, "nrows": 1000, "method": "cubic"}
+        ncols = grid_config.get("ncols", 1000)
+        nrows = grid_config.get("nrows", 1000)
+        method = grid_config.get("method", "cubic")
         self.lonmesh, self.latmesh = np.meshgrid(self.lon, self.lat)
         self.input_x, self.input_y = self.lonlat_to_xy_transformer.transform(
             self.lonmesh, self.latmesh
@@ -86,19 +113,23 @@ class GIA:
             method=method,
         )
 
-    def interp_gia(self, crs_bng, crs_wgs, x, y, method="linear"):
+    def interp_gia(self, x, y, crs_config=None, method="linear"):
         """Interpolate GIA data at given coordinates.
 
         Args:
-            crs_bng (_type_): _description_
-            crs_wgs (_type_): _description_
-            x (_type_): _description_
-            y (_type_): _description_
-            method (str, optional): _description_. Defaults to 'linear'.
+            x (array-like): X coordinates in source CRS.
+            y (array-like): Y coordinates in source CRS.
+            crs_config (dict, optional): Configuration dict with keys 'crs_bng', 'crs_wgs'.
+                Defaults to {'crs_bng': self.crs_bng, 'crs_wgs': self.crs_wgs}.
+            method (str, optional): Interpolation method. Defaults to 'linear'.
 
         Returns:
-            _type_: _description_
+            ndarray: Interpolated GIA data at given coordinates.
         """
+        if crs_config is None:
+            crs_config = {"crs_bng": self.crs_bng, "crs_wgs": self.crs_wgs}
+        crs_bng = crs_config.get("crs_bng", self.crs_bng)
+        crs_wgs = crs_config.get("crs_wgs", self.crs_wgs)
         # Transform input coordinates to GIA map projection if needed
         if crs_bng != self.crs_bng or crs_wgs != self.crs_wgs:
             this_xy_to_lonlat_transformer = Transformer.from_proj(
@@ -124,5 +155,20 @@ class GIA:
         return gia_data
 
     def interp_gia_from_lat_lon(self, lat, lon, method="linear"):
+        """Interpolate GIA data at given latitude and longitude.
+
+        Args:
+            lat (array-like): Latitude coordinates in WGS 84.
+            lon (array-like): Longitude coordinates in WGS 84.
+            method (str, optional): Interpolation method. Defaults to 'linear'.
+
+        Returns:
+            ndarray: Interpolated GIA data at given coordinates.
+        """
         thisx, thisy = self.lonlat_to_xy_transformer.transform(lon, lat)
-        return self.interp_gia(self.crs_bng, self.crs_wgs, thisx, thisy, method=method)
+        return self.interp_gia(
+            thisx,
+            thisy,
+            crs_config={"crs_bng": self.crs_bng, "crs_wgs": self.crs_wgs},
+            method=method,
+        )

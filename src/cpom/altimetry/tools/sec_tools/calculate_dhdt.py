@@ -2,11 +2,11 @@
 cpom.altimetry.tools.sec_tools.calculate_dhdt
 
 Purpose:
-    Calculate surface elevation change rates (dh/dt) on a grid, from epoch averaged altimetry 
-    elevation data. 
+    Calculate surface elevation change rates (dh/dt) on a grid, from epoch averaged altimetry
+    elevation data.
     For each grid cell, dh/dt is estimated using linear regression within specified time windows.
 
-    This tool supports single mission and multimission (cross-calibrated) datasets as input: 
+    This tool supports single mission and multimission (cross-calibrated) datasets as input:
     - Single-mission: Processes data from one satellite mission
         Uncertainty: input_uncertainty + model_uncertainty
 
@@ -16,7 +16,7 @@ Purpose:
 
     And icesheet wide or basin_level processing:
     - Icesheet-wide: Processes all data in a single root directory (--basin_structure False)
-    - Basin-structured: Processes subdirectories independently (--basin_structure True, 
+    - Basin-structured: Processes subdirectories independently (--basin_structure True,
         --region_selector defined )
 """
 
@@ -53,7 +53,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description=(
-        """
+            """
         Processor to take an epoch-averaged dh and 
         calculate surface elevation change rate in each grid cell, for given time limits.
         """
@@ -74,43 +74,42 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--parquet_glob",
-        help="File glob pattern for selecting input files." \
-        "The pattern is applied relative to the input directory (--in_dir).", 
+        help="File glob pattern for selecting input files."
+        "The pattern is applied relative to the input directory (--in_dir).",
         type=str,
         default="*/epoch_average.parquet",
     )
     # dh/dt Calculation Parameters
     parser.add_argument(
         "--dhdt_start",
-        help="Start time of first dh/dt period, if not provided the earliest date in the dataset " \
+        help="Start time of first dh/dt period, if not provided the earliest date in the dataset "
         "is used. Format YYYY/MM/DD",
         type=str,
         default=None,
     )
     parser.add_argument(
         "--dhdt_end",
-        help="End time of last dh/dt period, if not provided the latest date in the dataset " \
+        help="End time of last dh/dt period, if not provided the latest date in the dataset "
         "is used. Format YYYY/MM/DD",
         type=str,
         default=None,
     )
     parser.add_argument(
         "--dhdt_period",
-        help="Length of each dh/dt calculation window. If not set a single dh/dt value is computed. " \
+        help="Length of each dh/dt calculation window. If not set a single dh/dt value is computed"
         "Format years(y), months(m) and days(d), e.g. '2y', '2y1m','2y1m12d'",
         default=None,
         type=str,
     )
     parser.add_argument(
         "--step_length",
-        help="Temporal spacing between successive dh/dt windows," \
-        "Format as --dhdt_period",
+        help="Temporal spacing between successive dh/dt windows," "Format as --dhdt_period",
         default=None,
         type=str,
     )
     parser.add_argument(
         "--min_pts_in_period",
-        help="Minimum number of datapoints needed within a grid cell and dh/dt period" \
+        help="Minimum number of datapoints needed within a grid cell and dh/dt period"
         " to calculate dh/dt.",
         type=int,
         default=30,
@@ -118,7 +117,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--min_period_coverage",
         help="Minimum percentage of the dh/dt period that must be spanned by data in a grid cell."
-        "E.g. Within a 5 year window, if min_period_coverage is 60%,the time difference must be at " \
+        "E.g. Within a 5 year window, if min_period_coverage is 60%,the time difference must be at "
         "least 3 years between the earliest and latest data points to calculate dh/dt.",
         type=int,
         default=50,
@@ -173,6 +172,7 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
 # Setup Functions - Dates, Periods, Input Data
 # ----------------------------------------------
 
+
 def get_start_end_dates_for_calculation(
     input_df: pl.LazyFrame, dhdt_start: str | None, dhdt_end: str | None, dh_time_var: str
 ) -> tuple[datetime, datetime]:
@@ -221,16 +221,16 @@ def get_period_limits_df(
     dhdt_period: str, step_length: str, dhdt_start: datetime, dhdt_end: datetime
 ) -> tuple[pl.DataFrame, float]:
     """
-    Calculates the time intervals 'periods' over which dh/dt will be calculated. Defined by a fixed 
+    Calculates the time intervals 'periods' over which dh/dt will be calculated. Defined by a fixed
     window length (dhdt_period) and optional step size (step_length) spanning from (dhdt_start) to
     (dhdt_end).Each interval is assigned period_id.
 
-    If dhdt_period and step_length is provided multiple windows are generated. 
+    If dhdt_period and step_length is provided multiple windows are generated.
     If step_length is not provided a single window spanning the full time range is used.
 
     Args:
         dhdt_period (str): Length of each dh/dt calculation window. Format 'ymd' e.g. '2y1m'.
-        step_length (str):  Temporal spacing between successive window start times. 
+        step_length (str):  Temporal spacing between successive window start times.
                             Format ymd e.g. "1y"
         dhdt_start (datetime): Start datetime for dh/dt calculation.
         dhdt_end (datetime): End datetime for dh/dt calculation.
@@ -238,7 +238,7 @@ def get_period_limits_df(
     Returns:
         tuple[pl.DataFrame, float]:
             usable_periods (pl.DataFrame): DataFrame defining the dh/dt windows.
-                                            Columns [period_lo, period_hi, period_id]. 
+                                            Columns [period_lo, period_hi, period_id].
             dhdt_period (float): Length of dh/dt period in fractional years
     """
 
@@ -292,7 +292,7 @@ def get_input_df(
     """
     Assign input data to dh/dt calculation windows.
 
-    This function takes epoch-level input data and assigns each record to a dh/dt period based 
+    This function takes epoch-level input data and assigns each record to a dh/dt period based
     on its (dh_time_var).
 
     Observations that do not fall within any valid dh/dt window are excluded
@@ -337,8 +337,8 @@ def get_dhdt(
     """
     Compute dh/dt and uncertainties for each grid cell and dh/dt period.
 
-    Calculates dhdt for each grid cell and dh/dt period (period_id) using linear regression of 
-    epoch averaged elevation over time. 
+    Calculates dhdt for each grid cell and dh/dt period (period_id) using linear regression of
+    epoch averaged elevation over time.
 
     For each grid cell and period :
         1. Quality control:
@@ -371,7 +371,7 @@ def get_dhdt(
         [(list[dict], dict)]:
             -record_dhdt (list[dict]): List of dicts, one per successful (x_bin, y_bin, period_id).
             Includes : dh/dt results, uncertainties, period bounds, and metadata.
-            -status (dict):  Dictionary summarizing processing outcome counts. 
+            -status (dict):  Dictionary summarizing processing outcome counts.
     """
 
     def _get_uncertainty(group, params, dhdt_period, input_uncertainty, model_uncertainty):
@@ -521,9 +521,9 @@ def get_metadata_json(
 # --------------------------
 
 
-def main(params: list[str]) -> None:
+def main(args: list[str]) -> None:
     """
-    Main processing workflow for dh/dt calculation. 
+    Main processing workflow for dh/dt calculation.
 
     Parses command-line arguments, configures logging, iterates over one or more input datasets
     (either a single root dataset or multiple basin subdirectories), and writes
@@ -533,7 +533,7 @@ def main(params: list[str]) -> None:
         1. Read epoch-averaged elevation data from Parquet files.
         2. Determine the temporal range for dh/dt calculation.
         3. Generate one or more dh/dt calculation windows.
-        4. Assign observations to windows. 
+        4. Assign observations to windows.
         5. Compute dh/dt and uncertainties per grid cell and window.
         6. Write dh/dt results and statistics to Parquet and JSON files.
 
@@ -544,14 +544,14 @@ def main(params: list[str]) -> None:
       for bias-corrected datasets.
 
     Args:
-        params: List of command-line arguments.
+        args: List of command-line arguments.
 
     Output:
         - dhdt.parquet: Grid cell dh/dt values with uncertainty components
         - dhdt_statistics.json: Processing metadata and quality statistics per basin
         - dhdt_metadata.json: Central metadata with processing parameters
     """
-        
+
     def _process_dhdt(
         input_df: pl.LazyFrame,
         params: argparse.Namespace,
@@ -559,7 +559,7 @@ def main(params: list[str]) -> None:
         logger,
     ):
         """
-        Main processing workflow for dh/dt calculation. 
+        Main processing workflow for dh/dt calculation.
 
         Args:
             input_df (pl.LazyFrame): Epoch-averaged input data for the basin/root.
@@ -585,7 +585,7 @@ def main(params: list[str]) -> None:
         record_dhdt, status = get_dhdt(
             get_input_df(input_df, usable_periods, params.dh_time_varname), dhdt_period, params
         )
-        
+
         logger.info("Writing %d dh/dt records to: %s", len(record_dhdt), out_path / "dhdt.parquet")
         pl.DataFrame(record_dhdt).write_parquet(out_path / "dhdt.parquet", compression="zstd")
 
@@ -599,9 +599,8 @@ def main(params: list[str]) -> None:
             json.dump(status, f, indent=2)
         logger.info("Wrote statistics for %s to %s", out_path, stats_file)
 
-
     start_time = time.time()
-    params = parse_arguments(params)
+    params = parse_arguments(args)
 
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
@@ -610,7 +609,7 @@ def main(params: list[str]) -> None:
         log_file_warning=str(Path(params.out_dir) / "warnings.log"),
     )
 
-    # Get required columns 
+    # Get required columns
     base_columns = [
         "x_bin",
         "y_bin",
@@ -619,7 +618,7 @@ def main(params: list[str]) -> None:
         params.dh_time_varname,
         params.dh_time_fractional_varname,
     ]
-    # Add cross-calibration uncertainty column if in multimission mode 
+    # Add cross-calibration uncertainty column if in multimission mode
     if params.multi_mission:
         base_columns.append(params.xcal_stderr_varname)
 

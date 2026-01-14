@@ -21,16 +21,19 @@ from pathlib import Path
 import polars as pl
 from matplotlib import pyplot as plt
 
-from cpom.areas.area_plot import Polarplot
-from cpom.areas.areas import Area
-from cpom.gridding.gridareas import GridArea
-from cpom.logging_funcs.logging import set_loggers
-
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
-from epoch_average_plots import get_data, get_objects, get_shapefile
+from cpom.altimetry.tools.sec_tools.epoch_average_plots import (
+    get_data,
+    get_objects,
+    get_shapefile,
+)
+from cpom.areas.area_plot import Polarplot
+from cpom.areas.areas import Area
+from cpom.gridding.gridareas import GridArea
+from cpom.logging_funcs.logging import set_loggers
 
 
 def parse_arguments(args):
@@ -198,7 +201,7 @@ def plot_basins(
 
     for sub_basin in sub_basins_to_process:
         # Get geometry for this specific basin using the helper function
-        basin_lazy = get_data(params, this_grid_area, sub_basin, logger=logger)
+        basin_lazy = get_data(params, this_grid_area, logger=logger, sub_basin=sub_basin)
         if basin_lazy.select(pl.len()).collect().item() == 0:
             logger.info("No data points found for basin %s; skipping", sub_basin)
             continue
@@ -265,7 +268,7 @@ def plot_icesheet(
         logger (logging.Logger): Logger object
     """
 
-    data = get_data(params, this_grid_area, sub_basin=None, logger=logger)
+    data = get_data(params, this_grid_area, logger, None)
     row_count = data.select(pl.len()).collect().item()
     if row_count == 0:
         logger.info("No root-level data found; skipping icesheet plots")

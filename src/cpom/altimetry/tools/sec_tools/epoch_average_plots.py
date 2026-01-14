@@ -3,7 +3,6 @@ cpom.altimetry.tools.sec_tools.epoch_average_plots
 
 Purpose:
     Generate spatial plots of epoch-averaged elevation data from epoch_average.py output.
-
     Creates scatter plots showing elevation values across ice sheet regions or basins,
     with optional glacier boundary overlays from shapefiles.
 
@@ -183,8 +182,8 @@ def get_objects(params):
 def get_data(
     params: argparse.Namespace,
     this_grid_area: GridArea,
+    logger: logging.Logger,
     sub_basin: str | None = None,
-    logger: logging.Logger | None = None,
 ) -> pl.LazyFrame:
     """
     Load epoch averaged data from parquet file and add geographic coordinates.
@@ -231,7 +230,7 @@ def get_data(
         return epoch_data.with_columns([pl.Series("x", x), pl.Series("y", y)])
 
     logger.info("Loading root-level data from %s", Path(params.in_dir) / params.parquet_glob)
-    epoch_data = pl.scan_parquet(Path(params.in_dir) / params.parquet_glob).collect()
+    epoch_data = pl.scan_parquet(Path(params.in_dir) / params.parquet_glob)
 
     row_count = epoch_data.select(pl.len()).collect().item()
     logger.info("Loaded %d rows for root-level data", row_count)
@@ -239,9 +238,12 @@ def get_data(
         logger.info("No root-level data found; skipping plot")
         return epoch_data
     # Convert grid coordinates to lat/lon
+    collected_data = epoch_data.collect()
+    x_bins = collected_data.select(pl.col("x_bin")).to_numpy()
+    y_bins = collected_data.select(pl.col("y_bin")).to_numpy()
     lats, lons = this_grid_area.get_cellcentre_lat_lon_from_col_row(
-        epoch_data.select(pl.col("x_bin")).collect().to_numpy(),
-        epoch_data.select(pl.col("y_bin")).collect().to_numpy(),
+        x_bins,
+        y_bins,
     )
     return epoch_data.with_columns([pl.Series("latitude", lats), pl.Series("longitude", lons)])
 
@@ -311,7 +313,10 @@ def plot_basins(
 
     for sub_basin in sub_basins_to_process:
         clipped_data = get_data(
-            params, this_grid_area, sub_basin=sub_basin, logger=logger
+            params,
+            this_grid_area,
+            logger=logger,
+            sub_basin=sub_basin,
         ).collect()
 
         if clipped_data.select(pl.len()).item() == 0:
@@ -392,7 +397,7 @@ def plot_icesheet(
         logger (Logger): Logger object
     """
 
-    data = get_data(params, this_grid_area, sub_basin=None, logger=logger)
+    data = get_data(params, this_grid_area, logger=logger, sub_basin=None)
     row_count = data.select(pl.len()).collect().item()
     if row_count == 0:
         logger.info("No root-level data found; skipping icesheet plots")
