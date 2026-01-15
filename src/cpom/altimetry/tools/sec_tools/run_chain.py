@@ -4,12 +4,12 @@ Run SEC processing chain from YAML configuration.
 Executes multi-step workflow: reads config → runs algorithms in sequence → passes outputs as inputs.
 
 CONFIGURATION MODES:
-  Single-mission:
-    Set 'missions_to_run' + 'algorithm_list' per mission
-        e.g. example_single_mission_icesheet_wide.yml
-  Multi-mission:
-    Set 'algorithm_list' at root
-        e.g. example_multi_mission_icesheet_wide.yml
+    Single-mission:
+        Set 'missions_to_run' + 'algorithm_list' per mission
+            e.g. example_single_mission_icesheet_wide.yml
+    Multi-mission:
+        Set 'algorithm_list' at root
+            e.g. example_multi_mission_icesheet_wide.yml
 
 PARAMETER PRIORITY (low → high):
   1. Algorithm defaults (config[algo])
@@ -145,19 +145,14 @@ def build_args(algo, config, mission=None):
     algo_config = config[algo].copy()
     # Get the mission overrides for the algorithm if they exist
     if mission and algo in config[mission]:
-        print(mission)
-        print(algo)
-        print(config[mission][algo])
         # Add / Replace with mission-specific parameters
         algo_config.update(config[mission][algo])
-        print(algo_config)
         # Add grid_info_json if specified at mission level
         if "grid_info_json" in config[mission]:
             algo_config["grid_info_json"] = config[mission]["grid_info_json"]
 
     # Convert to CLI args
     args = dict_to_cli_args(algo_config)
-    print(args)
 
     base_folder = config[mission]["base_folder"] if mission else None
     if get_auto_path(algo):
