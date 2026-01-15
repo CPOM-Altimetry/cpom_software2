@@ -46,7 +46,7 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
 
     Returns:
         argparse.Namespace: Parsed command line arguments including mask name,
-                           input/output directories, and region selection.
+                            input/output directories, and region selection.
     """
     parser = argparse.ArgumentParser(
         description="Generate plots from dhdt.parquet files produced by calculate_dhdt.py"
@@ -138,8 +138,6 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
     )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
-
-    # check either mask or
 
     return parser.parse_args(params)
 
@@ -271,10 +269,10 @@ def get_shapefile(params: argparse.Namespace):
             # Ensure shapefile is in the same projection as the grid/mask
             if shp.crs is None or shp.crs != mask.crs_bng:
                 shp = shp.to_crs(mask.crs_bng)
+            return shp, selector
 
         shp = gpd.read_file(params.shapefile)
         selector = params.shp_file_column
-
         return shp, selector
 
     except (TypeError, ValueError):
@@ -555,7 +553,6 @@ def main(params):
     )
 
     this_area, this_grid_area = get_objects(params)
-
     if params.basin_structure is False:
         logger.info("Processing root-level data")
         plot_icesheet(params, this_area, this_grid_area, logger=logger)
