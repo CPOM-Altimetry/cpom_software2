@@ -1,8 +1,7 @@
 """cpom.altimetry.tools.validate_l2_altimetry_elevations.py
 
-This tool compares a selected month of radar altimetry mission elevation data against laser
-altimetry reference elevations.
-It also allows comparing a reference mission to itself.
+This tool compares a selected date-range or month of radar altimetry against laser elevations.
+It also allows comparing a laser mission to it's self.
 
 ### **Supported Missions**
 
@@ -10,31 +9,32 @@ It also allows comparing a reference mission to itself.
 - **Reference Missions**: ICESat-2 (ATL06), IceBridge (ILATM2, ILUTP2),
                         Pre-IceBridge (BRMCR2, BLATM2), ICESat1 (GLAH12)
 
-**Please note you may need to add your dataset to 'get_default_variables' if you are testing
-with a none standard altimetry data product.**
-
 ### **Notes to user**
-When comparing to icebridge : The default radius increases from 20m to 10000m,
+Use 'get_default_variables' to add your dataset to this script, when testing with new datasets.
+
+- When running for Cryotempo, set --cryotempo_modes .
+- When comparing to self, set --compare_to_self.
+- When comparing to icesat1 , icebridge, pre-icebridge, set --compare_to_historical_reference.
+
+When comparing to historical references, the default radius increases from 20m to 10000m,
 to capture enough points for validation. For the best performance alter the radius and
 max_diff argument for your usecase, or provide a DEM to correct reference locations
-to align with altimetry measurements.
-
-When running for Cryotempo, the Cryotempo_Modes argument must be set.
 
 ### **Command Line Options**
 **Required**
 - `reference_dir`: Path to reference dataset.
 - `altim_dir`: Path to altimetry dataset.
-- `year`: Year of data.
-- `month`: Month of data.
 - `area`: CPOM area.
 - `outdir`: Output directory.
+- `year`/ `month` or `start_date`/`end_date`
 
 **Optional**
-- `dem`: Provide a DEM to correct location when comparing to IceBridge with a large radius,
+- `date_delta`: +/- days between altimetry and validation points (default: 0).
+- `dem`: Provide a DEM to correct location when comparing with a large radius,
         used in 'correct_elevation_using_slope'
 - `radius`: Search radius (in meters) for validation points.
 - `max_diff`: Maximum elevation difference between matched points.
+- `beams`: Space-separated list of IS2 beams to use (e.g., gt1l gt1r).
 - `add_vars`: Additional variables to include in output (e.g., uncertainty).
 - `cryotempo_modes`: CryoTempo modes to include (required if using CryoTempo data).
 - `max_workers`: Number of parallel processing threads.
@@ -57,14 +57,19 @@ do
 --month $m --area antarctica_is --outdir /tmp--beams gt1l gt1r
 --add_vars uncertainty_variable_name --max_workers 20 &
 done
+
 """
 
+# pylint: disable=C0302
+
 import argparse
+import calendar
 import logging
 import os
 import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -95,7 +100,10 @@ def setup_logging(
         "%(levelname)s : %(asctime)s : %(message)s", datefmt="%d/%m/%Y %H:%M:%S"
     )
 
-    for log_file, level in [(log_file_info, logging.INFO), (log_file_error, logging.ERROR)]:
+    for log_file, level in [
+        (log_file_info, logging.INFO),
+        (log_file_error, logging.ERROR),
+    ]:
         file_handler = logging.FileHandler(log_file, mode="w")
         file_handler.setFormatter(log_format)
         file_handler.setLevel(level)
@@ -113,20 +121,37 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--reference_dir",
-        help="The is2_atl06, icebridge or pre-icebridge data directory \
-            If a subdirectory matching 'YEAR/MONTH' exists it will be picked up automatically.",
+        help="The input directory containing the validation data.",
         required=True,
     )
     parser.add_argument(
         "--altim_dir",
         nargs="+",
         help="Altimetry data directory('s) \
-        Supports multiple directories by providing a space seperated list of path1 path2 \
-        If a subdirectory matching 'YEAR/MONTH' exists it will be picked up automatically",
+        Supports multiple directories by providing a space seperated list of path1 path2",
     )
-    parser.add_argument("--year", type=int, help="Year (YYYY)", required=True)
+    parser.add_argument("--year", type=int, help="Year (YYYY)", required=False)
     parser.add_argument(
-        "--month", type=int, choices=range(1, 13), help="Month (1-12)", required=True
+        "--month", type=int, choices=range(1, 13), help="Month (1-12)", required=False
+    )
+    parser.add_argument(
+        "--start_date",
+        type=str,
+        help="Start date for filtering files (format: YYYYMMDD)",
+        required=False,
+    )
+    parser.add_argument(
+        "--end_date",
+        type=str,
+        help="End date for filtering files (format: YYYYMMDD)",
+        required=False,
+    )
+    parser.add_argument(
+        "--date_delta",
+        type=int,
+        help="+/-days between altimetry and validation points",
+        required=False,
+        default=0,
     )
     parser.add_argument("--area", help="cpom area name", required=True)
     parser.add_argument("--outdir", help="output directory path for results", required=True)
@@ -136,7 +161,11 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="[optional] IS2 beams to use. Space separated list: gt1l gt1r gt2l gt2r gt3l gt3r",
     )
-    parser.add_argument("--dem", help="[optional] DEM, used in 'correct_elevation_using_slope'")
+    parser.add_argument(
+        "--dem",
+        type=str,
+        help="[optional] DEM, used in 'correct_elevation_using_slope'",
+    )
     parser.add_argument("--radius", type=float, default=20.0, help="[optional] search radius in m")
     parser.add_argument(
         "--maxdiff",
@@ -150,6 +179,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="[optional] additional variables in the altimetry file to include in the output."
         "Space-seperated list of : var1 var2 .",
+        default=[],
     )
     parser.add_argument(
         "--cryotempo_modes",
@@ -190,6 +220,11 @@ def parse_args() -> argparse.Namespace:
     if args.compare_to_historical_reference:
         if args.radius == 20:  # Change default if no value passed.
             args.radius = 1e4
+    if args.start_date and args.end_date:
+        if args.year or args.month:
+            parser.error("Cannot provide both 'start_date'/'end_date' and 'year'/'month'")
+        if len(args.start_date) != 8 or len(args.end_date) != 8:
+            parser.error("Start and end dates must be in YYYYMMDD format")
     return args
 
 
@@ -290,19 +325,25 @@ def get_default_variables(file: Path) -> dict:
             "lat": "{beam}/land_ice_segments/latitude",
             "lon": "{beam}/land_ice_segments/longitude",
             "elev": "{beam}/land_ice_segments/h_li",
+            "date_pattern": "YYYYMMDDHHMMSS_",
         },
         # iceSAT1
         "GLAH12": {
             "lat": "Data_40HZ/Geolocation/d_lat",
             "lon": "Data_40HZ/Geolocation/d_lon",
             "elev": "Data_40HZ/Elevation_Surfaces/d_elev",
+            "date_pattern": "",
         },
         # Icebridge
         "ILATM2": {"lat": "lat", "lon": "lon", "elev": "hgt"},
         "ILUTP2": {"lat": "lat", "lon": "lon", "elev": "hgt"},
         "BLATM2": {"lat": "lat", "lon": "lon", "elev": "height"},
         "BRMCR2": {"lat": "lat", "lon": "lon", "elev": "elevation"},
-        "ENVISAT_functional_TDS": {"lat": "latitude", "lon": "longitude", "elev": "elevation"},
+        "ENVISAT_functional_TDS": {
+            "lat": "latitude",
+            "lon": "longitude",
+            "elev": "elevation",
+        },
     }
 
     for key, value in variable_map.items():  # Check for a matching pattern
@@ -311,55 +352,103 @@ def get_default_variables(file: Path) -> dict:
     return {}
 
 
+def get_date_from_filename(file: Path, log) -> Optional[datetime]:
+    """Extract date from filename based on the regex patterns.
+    Args:
+        file (Path): Path to the input file.
+    Returns:
+        datetime: Extracted date from the filename.
+    """
+    match = re.compile(r"(?:\d{8}T|\d{8}_|\d{14}_)").findall(str(file))
+    date_candidates = []
+
+    for _, date_str in enumerate(match):
+        try:
+            if len(date_str) == 9 or len(date_str) == 15:
+                dt = datetime.strptime(date_str[:8], "%Y%m%d")
+                date_candidates.append(dt)
+        except ValueError:
+            continue
+
+    if len(date_candidates) == 1:
+        return date_candidates[0]
+    if len(date_candidates) > 1:
+        # Get difference between dates
+        date_diffs = [
+            abs((date_candidates[i] - date_candidates[j]).days)
+            for i in range(len(date_candidates))
+            for j in range(i + 1, len(date_candidates))
+        ]
+        # If the difference is less than 2 days, return the first date
+        if all(diff < 2 for diff in date_diffs):
+            return date_candidates[0]
+        log.error(f"Multiple possible dates found in file {file}: {date_candidates}")
+        return None
+
+    if len(match) == 0:
+        # Check for match to ICESat1 dateformat /YYYY.MM.DD/
+        dot_match = re.compile(r"(\d{4})\.(\d{2})\.(\d{2})").findall(str(file))
+        if len(dot_match) == 1:
+            try:
+                return datetime.strptime(".".join(dot_match[0]), "%Y.%m.%d")
+            except ValueError:
+                log.error(f"Invalid date {dot_match[0]} in file {file}")
+
+    log.error(f"No valid date found in file {file}")
+    return None
+
+
 def get_files_in_dir(
     directory: Path,
-    year: str,
-    month: str,
-    filetype: str,
-) -> list[Path]:
+    args: argparse.Namespace,
+    log: logging.Logger,
+    filetype: str = "nc",
+    date_delta: int = 0,
+) -> dict[Path, str]:
     """
     Find .nc or.h5 files in the specified directory.
+    This function searches for files in the given directory and its subdirectories,
+    filtering them based on the specified year, month, or optional date range.
 
     Args:
         directory (Path): The directory to search for files.
-        year (str): Year to process
-        month (str): Month to process (0 filled)
+        args (argparse.Namespace): Parsed command line arguments containing
+        year, month, start_date, end_date, and date_delta.
         filetype (str) : nc or h5
     Returns:
         List[Path]: A list of found .nc or .NC files with their full paths.
     """
-    extensions = {"nc": "*.nc", "h5": "*.h5"}
+
+    extensions = {"nc": "*.nc", "h5": "*.h5", "H5": "*.H5"}
     all_files: list[Path] = []
-    pattern = extensions[filetype]
-    all_files.extend(Path(directory).rglob(pattern))
+    all_files.extend(Path(directory).rglob(extensions[filetype]))
 
-    # If no files found, try upper case suffix
-    if not all_files:
-        all_files.extend(Path(directory).rglob(pattern.upper()))
+    if args.start_date:
+        first_day = datetime.strptime(args.start_date, "%Y%m%d") - timedelta(days=date_delta)
+        last_day = datetime.strptime(args.end_date, "%Y%m%d") + timedelta(days=date_delta)
+    else:
+        year = str(args.year)
+        month = str(args.month).zfill(2)
+        first_day = datetime.strptime(f"{year}{int(month):02d}01", "%Y%m%d") - timedelta(
+            days=date_delta
+        )
+        last_day = datetime.strptime(
+            f"{year}{int(month):02d}{calendar.monthrange(int(year), int(month))[1]:02d}",
+            "%Y%m%d",
+        ) + timedelta(days=date_delta)
 
-    # Matches: YYYYMMDDT | YYYYMMDD_ | YYMMDD_ |YYYYMMDDHHMMSS
-    file_basename_regex = re.compile(
-        rf"(?:{year}{month}\d{{2}}T\d*|{year}{month}\d{{2}}_\d*|{year[-2:]}{month}\d{{2}}_|{year}{month}\d{{8}})"  # noqa # pylint: disable=C0301
-    )
+    valid_files = {}
+    for file in all_files:
+        if "." in file.stem:
+            continue
+        try:
+            date_obj = get_date_from_filename(file, log)
+            if date_obj is not None and first_day <= date_obj <= last_day:
+                valid_files[file] = date_obj.strftime("%Y%m%d")
+        except TypeError:
+            pass
 
-    valid_files = [  # Exclude filenames containing multiple dots before the extension
-        f
-        for f in all_files
-        if any(
-            file_basename_regex.search(str(part)) for part in f.parts
-        )  # Check if regex matches any part of the path
-        and "." not in f.stem  # Exclude filenames containing multiple dots before the extension
-    ]
-
-    if valid_files:
-        return valid_files
-
-    # Match to YYYY.MM.DD in the input directory if no files found (Used for ISAT1 data load)
-    valid_files = [f for f in all_files if re.compile(rf"{year}\.{month}\.\d{{2}}").search(str(f))]
-    if valid_files:
-        return valid_files
-
-    return []
+    return valid_files
 
 
 class ProcessData:
@@ -375,10 +464,18 @@ class ProcessData:
         get_cryotempo_filters : Filters cryotempo data to valid modes.
     """
 
-    def __init__(self, args, area, log):
+    def __init__(self, args, area, valid_files, log):
         self.args = args
         self.area = area
+        self.valid_files = valid_files
         self.log = log
+        self.dtype_with_date = [
+            ("x", "float64"),
+            ("y", "float64"),
+            ("h", "float64"),
+            ("date", "U8"),
+        ]
+        self.dtype_no_date = [("x", "float64"), ("y", "float64"), ("h", "float64")]
 
     def get_cryotempo_filters(self, nc, args):
         """Check Cryotempo data is in a valid mode."""
@@ -424,7 +521,7 @@ class ProcessData:
         try:
             with Dataset(filename) as nc:
                 config = get_default_variables(filename)
-                if config is None:
+                if not config:
                     self.log.error("Unsupported file basename %s for file", filename)
                     return None
 
@@ -433,21 +530,19 @@ class ProcessData:
                     np.mod(get_variable(nc, config["lon"]), 360),
                     get_variable(nc, config["elev"]),
                 )
+                additional_data = {
+                    var.rsplit("/", 1)[-1]: get_variable(nc, var)
+                    for var in self.args.add_vars
+                    if var in nc.variables
+                }
+                if list(additional_data.keys()) != self.args.add_vars:
+                    self.log.info(
+                        "Variable(s) %s missing from netcdf",
+                        set(self.args.add_vars) - set(additional_data.keys()),
+                    )
 
-                try:
-                    add_vars = self.args.add_vars or []
-                    additional_data = {
-                        var.rsplit("/", 1)[-1]: get_variable(nc, var)
-                        for var in add_vars
-                        if var in nc.variables
-                    }
-                    if list(additional_data.keys()) != add_vars:
-                        self.log.info(
-                            "Variable(s) %s missing from netcdf",
-                            set(add_vars) - set(additional_data.keys()),
-                        )
-                except Exception as err:
-                    raise ValueError("Failed to load additional data") from err
+                if "lat_nadir" in config and "lon_nadir" in config:
+                    lats, lons = self.fill_empty_latlon_with_nadir(nc, lats, lons, config)
 
                 if self.args.cryotempo_modes:
                     mask = self.get_cryotempo_filters(nc, self.args)
@@ -455,11 +550,6 @@ class ProcessData:
                         lats, lons, elev = lats[mask], lons[mask], elev[mask]
                         for k in additional_data:
                             additional_data[k] = additional_data[k][mask]
-                    else:
-                        return None
-
-                if "lat_nadir" in config and "lon_nadir" in config:
-                    lats, lons = self.fill_empty_latlon_with_nadir(nc, lats, lons, config)
 
                 lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
                 x, y = self.area.latlon_to_xy(lats, lons)
@@ -467,99 +557,136 @@ class ProcessData:
                 idx, _ = self.area.inside_mask(x, y)
                 if not idx.size:
                     return None
-
                 try:
                     x, y, elev = x[idx], y[idx], elev[idx]
                     for k in additional_data:
                         additional_data[k] = additional_data[k][idx]
-
-                except Exception as err:
-                    raise ValueError("Mismatch in variable lengths") from err
+                except IndexError:
+                    self.log.error(f"Mismatch in variable lengths for {filename}")
+                    return None
 
             # Structured NumPy array containing x, y, elevation, and any additional variables
+            if self.args.date_delta != 0:
+                date_arr = np.full(len(x), self.valid_files[filename], dtype="U8")
+
+                if len(date_arr) != len(x) or len(date_arr) != len(y) or len(date_arr) != len(elev):
+                    self.log.error(f"Mismatch in variable lengths for {filename} with date array")
+                    raise ValueError(f"Mismatch in variable lengths for {filename} with date array")
+                return np.array(
+                    list(
+                        zip(
+                            x,
+                            y,
+                            elev,
+                            date_arr,
+                            *(additional_data[var] for var in additional_data),
+                        )
+                    ),
+                    dtype=self.dtype_with_date
+                    + [(var, str(data.dtype)) for var, data in additional_data.items()],
+                )
             return np.array(
                 list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
-                dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
+                dtype=self.dtype_no_date
                 + [(var, str(data.dtype)) for var, data in additional_data.items()],
             )
         except OSError as err:
             self.log.error(f"Error loading altimetry data file {filename}, failed with : {err}")
             return None
 
-    def get_is2_data_array(self, filename: Path) -> np.ndarray:
+    def get_is2_data_array(self, filename: Path) -> Optional[np.ndarray]:
         """Extract and filter data from an is2 data file.
         Args:
             filename (Path): IS2 data filename (.h5)
         Raises:
             ValueError: If variable lengths do not match
         Returns:
-            np.ndarray: Structured nd.array containing x,y,h fields
+            np.ndarray: Structured ndarray with fields x, y, h (and optionally date)
         """
+        points = []
         try:
             with h5py.File(filename, "r") as nc:
-                points = []
                 for beam in self.args.beams:
                     config = {
                         key: path.format(beam=beam)
                         for key, path in get_default_variables(filename).items()
                     }
-                    # Filter out files in wrong hemisphere. No files cross hemispheres
-                    try:
-                        hemisphere = get_variable(nc, config["lat"])[0]
-                        if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
-                            hemisphere > 0.0 and self.area.hemisphere == "south"
-                        ):
-                            break
 
-                        elevation = get_variable(nc, config["elev"])
-                        ok = np.flatnonzero(
-                            (
-                                get_variable(nc, f"{beam}/land_ice_segments/atl06_quality_summary")
-                                == 0
+                    hemisphere = get_variable(nc, config["lat"])[0]
+                    if (hemisphere < 0.0 and self.area.hemisphere == "north") or (
+                        hemisphere > 0.0 and self.area.hemisphere == "south"
+                    ):
+                        continue
+
+                    elevation = get_variable(nc, config["elev"])
+                    ok = np.flatnonzero(
+                        (get_variable(nc, f"{beam}/land_ice_segments/atl06_quality_summary") == 0)
+                        & (elevation <= 10e3)
+                    )
+                    if len(ok) == 0:
+                        continue
+
+                    lats, lons, elevation = (
+                        get_variable(nc, config["lat"])[ok],
+                        np.mod(get_variable(nc, config["lon"]), 360)[ok],
+                        elevation[ok],
+                    )
+
+                    # Filter on area's bounding box (not mask, for speed)
+                    lats, lons, bounded_indices, _ = self.area.inside_latlon_bounds(lats, lons)
+
+                    if len(lats) < 1:
+                        continue
+
+                    # Transform lat, lon to x,y in appropriate polar stereo projections
+                    elevation = elevation[bounded_indices]
+                    x, y = self.area.latlon_to_xy(lats, lons)
+
+                    if not len(x) == len(y) == len(elevation):
+                        continue
+                    # Structured NumPy array containing x, y, elevation
+                    if self.args.date_delta != 0:
+                        points.append(
+                            np.array(
+                                list(
+                                    zip(
+                                        x,
+                                        y,
+                                        elevation,
+                                        np.full(
+                                            len(x),
+                                            self.valid_files[filename],
+                                            dtype="U8",
+                                        ),
+                                    )
+                                ),
+                                dtype=self.dtype_with_date,
                             )
-                            & (elevation <= 10e3)
                         )
-                        if len(ok) == 0:
-                            continue
-
-                        lats, lons, elevation = (
-                            get_variable(nc, config["lat"])[ok],
-                            np.mod(get_variable(nc, config["lon"]), 360)[ok],
-                            elevation[ok],
-                        )
-
-                        # Filter on area's bounding box (not mask, for speed)
-                        lats, lons, bounded_indices, _ = self.area.inside_latlon_bounds(lats, lons)
-
-                        if len(lats) < 1:
-                            continue
-
-                        # Transform lat, lon to x,y in appropriate polar stereo projections
-                        elevation = elevation[bounded_indices]
-                        x, y = self.area.latlon_to_xy(lats, lons)
-
-                        if not len(x) == len(y) == len(elevation):
-                            raise ValueError("Mismatch in variable lengths for x,y,h")
-                        # Structured NumPy array containing x, y, elevation
+                    else:
                         points.append(
                             np.array(
                                 list(zip(x, y, elevation)),
-                                dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
+                                dtype=self.dtype_no_date,
                             )
                         )
-                    except KeyError:
-                        self.log.error(f"Missing data in {filename} for beam {beam}")
-                        continue
         except OSError as err:
             self.log.error(f"Error loading atl06 data file {filename} failed with : {err}")
-            return np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
+            return np.array(
+                [],
+                dtype=(self.dtype_no_date if self.args.date_delta == 0 else self.dtype_with_date),
+            )
+
         return (
             np.concatenate(points)
             if points
-            else np.array([], dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")])
+            else np.array(
+                [],
+                dtype=(self.dtype_no_date if self.args.date_delta == 0 else self.dtype_with_date),
+            )
         )  # Concat point arrays into one, or return an empty structured array if none exist
 
-    def get_icebridge_data_array(self, filename: Path) -> np.ndarray:
+    def get_icebridge_data_array(self, filename: Path) -> Optional[np.ndarray]:
         """Extract and filter icebridge and pre-icebridge data.
         Args:
             filename (Path): Filename
@@ -574,16 +701,24 @@ class ProcessData:
                 get_variable(nc, config["lon"]), 360
             )
             lats, lons, bounded_indices, _ = self.area.inside_latlon_bounds(lats, lons)
+            if len(lats) == 0:
+                return None
+
             x, y = self.area.latlon_to_xy(lats, lons)
             elevation = get_variable(nc, config["elev"])[bounded_indices]
-
             if not len(x) == len(y) == len(elevation):
-                raise ValueError("Mismatch in variable lengths for x,y,h")
+                self.log.error(f"Mismatch in variable lengths for x,y,h in file {filename}")
+                return None
 
-            # Structured NumPy array containing x, y, elevation
+            if self.args.date_delta != 0:
+                date_arr = np.full(len(x), self.valid_files[filename], dtype="U8")
+                return np.array(
+                    list(zip(x, y, elevation, date_arr)),
+                    dtype=self.dtype_with_date,
+                )
             return np.array(
                 list(zip(x, y, elevation)),
-                dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
+                dtype=self.dtype_no_date,
             )
 
     def get_is1_data_array(self, filename: Path) -> Optional[np.ndarray]:  # pylint: disable=R0914
@@ -650,11 +785,18 @@ class ProcessData:
             elevation = elevation[bounded_indices] + sat_corr[bounded_indices]
 
             if not len(x) == len(y) == len(elevation):
-                raise ValueError("Mismatch in variable lengths for x,y,h")
+                self.log.error(f"Mismatch in variable lengths for x,y,h in file {filename}")
+                return None
 
+            if self.args.date_delta != 0:
+                date_arr = np.full(len(x), self.valid_files[filename], dtype="U8")
+                return np.array(
+                    list(zip(x, y, elevation, date_arr)),
+                    dtype=self.dtype_with_date,
+                )
             return np.array(
                 list(zip(x, y, elevation)),
-                dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")],
+                dtype=self.dtype_no_date,
             )
 
     def process_reference_file(self, file_path: Path):
@@ -664,16 +806,18 @@ class ProcessData:
         h5 : IS2
         H5 : IS1
         """
-        if file_path.suffix == ".nc":
-            return self.get_icebridge_data_array(file_path)
-        if file_path.suffix == ".h5":
+        try:
+            if self.args.compare_to_historical_reference and file_path.suffix == ".nc":
+                return self.get_icebridge_data_array(file_path)
+            if self.args.compare_to_historical_reference and file_path.suffix == ".H5":
+                return self.get_is1_data_array(file_path)
             return self.get_is2_data_array(file_path)
-        if file_path.suffix == ".H5":
-            return self.get_is1_data_array(file_path)
-        self.log.error("Unsupported file format: %s", file_path)
-        return None
+        except ValueError as err:
+            self.log.error("Error processing file %s: %s", file_path, err)
+            return None
 
 
+# pylint: disable=R0914
 def get_elev_differences(
     args: argparse.Namespace,
     laser_points: np.ndarray,
@@ -695,7 +839,13 @@ def get_elev_differences(
     """
 
     is2_tree = KDTree(np.c_[laser_points["x"], laser_points["y"]])
-    add_vars = [var for var in altimeter_points.dtype.names if var not in {"x", "y", "h"}]
+    if args.date_delta > 0:
+        add_vars = [
+            var for var in altimeter_points.dtype.names if var not in {"x", "y", "h", "date"}
+        ]
+    else:
+        add_vars = [var for var in altimeter_points.dtype.names if var not in {"x", "y", "h"}]
+
     results: dict = {
         key: []
         for key in [
@@ -709,8 +859,8 @@ def get_elev_differences(
             "reference_h",
         ]
         + add_vars
+        + ([f"{prefix}date", "reference_date"] if args.date_delta > 0 else [])
     }
-
     for altimeter_point in altimeter_points:
         if nearest_only:
             dist, idx = is2_tree.query((altimeter_point["x"], altimeter_point["y"]))
@@ -719,6 +869,19 @@ def get_elev_differences(
             indices = is2_tree.query_ball_point(  # Find reference points within search_radius
                 (altimeter_point["x"], altimeter_point["y"]), args.radius
             )
+
+        if args.date_delta > 0:
+            valid_indices = []
+            for i in indices:
+                date_diff = abs(
+                    (
+                        datetime.strptime(altimeter_point["date"], "%Y%m%d")
+                        - datetime.strptime(laser_points[i]["date"], "%Y%m%d")
+                    ).days
+                )
+                if date_diff <= args.date_delta:  # Maximum date difference
+                    valid_indices.append(i)
+            indices = valid_indices
 
         if args.compare_to_self:  # Remove comparision to self
             indices = [
@@ -750,6 +913,9 @@ def get_elev_differences(
                 for var in add_vars:
                     results[var].append(altimeter_point[var])
 
+                if args.date_delta > 0:
+                    results[f"{prefix}date"].append(altimeter_point["date"])
+                    results["reference_date"].append(ref_point["date"])
     return results
 
 
@@ -767,7 +933,8 @@ def correct_elevation_using_slope(data, args, log, prefix) -> dict:
        dict: Slope corrected Dh between altimetry and is2 elevations.
     """
     log.info("Performing slope correction")
-    dem = Dem(args.dem)
+    dem = Dem("arcticdem_100m_greenland_v4.1")
+
     dh_dem_elev = (dem.interp_dem(data[f"{prefix}x"], data[f"{prefix}y"])) - (
         dem.interp_dem(data["reference_x"], data["reference_y"])
     )
@@ -872,42 +1039,62 @@ def compute_elevation_stats(output, prefix, output_file="elevation_stats.txt"):
 if __name__ == "__main__":
     params = parse_args()
     AREA_OBJ = Area(params.area)
-    DATE_YEAR = str(params.year)
-    DATE_MONTH = str(params.month).zfill(2)
-    month_outdir = Path(params.outdir) / f"{DATE_YEAR}/{DATE_MONTH}"
+
+    if params.start_date and params.end_date:
+        output_dir = (
+            Path(params.outdir)
+            / f"{datetime.strptime(params.start_date, '%Y%m%d').strftime('%Y%m%d')}\
+            _{datetime.strptime(params.end_date, '%Y%m%d').strftime('%Y%m%d')}"
+        )
+    else:
+        DATE_YEAR = str(params.year)
+        DATE_MONTH = str(params.month).zfill(2)
+        output_dir = Path(params.outdir) / f"{DATE_YEAR}{DATE_MONTH}"
 
     try:
-        month_outdir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        logger = setup_logging(
+            log_file_info=output_dir / "info.log",
+            log_file_error=output_dir / "errors.log",
+        )
+        with open(output_dir / "command_line_args.txt", "w", encoding="utf-8") as f:
+            f.write(" ".join(sys.argv) + "\n")
     except OSError as e:
-        sys.exit(f"Failed to create directory {month_outdir}: {e}")
+        sys.exit(f"Failed to create directory {output_dir}: {e}")
 
-    with open(month_outdir / "command_line_args.txt", "w", encoding="utf-8") as f:
-        f.write(" ".join(sys.argv) + "\n")
-
-    logger = setup_logging(
-        log_file_info=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.info.log",
-        log_file_error=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.errors.log",
-    )
     logger.info("Start processing with arguments %s", params)
 
-    # Load reference data #
-    reference_path = Path(params.reference_dir) / f"{DATE_YEAR}/{DATE_MONTH}"
-    reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
-    processor = ProcessData(params, AREA_OBJ, logger)
-    reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "h5")  # is1 & is2
-    if reference_files == []:  # icebridge/pre-icebridge
-        reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
+    if params.date_delta != 0 or params.start_date:
+        reference_dir = Path(params.reference_dir)
+    else:
+        reference_path = Path(params.reference_dir) / f"{DATE_YEAR}/{DATE_MONTH}"
+        reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
 
-    logger.info("Loaded %d reference data files", len(reference_files))
+    if params.compare_to_historical_reference:  # icebridge/pre-icebridge
+        reference_file_date = get_files_in_dir(
+            reference_dir, params, logger, "nc", date_delta=params.date_delta
+        )
+        if not reference_file_date:
+            reference_file_date = get_files_in_dir(
+                reference_dir, params, logger, "H5", date_delta=params.date_delta
+            )  # is1
+    else:
+        reference_file_date = get_files_in_dir(
+            reference_dir, params, logger, "h5", date_delta=params.date_delta
+        )  # is2
 
+    logger.info("Loaded %d reference data files", len(reference_file_date))
+
+    processor = ProcessData(params, AREA_OBJ, reference_file_date, logger)
+    reference_files = list(reference_file_date.keys())
     chunksize = max(1, len(reference_files) // (params.max_workers * 4))
+
     logger.info("Chunksize %d", chunksize)
     with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
         ref_results = list(
             executor.map(processor.process_reference_file, reference_files, chunksize=chunksize)
         )
-    valid_results = [result for result in ref_results if result is not None]
-    reference_points = np.concatenate(valid_results)
+    reference_points = np.concatenate([result for result in ref_results if result is not None])
     unique_indices = np.unique(reference_points[["x", "y", "h"]], return_index=True)[1]
     reference_points = reference_points[unique_indices]
     logger.info("Loaded reference data points, len : %d", len(reference_points))
@@ -920,32 +1107,44 @@ if __name__ == "__main__":
     else:
         logger.info("Comparing reference to altimetry")
         PREFIX = ""
-        altimetry_files = []
-        for basepath in params.altim_dir:
-            alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
-            altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
+        altimetry_files = {}
+        for basepath in params.altim_dir:  # Can have multiple altimetry directories e.g. LRM/SIN
+            if params.start_date:
+                altimetry_dir = Path(basepath)
+            else:
+                alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
+                altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
 
-            altimetry_files.extend(get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc"))
+            altimetry_files.update(
+                get_files_in_dir(altimetry_dir, params, logger, "nc", date_delta=0)
+            )
+
         logger.info("Loaded %d altimetry data files", len(altimetry_files))
 
         chunksize = max(1, len(altimetry_files) // (params.max_workers * 4))
         logger.info("Chunksize %d", chunksize)
+        processor.valid_files = altimetry_files  # Set valid files for processor
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
             altim_results = list(
                 executor.map(
-                    processor.get_altimetry_data_array, altimetry_files, chunksize=chunksize
+                    processor.get_altimetry_data_array,
+                    altimetry_files,
+                    chunksize=chunksize,
                 )
             )
-        valid_altim_results = [result for result in altim_results if result is not None]
-        altimetry_points = np.concatenate(valid_altim_results)
+
+        altimetry_points = np.concatenate(
+            [result for result in altim_results if result is not None]
+        )
         unique_indices = np.unique(altimetry_points[["x", "y", "h"]], return_index=True)[1]
         altimetry_points = altimetry_points[unique_indices]
         logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
 
-    outfile = month_outdir / f"p2p_diffs_{params.area}"
+    outfile = output_dir / f"p2p_diffs_{params.area}"
 
-    # Get elevation differences #
     elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
+
+    logger.info("Found %d elevation differences", len(elev_differences["dh"]))
     if params.dem:
         elev_differences = correct_elevation_using_slope(elev_differences, params, logger, PREFIX)
 
@@ -990,7 +1189,7 @@ if __name__ == "__main__":
             "lons": save_data[f"{PREFIX}lons"],
             "vals": save_data["dh"],
         },
-        output_dir=str(month_outdir),
+        output_dir=str(output_dir),
     )
     elev_dh_histograms(save_data["dh"], f"{outfile}_dh_histogram.png", bins=params.bins)
     elevation_dh_cumulative_dist(save_data["dh"], f"{outfile}_dh_cumulative_distribution.png")
