@@ -506,7 +506,7 @@ class Mask:
 
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
             self.shapefile_path = (
-                f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/"
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/'
                 "antarctica/rignot_2016_imbie2_ant_grounded_icesheet_basins/data/"
                 "/ANT_Basins_IMBIE2_v1.6.shp"
             )
@@ -553,7 +553,7 @@ class Mask:
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
             self.shapefile_path = (
-                f"{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/"
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
                 "GRE_Basins_IMBIE2_v1.3/shpfiles/GRE_IceSheet_IMBIE2_v1.3.shp"
             )
             self.shapefile_column_name = "SUBREGION1"
