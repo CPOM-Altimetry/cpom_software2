@@ -2,9 +2,9 @@
 
 # CPOM Area Definitions and Polarplot class
 
-## definitions  
+## definitions
 
-contain standard area definition files used by the Polarplot class and related tools 
+contain standard area definition files used by the Polarplot class and related tools
 such as plot_map.py. Each area definition is stored in a separate <area_name>.py file.
 
 ## areas.py
@@ -18,17 +18,17 @@ is **plot_points()**:
 
 `cpom.areas.area_plot.Polarplot.plot_points`
 
-The purpose of Polarplot('some_area_name').plot_points() is to plot latitude, longitude, 
-and values on predefined area maps. plot_points() takes one or more dataset dictionaries as input, 
+The purpose of Polarplot('some_area_name').plot_points() is to plot latitude, longitude,
+and values on predefined area maps. plot_points() takes one or more dataset dictionaries as input,
 containing the lat,lon,values and associated parameters. For a full list of the data set options
 see `cpom.areas.area_plot.Polarplot.plot_points`.
 
 ### Example 1 : plot two data sets on a basic map of Antarctica
 
-The following example plots 2 data sets on a basic map of Antarctica. 
+The following example plots 2 data sets on a basic map of Antarctica.
 
 * The first dataset has a valid range set which will only plots vals within this range.
-* The second dataset is plotted using the viridis colormap 
+* The second dataset is plotted using the viridis colormap
       (the first uses the default colormap).
 
 **Note** that the ancillary plots (histograms, etc) only apply to the first data set plotted.
@@ -69,7 +69,7 @@ Polarplot('antarctica').plot_points(dataset1,dataset2)
 
 ### Example 2: Map only (no histograms), hill shaded Antarctic map
 
-In this example we plot a single dataset, add the map_only=True option to plot_points() 
+In this example we plot a single dataset, add the map_only=True option to plot_points()
 to remove the default histograms,
 and we change the map area definition name to antarctica_hs. antarctica_hs is
 an area definition that applies a hill shaded DEM background and adds some
