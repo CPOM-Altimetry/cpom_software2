@@ -53,6 +53,7 @@ mask_list = [
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-positional-arguments
 
+
 class Mask:
     """class to handle area masking"""
 
@@ -629,7 +630,7 @@ class Mask:
             self.minxm = -1000000  # meters
             self.minym = -3500000  # meters
             self.binsize = 2000  # meters
-            self.dtype = np.uint16
+            self.dtype = np.uint8
             self.bad_mask_value = 0  # value in unknown grid cells in mask
 
             self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")

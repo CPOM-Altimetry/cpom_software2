@@ -855,7 +855,7 @@ class Area:
             df, x_col="x", y_col="y", return_pl_dataframe=return_pl_dataframe
         )
         if not return_xy:
-            df = df.drop_columns(["x", "y"])
+            df = df.drop(["x", "y"])
 
         if isinstance(df, pl.LazyFrame) and return_pl_dataframe:
             df = df.collect()
