@@ -1,6 +1,5 @@
 """Class for area masking"""
 
-# pylint: disable=C0302
 import csv
 import hashlib
 import logging
@@ -16,6 +15,7 @@ from pyproj import CRS  # CRS definitions
 from pyproj import Transformer  # for transforming between projections
 
 # pylint: disable=R0801
+# pylint: disable=C0302
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ mask_list = [
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-arguments
-
+# pylint: disable=too-many-positional-arguments
 
 class Mask:
     """class to handle area masking"""
@@ -827,9 +827,6 @@ class Mask:
             x, y = lats, lons
         else:
             x, y = self.latlon_to_xy(lats, lons)  # pylint: disable=E0633
-
-        # get count of xy that are infinity
-        np.sum(np.isinf(x)) + np.sum(np.isinf(y))
 
         inmask = np.zeros(lats.size, np.bool_)
 
