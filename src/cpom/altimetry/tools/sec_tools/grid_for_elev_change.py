@@ -327,7 +327,7 @@ def get_spatial_filter(
 
     # Reconstruct full-size mask
     area_mask = np.zeros_like(variable_dict["latitude"], dtype=bool)
-    area_mask[bounded_mask] = area_mask_valid
+    area_mask[bounded_mask.astype(int)] = area_mask_valid
 
     variable_dict["x"] = x_coords
     variable_dict["y"] = y_coords
