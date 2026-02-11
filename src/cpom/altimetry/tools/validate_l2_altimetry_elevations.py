@@ -213,9 +213,12 @@ def get_variable(nc: Dataset, nc_var_path: str) -> np.ndarray:
         for part in parts:
             var = var[part]
             if var is None:
+                # return []
                 raise IndexError(f"NetCDF parameter '{nc_var_path}' not found.")
         return var[:]
     except IndexError as err:
+        # print(nc.product_name)
+        # return []
         raise IndexError(f"NetCDF parameter or group {err} not found") from err
 
 
@@ -245,24 +248,61 @@ def get_default_variables(file: Path) -> dict:
             "lon": "lon_poca_20_ku",
             "elev": "height_1_20_ku",
         },
-        "S3A_": {  # Sentinel data
+        # "S3A_": {  # Sentinel data
+        #     "lat_nadir": "lat_20_ku",
+        #     "lon_nadir": "lon_20_ku",
+        #     "lat": "lat_cor_20_ku",
+        #     "lon": "lon_cor_20_ku",
+        #     "elev": "elevation_ocog_20_ku_filt",
+        # },
+        "standard_measurement": {  # Sentinel data
             "lat_nadir": "lat_20_ku",
             "lon_nadir": "lon_20_ku",
             "lat": "lat_cor_20_ku",
             "lon": "lon_cor_20_ku",
-            "elev": "elevation_ocog_20_ku_filt",
+            "elev": "elevation_ice_sheet_20_ku",
         },
-        "S3B_": {  # Sentinel data
-            "lat_nadir": "lat_20_ku",
-            "lon_nadir": "lon_20_ku",
-            "lat": "lat_cor_20_ku",
-            "lon": "lon_cor_20_ku",
-            "elev": "elevation_ocog_20_ku_filt",
+        "S3A_SR_2_TDP_LI": {  # Sentinel data
+            "lat_nadir": "satellite_and_altimeter/lat_nadir",
+            "lon_nadir": "satellite_and_altimeter/lon_nadir",
+            # "lat": "AMPLI_processing/lat_radar_ampli",
+            # "lon": "AMPLI_processing/lon_radar_ampli",
+            # "elev": "AMPLI_processing/elevation_radar_ampli",
+            "lat": "ESA_L2_processing/lat_radar_esa",
+            "lon": "ESA_L2_processing/lon_radar_esa",
+            "elev": "ESA_L2_processing/elevation_radar_esa",
         },
+        "S3B_SR_2_TDP_LI": {  # Sentinel data
+            "lat_nadir": "satellite_and_altimeter/lat_nadir",
+            "lon_nadir": "satellite_and_altimeter/lon_nadir",
+            # "lat": "AMPLI_processing/lat_radar_ampli",
+            # "lon": "AMPLI_processing/lon_radar_ampli",
+            # "elev": "AMPLI_processing/elevation_radar_ampli",
+            "lat": "ESA_L2_processing/lat_radar_esa",
+            "lon": "ESA_L2_processing/lon_radar_esa",
+            "elev": "ESA_L2_processing/elevation_radar_esa",
+        },
+        # "S3B_": {  # Sentinel data
+        #     "lat_nadir": "lat_20_ku",
+        #     "lon_nadir": "lon_20_ku",
+        #     "lat": "lat_cor_20_ku",
+        #     "lon": "lon_cor_20_ku",
+        #     "elev": "elevation_ocog_20_ku_filt",
+        # },
         "CS_OFFL_SIR_TDP": {  # Cryotempo
             "lat": "latitude",
             "lon": "longitude",
             "elev": "elevation",
+        },
+        "CRA_IR_GR": {  # CLEV2ER TDS
+            "lat": "data/ku/poca/lat_surf",
+            "lon": "data/ku/poca/lon_surf",
+            "elev": "data/ku/poca/land_ice_elevation",
+        },
+        "CS_OFFL_THEM_POINT_":{ # EOLIS
+            "lat": 'y',
+            "lon": 'x',
+            "elev": 'elevation',
         },
         # FDR4ALT Products
         "ER1": {
@@ -329,6 +369,7 @@ def get_files_in_dir(
         List[Path]: A list of found .nc or .NC files with their full paths.
     """
     extensions = {"nc": "*.nc", "h5": "*.h5"}
+    # extensions = {"nc": "*standard_measurement.nc", "h5": "*.h5"}
     all_files: list[Path] = []
     pattern = extensions[filetype]
     all_files.extend(Path(directory).rglob(pattern))
@@ -434,6 +475,9 @@ class ProcessData:
                     get_variable(nc, config["elev"]),
                 )
 
+                # if len(lats) == 0: 
+                #     return None
+
                 try:
                     add_vars = self.args.add_vars or []
                     additional_data = {
@@ -463,6 +507,7 @@ class ProcessData:
 
                 lats, lons, _, _ = self.area.inside_latlon_bounds(lats, lons)
                 x, y = self.area.latlon_to_xy(lats, lons)
+                # x, y = lats, lons
 
                 idx, _ = self.area.inside_mask(x, y)
                 if not idx.size:
@@ -679,7 +724,7 @@ def get_elev_differences(
     laser_points: np.ndarray,
     altimeter_points: np.ndarray,
     prefix: str = "",
-    nearest_only=False,
+    nearest_only=True,
 ) -> dict:
     """
     Calculate the elevation differences between IS2 points and altimeter points
