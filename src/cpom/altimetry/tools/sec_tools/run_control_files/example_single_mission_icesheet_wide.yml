@@ -58,7 +58,7 @@ cs2:
 
   # Surface fitting parameters
   surface_fit:
-    in_dir : "example/name/SEC/greenland_cs2/gridded_altimetry/" # Override input directory
+    in_dir : "${CPOM_SOFTWARE_DIR}/cpom_software2/src/cpom/altimetry/tools/sec_tools/example/name/SEC/greenland_cs2/gridded_altimetry/" # Override input directory
     mintime: "20/10/2010"
     maxtime: "28/02/2025"
     pcmintime: "20/10/2010"
@@ -86,8 +86,8 @@ env:
 
   # Raw data configuration for grid creation
   grid_for_elev_change:
-    data_input_dir: "/data/ENV/L2/FDR4ALT/TDP/greenland/land_ice"
-    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+    data_input_dir: "${CPDATA_DIR}/ENV/L2/FDR4ALT/TDP/greenland/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/cpom_software2/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
 
   # Surface fitting parameters
   # No in_dir override here - uses output from grid step

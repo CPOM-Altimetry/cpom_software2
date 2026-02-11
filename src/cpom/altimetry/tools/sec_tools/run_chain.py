@@ -32,7 +32,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml  # type: ignore[import-untyped]
+from envyaml import EnvYAML
 
 
 def dict_to_cli_args(config):
@@ -207,8 +207,8 @@ def main(args):
     parser.add_argument("--config", type=Path, required=True, help="Path to the config file")
     parsed_args = parser.parse_args(args)
 
-    with open(parsed_args.config, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
+    config = yml.export()
 
     # Single-mission or multi-mission processing
     if "missions_to_run" in config:

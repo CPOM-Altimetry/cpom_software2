@@ -34,6 +34,7 @@ duckdb = "^1.4.3"
 polars = "^1.37.1"
 pyarrow = "^22.0.0"
 statsmodels = "^0.14.6"
+envyaml = "^1.10.211231"
 
 
 

@@ -33,7 +33,7 @@ cs2:
   # If points to the same location as epoch_average output, there is no need 
   # to pass a custom in_dir to clip_to_basins
   base_folder: "greenland_cs2"
-  grid_info_json: "/data/grids/greenland/cs2_5km/metadata.json"
+  grid_info_json: "${CPDATA_DIR}/grids/greenland/cs2_5km/metadata.json"
 
   clip_to_basins:
     in_dir: "path/to/existing/epoch_average/output" # Optional 
