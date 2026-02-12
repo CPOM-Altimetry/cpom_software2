@@ -136,6 +136,11 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
         default="dh_ave",
         help="Column name to use for elevation change values in ice sheet plots (default: dh_ave).",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
 
@@ -547,9 +552,8 @@ def main(params):
     params = parse_arguments(params)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
-        log_file_info=Path(params.out_dir) / "info.log",
-        log_file_error=Path(params.out_dir) / "errors.log",
-        log_file_warning=Path(params.out_dir) / "warnings.log",
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
     this_area, this_grid_area = get_objects(params)

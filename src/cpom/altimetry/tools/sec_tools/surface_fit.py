@@ -240,6 +240,11 @@ def parse_arguments(args):
         type=str,
         help="(optional) Name of the weight column to use for weighted surface fit",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
 
     # Add shared basin/region selection arguments for consistency across tools
     add_basin_selection_arguments(parser)
@@ -286,10 +291,8 @@ def clean_directory(params: argparse.Namespace, confirm_regrid: bool = False):
     os.makedirs(params.out_dir, exist_ok=True)
 
     logger = set_loggers(
-        log_file_info=str(Path(params.out_dir) / "info.log"),
-        log_file_error=str(Path(params.out_dir) / "errors.log"),
-        log_file_debug=str(Path(params.out_dir) / "debug.log"),
-        log_file_warning=str(Path(params.out_dir) / "warnings.log"),
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
     logger.info("output_dir=%s", params.out_dir)
 

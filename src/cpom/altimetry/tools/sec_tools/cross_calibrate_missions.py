@@ -40,8 +40,6 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
 )
 from cpom.logging_funcs.logging import set_loggers
 
-log = logging.getLogger(__name__)
-
 
 def parse_arguments(args: list[str]) -> argparse.Namespace:
     """
@@ -127,6 +125,11 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--plot_results",
         action="store_false",
         help="Boolean flag to enable/disable generation of comparison plots ",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
     )
     # Shared basin/region selection arguments
     add_basin_selection_arguments(parser)
@@ -945,9 +948,8 @@ def main(args: list[str]) -> None:
     params = parse_arguments(args)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
-        log_file_info=str(Path(params.out_dir) / "info.log"),
-        log_file_error=str(Path(params.out_dir) / "errors.log"),
-        log_file_warning=str(Path(params.out_dir) / "warnings.log"),
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
     processed_basins = []

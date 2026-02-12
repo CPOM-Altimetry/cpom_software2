@@ -147,6 +147,11 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
         default=None,
         help="Maximum slope. When None, no filtering is applied.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
 
     # Basin/region selection
     add_basin_selection_arguments(parser)
@@ -752,10 +757,8 @@ def main(args: list[str] | None = None) -> None:
 
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
-        log_file_info=str(Path(params.out_dir) / "info.log"),
-        log_file_error=str(Path(params.out_dir) / "errors.log"),
-        log_file_debug=str(Path(params.out_dir) / "debug.log"),
-        log_file_warning=str(Path(params.out_dir) / "warnings.log"),
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
     params.epoch_time = datetime.fromisoformat(grid_meta["standard_epoch"])

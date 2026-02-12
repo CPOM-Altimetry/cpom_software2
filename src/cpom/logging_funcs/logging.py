@@ -17,6 +17,7 @@ log = get_logger(
 """
 
 import logging
+from pathlib import Path
 from types import TracebackType
 from typing import Type
 
@@ -25,6 +26,7 @@ from typing import Type
 def set_loggers(
     log_format: str = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
     log_name: str = "",
+    log_dir: str | None = None,
     log_file_info: str = "info.log",
     log_file_error: str = "error.log",
     log_file_warning: str = "warning.log",
@@ -44,12 +46,20 @@ def set_loggers(
     Args:
         log_format (str) : format string to use in logger
         log_name (str) : log name, default is ""
+        log_dir (str | None) : directory to store log files.
         log_file_info (str) : file name of INFO log, default is "info.log"
         log_file_warning (str) : file name of WARNING log, default is "warning.log"
         log_file_error (str) : file name of ERROR log, default is "error.log"
         log_file_debug (str) : file name of DEBUG log, default is "debug.log"
-        default_log_level(int): default log level, default is logging.INFO
+        default_log_level (int): default log level, default is logging.INFO
     """
+    # If log_dir is provided, construct file paths automatically
+    if log_dir is not None:
+        log_dir_path = Path(log_dir)
+        log_file_info = str(log_dir_path / "info.log")
+        log_file_error = str(log_dir_path / "errors.log")
+        log_file_warning = str(log_dir_path / "warnings.log")
+        log_file_debug = str(log_dir_path / "debug.log")
 
     log = logging.getLogger(log_name)
     log_formatter = logging.Formatter(log_format, datefmt="%d/%m/%Y %H:%M:%S")
@@ -87,6 +97,7 @@ def set_loggers(
 
     log.setLevel(default_log_level)
 
+    print("Default log level:", logging.getLevelName(default_log_level))
     print("log file (INFO) :", log_file_info)
     print("log file (WARNING) :", log_file_warning)
     print("log file (ERROR):", log_file_error)

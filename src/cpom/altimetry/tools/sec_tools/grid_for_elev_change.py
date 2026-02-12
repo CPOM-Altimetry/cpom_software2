@@ -33,6 +33,7 @@ Parameters:
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import sys
@@ -121,6 +122,11 @@ def parse_arguments(args):
         "where the 'expert/ice_sheet_qual_relocation' is > 0. "
         "This is specific to the FDR4ALT dataset.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
 
     return parser.parse_args(args)
 
@@ -174,11 +180,9 @@ def get_processing_objects(params, dataset):
     """
 
     logger = set_loggers(
-        log_file_info=Path(params.out_dir) / "info.log",
-        log_file_error=Path(params.out_dir) / "errors.log",
-        log_file_warning=Path(params.out_dir) / "warnings.log",
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
-
     logger.info("output_dir=%s", params.out_dir)
 
     thisgrid = GridArea(params.gridarea, params.binsize)

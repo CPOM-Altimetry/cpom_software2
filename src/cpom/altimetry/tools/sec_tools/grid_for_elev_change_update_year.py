@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 from functools import partial
-from pathlib import Path
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
@@ -158,7 +157,11 @@ def main():
         required=True,
         help="Year to update in the dataset (e.g., 2020)",
     )
-
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
     args = parser.parse_args()
 
     # --------------------------------------------------------#
@@ -174,10 +177,8 @@ def main():
     files_and_dates = dataset.get_files_and_dates(min_dt_time=min_date, max_dt_time=max_date)
 
     logger = set_loggers(
-        log_file_info=Path(grid_meta["out_dir"]) / "info.log",
-        log_file_error=Path(grid_meta["out_dir"]) / "errors.log",
-        log_file_warning=Path(grid_meta["out_dir"]) / "warnings.log",
-        log_file_debug=Path(grid_meta["out_dir"]) / "debug.log",
+        log_dir=grid_meta["out_dir"],
+        default_log_level=logging.DEBUG if args.debug else logging.INFO,
     )
 
     if len(files_and_dates) == 0:

@@ -189,7 +189,7 @@ def main(args):
     Run the processing chain.
 
     STEPS:
-    1. Parse --config command-line argument
+    1. Parse --config and optional --debug command-line arguments
     2. Load YAML configuration file
     3. Detect processing mode:
        - Single-mission: 'missions_to_run' key exists in config
@@ -202,13 +202,22 @@ def main(args):
     Args:
         args (list): Command-line arguments (from sys.argv[1:]).
                     Must contain: ['--config', '/path/to/config.yml']
+                    Optionally: ['--debug'] to enable DEBUG level logging in child processes
     """
     parser = argparse.ArgumentParser(description="Run the processing chain")
     parser.add_argument("--config", type=Path, required=True, help="Path to the config file")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging in all child processes",
+    )
     parsed_args = parser.parse_args(args)
 
     yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
     config = yml.export()
+
+    # Build debug flag to pass to child processes
+    debug_args = ["--debug"] if parsed_args.debug else []
 
     # Single-mission or multi-mission processing
     if "missions_to_run" in config:
@@ -217,12 +226,12 @@ def main(args):
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
                 args = build_args(algo, config, mission)
                 print(f"Running {algo}.py with args: {args}")
-                subprocess.run(["python", f"{algo}.py"] + args, check=True)
+                subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
     else:
         for algo in config["algorithm_list"]:
             args = build_args(algo, config)
             print(f"Running {algo}.py with args: {args}")
-            subprocess.run(["python", f"{algo}.py"] + args, check=True)
+            subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
 
 
 if __name__ == "__main__":

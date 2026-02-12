@@ -32,10 +32,10 @@ Output:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
-from logging import Logger
 from pathlib import Path
 
 import geopandas as gpd
@@ -108,7 +108,11 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "If set, data will be loaded one partition and a bounding box filter applied "
         "before clipping to each basin shape.",
     )
-
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging",
+    )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
 
@@ -148,7 +152,7 @@ def load_partitioned_data_for_basin(
     grid_area: GridArea,
     params: argparse.Namespace,
     basin_shape: gpd.GeoDataFrame,
-    logger: Logger,
+    logger: logging.Logger,
 ):
     """
     Incrementally load partitioned Parquet data filtered to a basin bounding box.
@@ -166,7 +170,7 @@ def load_partitioned_data_for_basin(
             - in_dir (str): Directory containing partitioned parquet files
             - parquet_glob (str): Glob pattern for parquet files
         basin_shape (geopandas.GeoDataFrame): Basin geometry used to determine bounding-box limits.
-        logger (Logger): Logger for progress and status messages.
+        logger (logging.Logger): Logger for progress and status messages.
 
     Yields:
         pl.DataFrame: Each partition with x/y coordinates added and filtered by basin bounds.
@@ -265,7 +269,7 @@ def process_single_basin(
     grid_area: GridArea,
     basin_shape: gpd.GeoDataFrame,
     basin_name: str,
-    logger: Logger,
+    logger: logging.Logger,
 ):
     """
     Clip altimetry data to a single basin and write results to disk.
@@ -323,13 +327,13 @@ def process_single_basin(
             clipped_chunk.sink_parquet(chunked_out / "data.parquet")
 
 
-def get_metadata_json(params: argparse.Namespace, start_time, logger: Logger):
+def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Logger):
     """
     Generate metadata JSON for clipped data.
     Args:
         params (argparse.Namespace): Command line parameters.
         start_time (float): Start time.
-        logger (Logger): Logger object.
+        logger (logging.Logger): Logger object.
     """
     meta_json_path = Path(params.out_dir) / "metadata.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
@@ -372,10 +376,8 @@ def main(args):
     params = parse_arguments(args)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
-        log_file_info=Path(params.out_dir) / "info.log",
-        log_file_error=Path(params.out_dir) / "errors.log",
-        log_file_warning=Path(params.out_dir) / "warnings.log",
-        log_file_debug=Path(params.out_dir) / "debug.log",
+        log_dir=params.out_dir,
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
     with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
