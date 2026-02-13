@@ -763,7 +763,7 @@ def main(args):
                 f"Must be either a path to a YAML file or a valid JSON string"
             )
 
-    clean_directory(args, dataset, confirm_regrid=args.force_regrid)
+    clean_directory(args, dataset, confirm_regrid=not args.force_regrid)
 
     file_and_dates, worker, thisgrid, logger = get_processing_objects(args, dataset)
 
