@@ -128,6 +128,15 @@ def parse_arguments(args):
         help="Enable DEBUG level logging",
     )
 
+    parser.add_argument(
+        "--force_regrid",
+        action="store_true",
+        help=(
+            "Force regridding even if output directory exists. "
+            "WARNING: This will delete the existing output directory and all its contents."
+        ),
+    )
+
     return parser.parse_args(args)
 
 
@@ -707,7 +716,9 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
     output["grid_y_size"] = thisgrid.grid_y_size
 
     elapsed_time = time.time() - start_time
-    output["gridding_time"] = f"{elapsed_time//3600}h {(elapsed_time%3600)//60}m {elapsed_time%60}s"
+    output["gridding_time"] = (
+        f"{elapsed_time // 3600}h {(elapsed_time % 3600) // 60}m {elapsed_time % 60}s"
+    )
 
     meta_json_path = os.path.join(params.out_dir, "metadata.json")
     try:
@@ -752,7 +763,7 @@ def main(args):
                 f"Must be either a path to a YAML file or a valid JSON string"
             )
 
-    clean_directory(args, dataset, confirm_regrid=True)
+    clean_directory(args, dataset, confirm_regrid=args.force_regrid)
 
     file_and_dates, worker, thisgrid, logger = get_processing_objects(args, dataset)
 
