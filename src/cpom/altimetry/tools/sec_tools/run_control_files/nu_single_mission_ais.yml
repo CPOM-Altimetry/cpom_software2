@@ -57,7 +57,7 @@ cs2:
   base_folder: "ais_cs2"
 
   # Path to grid metadata
-  grid_info_json: "/data/grids/ais/cs2_5km/metadata.json"
+  #grid_info_json: "/data/grids/ais/cs2_5km/metadata.json"
 
   # --------------------#
   # Algorithm Overrides #
@@ -65,7 +65,11 @@ cs2:
 
   # Raw data configuration for grid creation
   grid_for_elev_change:
-    data_input_dir: "/cpdata/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
+    area: 'antarctica'
+    gridarea: 'antarctica'
+    binsize: 5000
+    mask_name: 'antarctica_bedmachine_v2_grid_mask'
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
     dataset: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/datasets/definitions/cryotempo_d.yml"
 
 
