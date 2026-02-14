@@ -26,7 +26,7 @@ from cpom.dems.dems import Dem  # DEM reading
 log = logging.getLogger(__name__)
 
 # pylint: disable=unpacking-non-sequence
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines, C0302
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements

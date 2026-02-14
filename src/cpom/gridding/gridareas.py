@@ -8,11 +8,13 @@ Each area is defined by projection, bottom left corner x,y coordinates in m, wid
 
 Author: Alan Muir (CPOM/UCL)
 Date: 2019
-Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author 
+Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author
 
 History:
 Updated 24/09/21 by Lin Gilbert to use pyproj CRS rather than Proj
 """
+from typing import Tuple, Union
+
 import numpy as np
 from pyproj import CRS, Transformer  # co-ord transforms and definitions
 
@@ -312,8 +314,8 @@ class GridArea:
         """
         returns the grid column and row for a given x,y and bin size in m
         """
-        ii = int(np.floor((x - self.minxm) / self.binsize))
-        jj = int(np.floor((y - self.minym) / self.binsize))
+        ii = (np.floor((x - self.minxm) / self.binsize)).astype(int)
+        jj = (np.floor((y - self.minym) / self.binsize)).astype(int)
         return ii, jj
 
     def get_cellcentre_x_y_from_col_row(self, col, row):
@@ -348,6 +350,31 @@ class GridArea:
         return x - (self.minxm + col * self.binsize + (self.halfbinsize)), y - (
             self.minym + row * self.binsize + (self.halfbinsize)
         )
+
+    def get_xy_relative_to_cellcentres(
+        self, x: Union[float, np.ndarray], y: Union[float, np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Returns the offsets in x and y from the centers of the grid cells
+        that the input x,y points are located in.
+
+        Args:
+            x (Union[float, np.ndarray]): The x-coordinate or an array of x-coordinates.
+            y (Union[float, np.ndarray]): The y-coordinate or an array of y-coordinates.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: A tuple containing the x and y offsets from the
+            center of the grid cell that each input x,y point is located in.
+            If inputs are scalars, the outputs will be scalar arrays.
+        """
+        # 1. Get integer grid column and row for each x,y
+        col, row = self.get_col_row_from_x_y(x, y)
+
+        # 2. Compute the offsets from the cell center
+        offset_x = x - (self.minxm + col * self.binsize + self.halfbinsize)
+        offset_y = y - (self.minym + row * self.binsize + self.halfbinsize)
+
+        return offset_x, offset_y
 
     def transform_x_y_to_lat_lon(self, x, y):
         """

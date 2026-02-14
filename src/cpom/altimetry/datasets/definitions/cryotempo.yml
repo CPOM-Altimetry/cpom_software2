@@ -1,0 +1,12 @@
+#
+mission : cs2
+long_name : "CryoTEMPO Land Ice Dataset"
+dataset_epoch : "2000-01-01T00:00:00"
+search_pattern :  "**/CS_OFFL_SIR_TDP_LI*.nc"
+yyyymm_str_fname_indices: [-48, -40]
+latitude_param: "latitude"
+longitude_param: "longitude"
+elevation_param: "elevation"
+power_param: "backscatter"
+time_param: "time"
+mode_param: "instrument_mode"

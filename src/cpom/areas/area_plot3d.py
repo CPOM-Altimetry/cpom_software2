@@ -471,7 +471,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
         log.info("Loading %d data sets", num_data_sets)
 
         for ds_num, data_set in enumerate(data_sets):
-            print(f"loading data set {ds_num}: {data_set.get('name','unnamed')}")
+            print(f"loading data set {ds_num}: {data_set.get('name', 'unnamed')}")
 
             is_flag_data = len(data_set.get("flag_values", [])) > 0
 
@@ -514,9 +514,10 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
 
             # Test for masked arrays
             if ma.is_masked(lats):
-                lats[lats.mask.nonzero()] = np.nan
+                lats[np.ma.getmaskarray(lats)] = np.nan
+
             if ma.is_masked(lons):
-                lons[lons.mask.nonzero()] = np.nan
+                lons[np.ma.getmaskarray(lons)] = np.nan
 
             # Step 1: Filter for valid values
             # Assuming latitude values must be between -90 and 90, and longitude
