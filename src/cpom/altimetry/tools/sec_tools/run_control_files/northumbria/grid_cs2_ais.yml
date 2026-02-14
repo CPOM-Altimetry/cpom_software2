@@ -8,13 +8,12 @@
 #
 # USAGE:
 #  Process all configured missions (sequential):
-#     python run_chain.py --config nu_single_mission_ais.yml
+#     ./run_chain.py --config grid_cs2_ais.yml
 #-------------------------------------------------------------------------------------#
 
 # Define which mission(s) to process
 missions_to_run: 
   - cs2
-# initially just test with CS2, then add in other missions
 # - s3a
 # - s3b
 # - env
@@ -57,7 +56,7 @@ cs2:
   base_folder: "ais_cs2"
 
   # Path to grid metadata
-  #grid_info_json: "/data/grids/ais/cs2_5km/metadata.json"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_cs2/gridded_altimetry/metadata.json"
 
   # --------------------#
   # Algorithm Overrides #
