@@ -84,8 +84,8 @@ cs2:
     powercorrect: true
     mintime: "20/10/2010"
     # maxtime: "28/11/2025" # End time for plane fit (DD/MM/YYYY or DD.MM.YYYY) | max time in the grid if not provided.
-    pcmintime = "01/01/2011" # Start date of power correction (DD/MM/YYYY or DD.MM.YYYY) | mintime if not provided.
-    pcmaxtime = "01/01/2016" # End date of power correction (DD/MM/YYYY or DD.MM.YYYY) | maxtime if not provided.
+    pcmintime : "01/01/2011" # Start date of power correction (DD/MM/YYYY or DD.MM.YYYY) | mintime if not provided.
+    pcmaxtime : "01/01/2016" # End date of power correction (DD/MM/YYYY or DD.MM.YYYY) | maxtime if not provided.
     #mode_values: [1, 3]
 
 env:
