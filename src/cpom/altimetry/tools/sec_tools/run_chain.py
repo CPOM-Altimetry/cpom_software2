@@ -207,11 +207,19 @@ def main(args):
                     Optionally: ['--debug'] to enable DEBUG level logging in child processes
     """
     parser = argparse.ArgumentParser(description="Run the processing chain")
-    parser.add_argument("--config", type=Path, required=True, help="Path to the config file")
+    parser.add_argument("--config", "-c", type=Path, required=True, help="Path to the config file")
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging in all child processes",
+    )
+    parser.add_argument(
+        "--missions",
+        "-m",
+        help=(
+            "override missions_to_run in config (for single-mission configs, useful for testing"
+            " specific missions). Comma-separated list of missions to run, e.g. --mission cs2,env"
+        ),
     )
     parsed_args = parser.parse_args(args)
 
@@ -223,6 +231,10 @@ def main(args):
 
     # Single-mission or multi-mission processing
     if "missions_to_run" in config:
+        if parsed_args.missions:
+            # Override missions_to_run with command-line argument
+            config["missions_to_run"] = [m.strip() for m in parsed_args.missions.split(",")]
+            print(f"Overriding missions_to_run with: {config['missions_to_run']}")
         for mission in config["missions_to_run"]:
             for algo in config[mission]["algorithm_list"]:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))

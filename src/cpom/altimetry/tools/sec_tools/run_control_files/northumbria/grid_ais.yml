@@ -1,0 +1,127 @@
+#-------------------------------------------------------------------------------------#
+# Example Run Control file to produce single mission Antarctic Ice Sheet wide 
+# dhdt estimates and plots. 
+#
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process a single mission (e.g. CS2):
+#     ./run_chain.py --config grid_ais.yml --missions cs2
+#  Process all configured missions (sequential):
+#     ./run_chain.py --config grid_ais.yml
+#-------------------------------------------------------------------------------------#
+
+# Define which mission(s) to process
+missions_to_run: 
+- cs2
+- s3a
+- s3b
+- env
+- e2
+- e1
+
+# Base output directory where all results will be stored
+# Individual missions create subdirectories within this path
+# Note: path chosen at CPOM/Northumbria University
+base_out: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/"
+
+#-------------------------------------------------------------------------------------#
+# MISSION-SPECIFIC PARAMETERS
+# These override the common parameters below for each mission
+#
+# INPUT DIRECTORY OVERRIDE:
+# You can override input directories in the config by adding 'in_dir' 
+# to any step. This allows reusing intermediate outputs from previous runs.
+#
+# GRID METADATA MANAGEMENT:
+# When grids are pre-computed and stored externally, specify 'grid_info_json' at 
+# the mission level. This path is then automatically passed to all steps that need it.
+#-------------------------------------------------------------------------------------#
+
+# Defining the first mission: cs2 steps to be run
+cs2:
+  # Algorithm chain: No grid_for_elev_change because grid already exists
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Data will be written to {base_out}/{base_folder}/
+  base_folder: "ais_cs2"
+
+  # Path to grid metadata
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_cs2/gridded_altimetry/metadata.json"
+
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    mask_name: 'antarctica_bedmachine_v2_grid_mask'
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
+    dataset: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/datasets/definitions/cryotempo_d.yml"
+
+env:
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+   
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Base folder name for this mission's outputs
+  base_folder: "ais_env"
+  
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ENV/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+
+e2:
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+    
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Base folder name for this mission's outputs
+  base_folder: "ais_e2"
+  
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ERS2/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/e2_fdr4alt.yml"
+
+#-------------------------------------------------------------------------#
+# COMMON PROCESSING PARAMETERS
+# Applied to all missions; mission-specific params above override these
+#-------------------------------------------------------------------------#
+
+########################
+# Grid Creation
+########################
+grid_for_elev_change:
+  area: 'antarctica'
+  gridarea: 'antarctica'
+  binsize: 5000
+  out_folder_name: gridded_altimetry
+  mask_name: 'antarctica_bedmachine_v2_grid_mask'
+  standard_epoch: "1991-01-01T00:00:00"
+  partition_xy_chunking: 200
+  force_regrid: true   # Set to true to force regridding even if output exists 
+                       #(WARNING: will delete existing output directory)
+
