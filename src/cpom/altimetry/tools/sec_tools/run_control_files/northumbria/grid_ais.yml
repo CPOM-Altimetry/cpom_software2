@@ -62,9 +62,56 @@ cs2:
 
   # Raw data configuration for grid creation
   grid_for_elev_change:
-    mask_name: 'antarctica_bedmachine_v2_grid_mask'
     data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
-    dataset: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/datasets/definitions/cryotempo_d.yml"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/cryotempo.yml"
+
+s3a:
+  # Algorithm chain: No grid_for_elev_change because grid already exists
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Data will be written to {base_out}/{base_folder}/
+  base_folder: "ais_s3a"
+
+  # Path to grid metadata
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
+
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/S3A/L2/THEMATIC/BC005/LI"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3a_thematic_bc005.yml"
+
+s3b:
+  # Algorithm chain: No grid_for_elev_change because grid already exists
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Data will be written to {base_out}/{base_folder}/
+  base_folder: "ais_s3a"
+
+  # Path to grid metadata
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
+
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3b_thematic_bc005.yml"
 
 env:
   algorithm_list:
@@ -105,6 +152,27 @@ e2:
   grid_for_elev_change:
     data_input_dir: "${CPDATA_DIR}/SATS/RA/ERS2/L2/FDR4ALT/TDP/antarctica/land_ice"
     dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/e2_fdr4alt.yml"
+
+e1:
+  algorithm_list:
+    - grid_for_elev_change       # Step 1: Create new grid from raw data
+    
+  # -----------------# 
+  # Global Overrides # 
+  # -----------------#
+
+  # Base folder name for this mission's outputs
+  base_folder: "ais_e1"
+  
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Raw data configuration for grid creation
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ERS1/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/e1_fdr4alt.yml"
+
 
 #-------------------------------------------------------------------------#
 # COMMON PROCESSING PARAMETERS

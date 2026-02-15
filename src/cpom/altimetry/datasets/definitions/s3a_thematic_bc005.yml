@@ -1,0 +1,12 @@
+#
+mission : s3a
+long_name : "Sentiment-3A Thematic Land Ice Dataset BC-005"
+dataset_epoch : "2000-01-01T00:00:00"
+search_pattern :  "**/S3A_SR_2_LAN_LI_*/enhanced_measurement.nc"
+yyyymm_str_fname_indices: [-91, -83]
+latitude_param: "lat_cor_20_ku"
+longitude_param: "lon_cor_20_ku"
+elevation_param: "elevation_ice_sheet_20_ku"
+power_param: "sig0_ice_sheet_20_ku"
+time_param: "time_20_ku"
+mode_param: "instr_op_mode_20_ku"
