@@ -472,6 +472,8 @@ def process_file(
                         or None if insufficient valid data (< 2 points)
     """
 
+    print(f"Processing file: {file_and_date['path']}")  # Debug print to track progress
+
     # Get filetype from search pattern
     context_manager = Dataset
     if dataset.search_pattern is not None and dataset.search_pattern.endswith(".h5"):
