@@ -398,7 +398,7 @@ class DatasetHelper(DatasetConfig):
                     if var is None:
                         return np.array([])  # Variable not found
                 return var[:]
-            except KeyError:
+            except (KeyError, RuntimeError):
                 print("Variable not found in NetCDF: ", path)
                 return np.array([])  # Variable not found
 
