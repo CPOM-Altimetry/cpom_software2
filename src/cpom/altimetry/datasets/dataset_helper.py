@@ -399,7 +399,7 @@ class DatasetHelper(DatasetConfig):
                         return np.array([])  # Variable not found
                 return var[:]
             except (KeyError, RuntimeError):
-                print("Variable not found in NetCDF: ", path)
+                print("Variable not found in NetCDF: ", path, dataset)
                 return np.array([])  # Variable not found
 
         if self.beams:
