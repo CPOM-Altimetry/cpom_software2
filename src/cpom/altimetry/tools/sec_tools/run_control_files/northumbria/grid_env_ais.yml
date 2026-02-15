@@ -13,10 +13,10 @@
 
 # Define which mission(s) to process
 missions_to_run: 
-  - cs2
+# - cs2
 # - s3a
 # - s3b
-# - env
+  - env
 # - e2
 # - e1
 
@@ -64,9 +64,13 @@ cs2:
 
   # Raw data configuration for grid creation
   grid_for_elev_change:
+    area: 'antarctica'
+    gridarea: 'antarctica'
+    binsize: 5000
+    mask_name: 'antarctica_bedmachine_v2_grid_mask'
     data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
     dataset: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/datasets/definitions/cryotempo_d.yml"
-    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/cryotempo.yml"
+
 
   # # Surface fitting parameters
   # surface_fit:
@@ -80,10 +84,10 @@ cs2:
 env:
   algorithm_list:
     - grid_for_elev_change       # Step 1: Create new grid from raw data
-    - surface_fit                # Step 2: Fit surfaces to grid
-    - epoch_average              # Step 3: Compute epoch-averaged values
-    - calculate_dhdt             # Step 4: Calculate rate of change
-    - dhdt_plots                 # Step 5: Generate visualizations
+    # - surface_fit                # Step 2: Fit surfaces to grid
+    # - epoch_average              # Step 3: Compute epoch-averaged values
+    # - calculate_dhdt             # Step 4: Calculate rate of change
+    # - dhdt_plots                 # Step 5: Generate visualizations
 
   # -----------------# 
   # Global Overrides # 
@@ -98,8 +102,8 @@ env:
 
   # Raw data configuration for grid creation
   grid_for_elev_change:
-    data_input_dir: "/data/ENV/L2/FDR4ALT/TDP/greenland/land_ice"
-    dataset: "/home/willisc3/luna/CPOM/willisc3/cpom_software2/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ENV/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
 
   # Surface fitting parameters
   # No in_dir override here - uses output from grid step
