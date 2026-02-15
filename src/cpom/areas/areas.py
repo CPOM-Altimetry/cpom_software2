@@ -8,6 +8,7 @@ import sys
 from typing import Optional
 
 import numpy as np
+import polars as pl
 from pyproj import CRS  # Transformer transforms between projections
 from pyproj import Transformer  # Transformer transforms between projections
 
@@ -627,3 +628,236 @@ class Area:
             indices_in_maskarea,
             indices_in_maskarea.size,
         )
+
+    def inside_area(self, lats: np.ndarray, lons: np.ndarray) -> tuple[np.ndarray, int]:
+        """find if input latitude and longitude locations are inside area's
+            extent and any mask
+
+        Args:
+            lats (np.ndarray): array of latitude values (degs N)
+            lons (np.ndarray): array of longitude values (degs E)
+
+        Returns:
+            bool_mask (ndarray[bool]): boolean mask of points inside
+            n_inside (int) : number of points inside mask
+        """
+
+        bool_mask = np.full_like(lats, False, dtype=bool)
+
+        if self.specify_by_bounding_lat:
+            (lats_inside, lons_inside, indices_inside_orig, n_inside) = self.inside_latlon_bounds(
+                lats, lons
+            )
+            x_inside, y_inside = self.latlon_to_xy(lats_inside, lons_inside)
+        else:
+            (lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside) = (
+                self.inside_xy_extent(lats, lons)
+            )
+        if n_inside > 0:
+            (indices_inside_mask, n_inside) = self.inside_mask(x_inside, y_inside)
+            if n_inside > 0:
+                indice_inside_orig = indices_inside_orig[indices_inside_mask]
+                bool_mask[indice_inside_orig] = True
+
+        return (bool_mask, n_inside)
+
+    ########################################################
+    # Functions to work with Polars DataFrames or LazyFrames #
+    #########################################################
+
+    def inside_latlon_bounds_polars(
+        self, df: pl.DataFrame | pl.LazyFrame, lat_col: str, lon_col: str, return_pl_dataframe=False
+    ) -> pl.DataFrame | pl.LazyFrame:
+        """Find if input latitude and longitude locations are inside area's lat/lon extent
+        bounds.
+        Filter polars DataFrame or LazyFrame to only include rows within the area's lat/lon bounds.
+        Args:
+            df (pl.DataFrame|pl.LazyFrame): Polars DataFrame or LazyFrame containing lat/lon data
+            lat_col (str): name of latitude column in df
+            lon_col (str): name of longitude column in df
+            return_pl_dataframe (bool): if True and input is LazyFrame, return a DataFrame
+        Returns:
+            pl.DataFrame|pl.LazyFrame: filtered DataFrame or LazyFrame with only rows inside bounds
+        """
+
+        df = df.filter(
+            (pl.col(lat_col) >= self.minlat)
+            & (pl.col(lat_col) <= self.maxlat)
+            & (pl.col(lon_col) >= self.minlon)
+            & (pl.col(lon_col) <= self.maxlon)
+        )
+
+        return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
+
+    # pylint: disable=R0913, R0917
+    def latlon_to_xy_polars(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        lat_col: str = "latitude",
+        lon_col: str = "longitude",
+        out_x_col: str = "x",
+        out_y_col: str = "y",
+        return_pl_dataframe=False,
+    ) -> pl.DataFrame | pl.LazyFrame:
+        """
+        Convert latitude and longitude columns in a Polars DataFrame or LazyFrame to x,y
+        coordinates in the area's projection.
+        Return a new DataFrame or LazyFrame with added x,y columns.
+        Args:
+            df (pl.DataFrame|pl.LazyFrame): Polars DataFrame or LazyFrame containing lat/lon
+            latitude_col (str): name of latitude column in df
+            longitude_col (str): name of longitude column in df
+            out_x_col (str): name of output x column to create
+            out_y_col (str): name of output y column to create
+        Returns:
+            pl.DataFrame|pl.LazyFrame: DataFrame or LazyFrame with added x,y
+        """
+        if isinstance(df, pl.DataFrame):
+            df = df.lazy()
+
+        schema = df.collect_schema()
+        schema[out_x_col], schema[out_y_col] = pl.Float64, pl.Float64
+
+        def transform_batch(df):
+            x, y = self.latlon_to_xy(df[lat_col].to_numpy(), (df[lon_col].to_numpy()))
+            df = df.with_columns(
+                [
+                    pl.Series(out_x_col, x, dtype=pl.Float64),
+                    pl.Series(out_y_col, y, dtype=pl.Float64),
+                ]
+            )
+            return df
+
+        df = df.map_batches(
+            transform_batch,
+            schema=schema,
+        )
+
+        return df.collect() if isinstance(df, pl.LazyFrame) & return_pl_dataframe else df
+
+    # pylint: disable=R0913, R0917
+    def xy_to_latlon_polars(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        x_col: str = "x",
+        y_col: str = "y",
+        out_lat_col: str = "latitude",
+        out_lon_col: str = "longitude",
+        return_pl_dataframe=False,
+    ) -> pl.DataFrame | pl.LazyFrame:
+        """
+        Convert latitude and longitude columns in a Polars DataFrame or LazyFrame to x,y
+        coordinates in the area's projection.
+        Return a new DataFrame or LazyFrame with added x,y columns.
+        Args:
+            df (pl.DataFrame|pl.LazyFrame): Polars DataFrame or LazyFrame containing lat/lon
+            x_col (str): name of x column in df
+            y_col (str): name of y column in df
+            out_lat_col (str): name of output latitude column to create
+            out_lon_col (str): name of output longitude column to create
+        Returns:
+            pl.DataFrame|pl.LazyFrame: DataFrame or LazyFrame with added x,y
+        """
+        if isinstance(df, pl.DataFrame):
+            df = df.lazy()
+
+        schema = df.collect_schema()
+        schema[out_lat_col], schema[out_lon_col] = pl.Float64, pl.Float64
+
+        def transform_batch(df):
+            x, y = self.xy_to_latlon(df[x_col].to_numpy(), (df[y_col].to_numpy()))
+            df = df.with_columns(
+                [
+                    pl.Series(out_lat_col, x, dtype=pl.Float64),
+                    pl.Series(out_lon_col, y, dtype=pl.Float64),
+                ]
+            )
+            return df
+
+        df = df.map_batches(
+            transform_batch,
+            schema=schema,
+        )
+
+        return df.collect() if isinstance(df, pl.LazyFrame) & return_pl_dataframe else df
+
+    def inside_mask_polars(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        x_col: str = "x",
+        y_col: str = "y",
+        return_pl_dataframe=False,
+    ):
+        """Find indices of x,y coords inside the area's data mask (if there is one).
+        Args:
+            df (pl.DataFrame|pl.LazyFrame): Polars DataFrame or LazyFrame containing x,y data
+            x_col (str): name of x column in df
+            y_col (str): name of y column in df
+            return_pl_dataframe (bool): if True and input is LazyFrame, return a DataFrame
+        Returns:
+            indices_in_maskarea (np.ndarray) : indices inside mask or empty np.ndarray
+            n_inside (int) : number of points inside mask
+        """
+
+        # Check there is a mask specified for the area
+        if self.masktype is None:
+            return df  # No mask to return entire dataframe
+        self.mask = Mask(self.maskname, self.basin_numbers)
+
+        if self.mask.nomask:
+            return df
+
+        df = self.mask.points_inside_polars(
+            df,
+            x_col=x_col,
+            y_col=y_col,
+            basin_numbers=self.basin_numbers,
+            return_pl_dataframe=return_pl_dataframe,
+        )
+
+        return df.collect() if (isinstance(df, pl.LazyFrame) and return_pl_dataframe) else df
+
+    # pylint: disable=R0913, R0917
+    def inside_area_polars(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        lat_col: str = "latitude",
+        lon_col: str = "longitude",
+        return_pl_dataframe=False,
+        return_xy: bool = False,
+    ) -> pl.DataFrame | pl.LazyFrame:
+        """
+        Find if input latitude and longitude locations are inside area's
+        extent and any mask.
+        Return a polars DataFrame or LazyFrame with only rows inside the area.
+        Args:
+            df (pl.DataFrame|pl.LazyFrame): Polars DataFrame or LazyFrame containing lat/lon
+            lat_col (str): name of latitude column in df
+            lon_col (str): name of longitude column in df
+            return_pl_dataframe (bool): if True and input is LazyFrame, return a DataFrame
+            return_xy (bool): if True, add x,y columns to output
+        Returns:
+            pl.DataFrame|pl.LazyFrame: filtered DataFrame or LazyFrame with only rows inside area
+        """
+        if self.specify_by_bounding_lat:
+            df = self.inside_latlon_bounds_polars(
+                df, lat_col=lat_col, lon_col=lon_col, return_pl_dataframe=False
+            )
+            if return_xy:
+                df = self.latlon_to_xy_polars(
+                    df, lat_col=lat_col, lon_col=lon_col, out_x_col="x", out_y_col="y"
+                )
+
+        df = self.latlon_to_xy_polars(
+            df, lat_col=lat_col, lon_col=lon_col, out_x_col="x", out_y_col="y"
+        )
+        df = self.inside_mask_polars(
+            df, x_col="x", y_col="y", return_pl_dataframe=return_pl_dataframe
+        )
+        if not return_xy:
+            df = df.drop(["x", "y"])
+
+        if isinstance(df, pl.LazyFrame) and return_pl_dataframe:
+            df = df.collect()
+
+        return df

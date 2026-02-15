@@ -1,5 +1,6 @@
 """Class for area masking"""
 
+import csv
 import hashlib
 import logging
 from multiprocessing.shared_memory import SharedMemory
@@ -8,11 +9,13 @@ from os.path import isfile
 from typing import Any, Optional
 
 import numpy as np
+import polars as pl
 from netCDF4 import Dataset  # pylint: disable=E0611
 from pyproj import CRS  # CRS definitions
 from pyproj import Transformer  # for transforming between projections
 
 # pylint: disable=R0801
+# pylint: disable=C0302
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +23,7 @@ log = logging.getLogger(__name__)
 mask_list = [
     "ase_xylimits_mask",  # rectangular mask for Amundsen Sea Embayment (ASE)
     "ronne_filchner_xylimits_mask",  # rectangular mask for Ronne Filchner (Antarctica)
-    "greenland_area_xylimits_mask",  # rectangular mask for Greenland
+    "trilinear_singular",  # rectangular mask for Greenland
     "antarctica_bedmachine_v2_grid_mask",  # Antarctic Bedmachine v2 surface type mask
     "greenland_bedmachine_v3_grid_mask",  # Greenland Bedmachine v3 surface type mask
     "antarctica_iceandland_dilated_10km_grid_mask",  # Antarctic ice (grounded+floating) and
@@ -39,12 +42,16 @@ mask_list = [
     # Greenland ice sheet grounded ice mask, from 2km grid, source: Rignot 2016. Can select basins
     "greenland_icesheet_2km_grid_mask_mouginot2019",
     # Greenland ice sheet grounded ice mask, from 2km grid, source: Mouginot 2019. Can select basins
+    "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers",
+    # Greenland ice sheet grounded ice
+    # + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
 ]
 
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
 
 
 class Mask:
@@ -499,6 +506,12 @@ class Mask:
             ]
 
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.shapefile_path = (
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/'
+                "antarctica/rignot_2016_imbie2_ant_grounded_icesheet_basins/data/"
+                "/ANT_Basins_IMBIE2_v1.6.shp"
+            )
+            self.shapefile_column_name = "SUBREGION1"
             self.mask_long_name = "Rignot (2016) 2km grid"
 
         elif mask_name == "greenland_icesheet_2km_grid_mask_rignot2016":
@@ -540,6 +553,11 @@ class Mask:
             self.grid_value_names[56] = "NO"
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
+            self.shapefile_path = (
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "GRE_Basins_IMBIE2_v1.3/shpfiles/GRE_IceSheet_IMBIE2_v1.3.shp"
+            )
+            self.shapefile_column_name = "SUBREGION1"
             self.mask_long_name = "Rignot (2016) 2km grid"
         elif mask_name == "greenland_icesheet_2km_grid_mask_mouginot2019":
             self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
@@ -582,8 +600,64 @@ class Mask:
             self.mask_grid_possible_values = list(range(len(self.grid_value_names)))
 
             self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
+            self.shapefile_path = (
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/"
+                "Greenland_Basins_PS_v1.4.2.shp"
+            )
+            self.shapefile_column_name = "SUBREGION1"
+
             self.mask_long_name = "Mouginot (2019) 2km grid"
 
+        elif mask_name == "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers":
+            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
+
+            if not mask_path:
+                mask_file = (
+                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                    "Mouginot/mouginot_subbasins/"
+                    "mouginot_2019_grn_grounded_icesheet_glacier_basins_2km.nc"
+                )
+            else:
+                mask_file = mask_path
+
+            if not isfile(mask_file):
+                self.log.error("mask file %s does not exist", mask_file)
+                raise FileNotFoundError("mask file does not exist")
+
+            self.num_x = 1000
+            self.num_y = 1550
+            self.minxm = -1000000  # meters
+            self.minym = -3500000  # meters
+            self.binsize = 2000  # meters
+            self.dtype = np.uint8
+            self.bad_mask_value = 0  # value in unknown grid cells in mask
+
+            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
+            # Load glacier names from CSV
+            glacier_csv = (
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/mouginot_subbasins/glacier_names.csv"
+            )
+            # Mask values are 1-260, CSV has 260 rows. Prepend entry for mask value 0.
+            glacier_names = ["Unclassified"]
+            with open(glacier_csv, mode="r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    glacier_names.append(row["NAME"])
+
+            self.grid_value_names = glacier_names
+
+            self.mask_grid_possible_values = list(range(len(self.grid_value_names)))
+            self.shapefile_path = (
+                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
+                "Mouginot/mouginot_subbasins/"
+                "Greenland_Basins_PS_v1.4.2.shp"
+            )
+            self.shapefile_column_name = "NAME"
+
+            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
+            self.mask_long_name = "Mouginot (2019) 2km glacier grid"
         else:
             raise ValueError(f"mask name: {mask_name} not supported")
 
@@ -774,6 +848,7 @@ class Mask:
         if self.mask_type == "grid":
             for i in range(x.size):
                 # calculate equivalent (ii,jj) in mask array
+
                 ii = int(np.around((x[i] - self.minxm) / self.binsize))
                 jj = int(np.around((y[i] - self.minym) / self.binsize))
 
@@ -895,3 +970,86 @@ class Mask:
                 raise IOError(
                     f'Shared memory for {self.mask_name} could not be closed {exc}"'
                 ) from exc
+
+    ######################################################
+    # Function to Mask to a polars LazyFrame or DataFrame #
+    ######################################################
+    # pylint: disable=R0917
+    def points_inside_polars(
+        self,
+        df: pl.LazyFrame | pl.DataFrame,
+        x_col: str = "x",
+        y_col: str = "y",
+        basin_numbers: Optional[list[int]] = None,
+        return_pl_dataframe=False,
+    ) -> pl.LazyFrame | pl.DataFrame:
+        """Given a list of lat,lon or x,y points, find the points that are inside the current mask
+        Args:
+            df (pl.LazyFrame|pl.DataFrame): polars LazyFrame or DataFrame with x,y columns
+            x_col (str): name of column in df containing x values
+            y_col (str): name of column in column in df containing y values
+            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
+            return_pl_dataframe (bool, optional): return a polars DataFrame instead of LazyFrame
+                                                  Defaults to False.
+        Returns:
+            pl.LazyFrame|pl.DataFrame: polars LazyFrame or DataFrame with only points inside mask
+        """
+        # Ensure LazyFrame
+        if isinstance(df, pl.DataFrame):
+            df = df.lazy()
+
+        # Basin numbers assignment
+        if basin_numbers and not isinstance(basin_numbers, (list, np.ndarray)):
+            basin_numbers = [basin_numbers]
+        if self.basin_numbers and not basin_numbers:
+            basin_numbers = self.basin_numbers
+
+        # Filter by mask type
+        if self.mask_type == "xylimits":
+            df = df.filter(
+                (pl.col(x_col) >= self.xlimits[0])
+                & (pl.col(x_col) <= self.xlimits[1])
+                & (pl.col(y_col) >= self.ylimits[0])
+                & (pl.col(y_col) <= self.ylimits[1])
+            )
+        elif self.mask_type == "grid":
+            df = df.with_columns(
+                [
+                    ((pl.col(x_col) - self.minxm) / self.binsize)
+                    .round()
+                    .cast(pl.Int64)
+                    .alias("ii"),
+                    ((pl.col(y_col) - self.minym) / self.binsize)
+                    .round()
+                    .cast(pl.Int64)
+                    .alias("jj"),
+                ]
+            )
+            df = (
+                df.with_columns(
+                    [
+                        (
+                            (pl.col("ii") >= 0)
+                            & (pl.col("ii") < self.num_x)
+                            & (pl.col("jj") >= 0)
+                            & (pl.col("jj") < self.num_y)
+                        ).alias("in_bounds")
+                    ]
+                )
+                .filter(pl.col("in_bounds"))
+                .drop("in_bounds")
+            )
+            jj = df.select("jj").collect().to_numpy().flatten()
+            ii = df.select("ii").collect().to_numpy().flatten()
+
+            # Get mask values from grid
+            mask_values = self.mask_grid[jj, ii]
+            df = df.with_columns([pl.Series("mask_value", mask_values)])
+
+            if self.basin_numbers:
+                df = df.filter(pl.col("mask_value").is_in(self.basin_numbers))
+            else:
+                df = df.filter(pl.col("mask_value") > 0)
+            df = df.drop(["ii", "jj", "mask_value"])
+
+        return df.collect() if return_pl_dataframe else df

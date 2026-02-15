@@ -5,7 +5,7 @@ Module for irregular data gridding functions optimised for typical satellite dat
 
 Author: Alan Muir (CPOM/UCL)
 Date: 2019
-Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author 
+Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of author
 
 """
 
