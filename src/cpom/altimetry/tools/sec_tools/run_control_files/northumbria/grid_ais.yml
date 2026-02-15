@@ -54,7 +54,7 @@ cs2:
   base_folder: "ais_cs2"
 
   # Path to grid metadata
-  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_cs2/gridded_altimetry/metadata.json"
+  #grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_cs2/gridded_altimetry/metadata.json"
 
   # --------------------#
   # Algorithm Overrides #
@@ -77,8 +77,8 @@ s3a:
   # Data will be written to {base_out}/{base_folder}/
   base_folder: "ais_s3a"
 
-  # Path to grid metadata
-  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
+  # Path to grid metadata, don't uncomment!
+  # grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
 
   # --------------------#
   # Algorithm Overrides #
@@ -100,9 +100,6 @@ s3b:
 
   # Data will be written to {base_out}/{base_folder}/
   base_folder: "ais_s3a"
-
-  # Path to grid metadata
-  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
 
   # --------------------#
   # Algorithm Overrides #
