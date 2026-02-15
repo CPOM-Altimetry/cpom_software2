@@ -315,7 +315,8 @@ class DatasetHelper(DatasetConfig):
             if self.latitude_param is not None and nc is not None:
                 assert self.latitude_nadir_param is not None
                 latitude = self.get_variable(
-                    nc, self.latitude_nadir_param
+                    nc,
+                    self.latitude_nadir_param,
                 )  # type: ignore[assignment]
             else:
                 raise ValueError("No latitude data provided or available.")
@@ -398,6 +399,7 @@ class DatasetHelper(DatasetConfig):
                         return np.array([])  # Variable not found
                 return var[:]
             except KeyError:
+                print("Variable not found in NetCDF: ", path)
                 return np.array([])  # Variable not found
 
         if self.beams:
