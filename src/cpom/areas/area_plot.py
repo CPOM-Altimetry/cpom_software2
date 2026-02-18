@@ -161,6 +161,8 @@ class Polarplot:
         avif_settings: tuple[int, int] = (60, 4),
         webp_settings: tuple[int, int] = (80, 6),
         use_cmap_in_hist: bool = True,
+        figure_width: int = 0,
+        figure_height: int = 0,
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -238,6 +240,9 @@ class Polarplot:
         - `use_cmap_in_hist` (bool, default: True) : if True colour first
            histogram using plots cmap, otherwise just plot in single dark colour
 
+        - `figure_width` (int, optional, default: 10) : width of the figure in inches
+        - `figure_height` (int, optional, default: 10) : height of the figure in inches
+
         ### Raises
 
         - `ValueError`:
@@ -248,11 +253,25 @@ class Polarplot:
         # Default plot configuration
         # -----------------------------------------------------------------------------------------
 
+        # set default figure dimensions depending upon the map_only setting
+        # and if the figure width and height have been set in the function args
+        if map_only and figure_width == 0:
+            figure_width = 12
+
+        if map_only and figure_height == 0:
+            figure_height = 12
+
+        if not map_only and figure_width == 0:
+            figure_width = 12
+
+        if not map_only and figure_height == 0:
+            figure_height = 10
+
         # Default plot parameters. If these are set to None, then the equivalent settings
         # in self.thisarea are used instead if set
         plot_params = {
-            "fig_width": 12,
-            "fig_height": 10,
+            "fig_width": figure_width,
+            "fig_height": figure_height,
             "draw_axis_frame": False,  # (bool|None)
             #  alpha value transparency (alpha value) of background. Float between 0 and
             #   1, or list of floats for multiple backgrounds.
