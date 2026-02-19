@@ -513,7 +513,7 @@ class Polarplot:
             log.info("Loading %d data sets", num_data_sets)
 
             for ds_num, data_set in enumerate(data_sets):
-                print(f"loading data set {ds_num}: {data_set.get('name','unnamed')}")
+                print(f"loading data set {ds_num}: {data_set.get('name', 'unnamed')}")
 
                 is_flag_data = len(data_set.get("flag_values", [])) > 0
 
@@ -901,10 +901,9 @@ class Polarplot:
                 plot_filename = f"{output_dir}/param_{_ds_name_0}_{self.area}.png"
             else:
                 raise ValueError("Neither outputdir or output_file provided")
-            print("Saving plot", plot_filename, image_format)
             if f"{image_format}" not in plot_filename[-6:]:
                 plot_filename += f".{image_format}"
-            print("Saving plot to %s at %d dpi", plot_filename, dpi)
+            print(f"Saving plot to {plot_filename} at {dpi} dpi")
             if image_format == "avif":
                 # Save to an in-memory PNG
                 buf = io.BytesIO()
@@ -1371,7 +1370,6 @@ class Polarplot:
 
         print(f"self.thisarea.masktype {self.thisarea.masktype} ")
         if self.thisarea.masktype in ("polygon", "xylimits"):
-
             self.draw_area_polygon_mask(
                 ax_minimap,
                 override_mask_display=True,
@@ -2179,8 +2177,8 @@ class Polarplot:
 
         print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
         xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
-        print(f"{xc - self.thisarea.width_km*1000/2 ,xc+ self.thisarea.width_km*1000/2}")
-        print(f"{yc - self.thisarea.height_km*1000/2 ,yc+ self.thisarea.height_km*1000/2}")
+        print(f"{xc - self.thisarea.width_km * 1000 / 2, xc + self.thisarea.width_km * 1000 / 2}")
+        print(f"{yc - self.thisarea.height_km * 1000 / 2, yc + self.thisarea.height_km * 1000 / 2}")
 
         polygon_color = "red"
         if override_mask_color:
