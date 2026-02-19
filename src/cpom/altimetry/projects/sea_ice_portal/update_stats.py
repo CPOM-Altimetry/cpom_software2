@@ -11,6 +11,7 @@ Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of
 """
 
 import logging
+import os
 import sys
 
 log = logging.getLogger(__name__)
@@ -20,7 +21,11 @@ def update_availability_database(sidata_dir, mission, area, year, month, count):
     """
     save database as <sidata_dir>/mission/availability.csv
     """
-    filename = f"{sidata_dir}/{mission}/{area}/availability.csv"
+    this_dir = f"{sidata_dir}/{mission}/{area}"
+    if not os.path.exists(this_dir):
+        print(f"Creating directory: {this_dir}")
+        os.makedirs(this_dir)
+    filename = f"{this_dir}/availability.csv"
 
     year_list = [[0 for m in range(1, 13)] for i in range(1990, 2030)]
 
@@ -43,7 +48,7 @@ def update_availability_database(sidata_dir, mission, area, year, month, count):
 
     # Add new entry to year_list
 
-    year_list[year - 1990][month - 1] = count
+    year_list[int(year) - 1990][int(month) - 1] = int(count)
 
     # Write year list
     with open(filename, "w", encoding="utf-8") as file:

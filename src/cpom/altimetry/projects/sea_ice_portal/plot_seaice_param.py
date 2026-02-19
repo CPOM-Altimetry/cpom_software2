@@ -144,32 +144,42 @@ if args.south:
 # -------------------------------------------------------------------------------------
 
 
+# if hemisphere == "south":
+#     area_plot_list = [
+#         "antarctica_ocean_seaiceportal",
+#         "antarctic_ocean_sector_ross",
+#         "antarctic_ocean_sector_pacific",
+#         "antarctic_ocean_sector_indian",
+#         "antarctic_ocean_sector_east_weddell",
+#         "antarctic_ocean_sector_west_weddell",
+#         "antarctic_ocean_sector_coastal_amundsen_bellingshausen",
+#         "antarctic_ocean_sector_amundsen_bellingshausen",
+#     ]
+#     area_output_list = ["anto", "anto1", "anto2", "anto3", "anto4", "anto5", "anto6", "anto7"]
+#     archive_area = "anto"
+# else:
+#     area_plot_list = ["arctic0_seaiceportal"]
+#     area_output_list = ["arco"]
+#     archive_area = "arco"
+
+#     # append basins 1..17 to area_plot_list
+#     for i in range(1, 18):
+#         area_plot_list.append(f"arctic_basin{i}")
+#         area_output_list.append(f"arco{i}")
+
+# if args.area:
+#     area_plot_list = [args.area[0]]
+#     area_output_list = [args.area[1]]
+
 if hemisphere == "south":
-    area_plot_list = [
-        "antarctica_ocean_seaiceportal",
-        "antarctic_ocean_sector_ross",
-        "antarctic_ocean_sector_pacific",
-        "antarctic_ocean_sector_indian",
-        "antarctic_ocean_sector_east_weddell",
-        "antarctic_ocean_sector_west_weddell",
-        "antarctic_ocean_sector_coastal_amundsen_bellingshausen",
-        "antarctic_ocean_sector_amundsen_bellingshausen",
-    ]
-    area_output_list = ["anto", "anto1", "anto2", "anto3", "anto4", "anto5", "anto6", "anto7"]
     archive_area = "anto"
+    area_plot_list = ["antarctica_ocean_seaiceportal"]
+    area_output_list = ["anto"]
 else:
+    archive_area = "arco"
     area_plot_list = ["arctic0_seaiceportal"]
     area_output_list = ["arco"]
-    archive_area = "arco"
 
-    # append basins 1..17 to area_plot_list
-    for i in range(1, 18):
-        area_plot_list.append(f"arctic_basin{i}")
-        area_output_list.append(f"arco{i}")
-
-if args.area:
-    area_plot_list = [args.area[0]]
-    area_output_list = [args.area[1]]
 
 # -------------------------------------------------------------------------------------
 # Logo
@@ -478,7 +488,7 @@ if args.year and not args.season:
 
                 # Create output directories
                 #  <outdir>/<mission>/<arco,anto>/<YYYY>
-                outdir = f"{args.outdir}/{mission}/{archive_area}/{args.year}"
+                outdir = f"{args.outdir}/{mission}/ntc/{archive_area}/{args.year}"
 
                 if not os.path.exists(outdir):
                     try:
@@ -510,7 +520,8 @@ if args.year and not args.season:
                         dataset,
                         output_dir=outdir,
                         output_file=(
-                            f"{mission}_{area}_{args.year}" f"{month:02d}_{si_param.param.lower()}"
+                            f"{mission}_{archive_area}_{args.year}"
+                            f"{month:02d}_{si_param.param.lower()}"
                         ),
                         annotation_list=annotation_list,
                         use_default_annotation=False,
@@ -707,7 +718,7 @@ if args.nrt:
 
             # Create output directories
             #  <outdir>/<mission>/<arco,anto>/nrt
-            outdir = f"{args.outdir}/{mission}/{area_output_list[i]}/nrt"
+            outdir = f"{args.outdir}/{mission}/nrt/{area_output_list[i]}"
 
             if not os.path.exists(outdir):
                 try:
@@ -736,7 +747,8 @@ if args.nrt:
                 dataset,
                 output_dir=outdir,
                 output_file=(
-                    f"{mission}_{area_output_list[i]}_" f"{period}days_{si_param.param.lower()}"
+                    f"{mission}_{area_output_list[i]}_"
+                    f"{int(period)}days_{si_param.param.lower()}"
                 ),
                 annotation_list=annotation_list,
                 use_default_annotation=False,
