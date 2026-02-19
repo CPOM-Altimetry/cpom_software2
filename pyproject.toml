@@ -30,6 +30,7 @@ h5py = "^3.11.0"
 astropy = "^7.0.0"
 pyvista = "^0.46.3"
 pillow-avif-plugin = "^1.5.2"
+cmocean = "^4.0.3"
 
 
 
