@@ -46,9 +46,11 @@ from os.path import exists
 import matplotlib.pyplot as plt
 import pandas as pd
 from cmocean import cm  # pylint: disable=unused-import, no-member # noqa
-from si_params import SIParams, all_si_params
-from update_stats import update_availability_database
 
+from cpom.altimetry.projects.sea_ice_portal.si_params import SIParams, all_si_params
+from cpom.altimetry.projects.sea_ice_portal.update_stats import (
+    update_availability_database,
+)
 from cpom.areas.area_plot import (  # cryosphere map plotting functions
     Annotation,
     Polarplot,
