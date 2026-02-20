@@ -46,7 +46,6 @@ import os
 import sys
 from os.path import exists
 
-import matplotlib.pyplot as plt
 import pandas as pd
 from cmocean import cm  # pylint: disable=unused-import, no-member # noqa
 
@@ -191,16 +190,16 @@ def main():
     # -------------------------------------------------------------------------------------
 
     # Get the CPOM Logo and set position as top left corner
-    logo_image = plt.imread("images/cpom_mini.png")
+    # logo_image = plt.imread("images/cpom_mini.png")
 
-    logo_width = 0.09  # in axis coordinates
-    logo_height = 0.09
-    logo_position = (
-        0.02,
-        1 - logo_height - 0.02,
-        logo_width,
-        logo_height,
-    )  # [left, bottom, width, height]
+    # logo_width = 0.09  # in axis coordinates
+    # logo_height = 0.09
+    # logo_position = (
+    #     0.02,
+    #     1 - logo_height - 0.02,
+    #     logo_width,
+    #     logo_height,
+    # )  # [left, bottom, width, height]
 
     common_annotations = []
     common_annotations.append(
@@ -216,7 +215,7 @@ def main():
     common_annotations.append(
         Annotation(
             0.37,
-            0.22,
+            0.212,
             "68°N",
             fontsize=9,
             fontweight="normal",
@@ -227,17 +226,12 @@ def main():
     common_annotations.append(
         Annotation(
             0.354,
-            0.122,
+            0.115,
             "60°N",
             fontsize=9,
             fontweight="normal",
             color="#626262",
         )
-    )
-
-    # parameter string:
-    common_annotations.append(
-        Annotation(0.21, 0.955, "Parameter:", fontsize=10, fontweight="normal", color="grey")
     )
 
     # -------------------------------------------------------------------------------------
@@ -287,7 +281,7 @@ def main():
                 f"{archive_area}/archive/{args.year}{month:02d}.thk"
             )
             if not exists(along_track_thickness_file):
-                print(f"{along_track_thickness_file} does not exist")
+                print(f"Along-track file{along_track_thickness_file} does not exist")
                 continue
 
             count = 0
@@ -321,13 +315,22 @@ def main():
                         f"{archive_area}/archive/{args.year}{month:02d}.map"
                     )
 
-                print("Reading gridded map file: ", map_file)
+                print(f"Reading gridded map file for {param}: {map_file}")
 
                 if not exists(map_file):
+                    print(f"Reading gridded map file: {map_file}")
                     print(f"{map_file} does not exist")
                     continue
 
-                pd_data = pd.read_csv(map_file, sep=r"\s+")
+                try:
+                    pd_data = pd.read_csv(map_file, sep=r"\s+")
+                except FileNotFoundError:
+                    print(f"Map file not found: {map_file}")
+                    continue
+                except pd.errors.EmptyDataError:
+                    print(f"Map file is empty: {map_file}")
+                    continue
+
                 pd_data.columns = ["lat", "lon", "thickness", "stdev", "numvals", "dist"]
 
                 lats = pd_data["lat"]
@@ -361,7 +364,7 @@ def main():
                         )
 
                     if not exists(alongtrack_file):
-                        sys.exit(f"{alongtrack_file} does not exist")
+                        sys.exit(f"Along-track file {alongtrack_file} does not exist")
 
                     print("Reading along track file: ", alongtrack_file)
 
@@ -410,6 +413,17 @@ def main():
                     # -------------------------------------------------------------------------------
                     annotation_list = []  # an empty annotation list
 
+                    annotation_list.append(
+                        Annotation(
+                            0.027,
+                            0.965,
+                            "Parameter:",
+                            fontsize=10,
+                            fontweight="normal",
+                            color="grey",
+                        )
+                    )
+
                     # ------------------------------------------------------------------
                     # param_longname:  rounded blue box to right of logo
 
@@ -426,8 +440,8 @@ def main():
                         thisfontsize = 15
                     annotation_list.append(
                         Annotation(
-                            0.24,
-                            0.92,
+                            0.03,
+                            0.925,
                             si_param.long_name,
                             bbox=props,
                             fontsize=thisfontsize,
@@ -438,12 +452,12 @@ def main():
                     # processor string:
                     annotation_list.append(
                         Annotation(
-                            0.02,
-                            0.878,
-                            "Sea Ice Processor",
-                            fontsize=9,
+                            0.83,
+                            0.01,
+                            "processed by CPOM, U.K.",
+                            fontsize=10,
                             fontweight="normal",
-                            color="#000049",
+                            color="#000000",
                         )
                     )
 
@@ -486,18 +500,6 @@ def main():
                         )
                     )
 
-                    # Latitude annotation
-                    annotation_list.append(
-                        Annotation(
-                            0.024,
-                            0.874,
-                            "70°N",
-                            fontsize=8,
-                            fontweight="normal",
-                            color="#000049",
-                        )
-                    )
-
                     annotation_list.extend(common_annotations)
 
                     # Create output directories
@@ -534,12 +536,12 @@ def main():
                             output_dir=outdir,
                             output_file=(
                                 f"{mission}_{archive_area}_{args.year}"
-                                f"{month:02d}_{si_param.param.lower()}"
+                                f"{month:02d}_{si_param.param.lower()}_alongtrack"
                             ),
                             annotation_list=annotation_list,
                             use_default_annotation=False,
-                            logo_image=logo_image,
-                            logo_position=logo_position,
+                            # logo_image=logo_image,
+                            # logo_position=logo_position,
                             figure_height=12,
                             figure_width=12,
                             image_format="webp",
@@ -573,12 +575,12 @@ def main():
                         output_dir=outdir,
                         output_file=(
                             f"{mission}_{area_output_list[i]}_{args.year}{month:02d}"
-                            f"_{si_param.param.lower()}"
+                            f"_{si_param.param.lower()}_grid"
                         ),
                         annotation_list=annotation_list,
                         use_default_annotation=False,
-                        logo_image=logo_image,
-                        logo_position=logo_position,
+                        # logo_image=logo_image,
+                        # logo_position=logo_position,
                         figure_height=12,
                         figure_width=12,
                         image_format="webp",
@@ -645,15 +647,21 @@ def main():
                 # -------------------------------------------------------------------------------------
                 annotation_list = []  # an empty annotation list
 
+                annotation_list.append(
+                    Annotation(
+                        0.21, 0.96, "Parameter:", fontsize=10, fontweight="normal", color="grey"
+                    )
+                )
+
                 props = {
                     "boxstyle": "round",
                     "facecolor": "aliceblue",
                     "alpha": 1.0,
                     "edgecolor": "lightgrey",
                 }
-                thisfontsize = 20
+                thisfontsize = 22
                 if len(si_param.long_name) > 25:
-                    thisfontsize = 15
+                    thisfontsize = 16
                 annotation_list.append(
                     Annotation(
                         0.21,
@@ -678,27 +686,27 @@ def main():
 
                 # Latency:
                 annotation_list.append(
-                    Annotation(0.02, 0.81, f"{latency}", fontsize=10, fontweight="normal")
+                    Annotation(0.02, 0.9, f"CPOM {latency}", fontsize=10, fontweight="normal")
                 )
                 # Latency:
                 annotation_list.append(
-                    Annotation(0.02, 0.79, "Sea Ice Processor", fontsize=10, fontweight="normal")
+                    Annotation(0.02, 0.88, "Sea Ice Processor", fontsize=10, fontweight="normal")
                 )
 
                 # Period:
                 annotation_list.append(
-                    Annotation(0.685, 0.89, "Latest:", fontsize=14, fontweight="normal")
+                    Annotation(0.685, 0.91, "Latest:", fontsize=14, fontweight="normal")
                 )
                 # Period:
                 annotation_list.append(
-                    Annotation(0.75, 0.89, f"{int(period)} days", fontsize=24, fontweight="bold")
+                    Annotation(0.75, 0.91, f"{int(period)} days", fontsize=24, fontweight="bold")
                 )
 
                 # Period:
                 annotation_list.append(
                     Annotation(
                         0.03,
-                        0.85,
+                        0.94,
                         "NRT",
                         fontsize=24,
                         fontweight="normal",
@@ -712,11 +720,22 @@ def main():
                     )
                 )
 
+                # Latency:
+                annotation_list.append(
+                    Annotation(
+                        0.685,
+                        0.87,
+                        f"Latency: {latency}",
+                        fontsize=14,
+                        fontweight="normal",
+                    )
+                )
+
                 # Start Date:
                 annotation_list.append(
                     Annotation(
                         0.685,
-                        0.84,
+                        0.835,
                         f"Start: {start_day}-{start_month}-{start_year}",
                         fontsize=14,
                         fontweight="normal",
@@ -727,7 +746,7 @@ def main():
                 annotation_list.append(
                     Annotation(
                         0.685,
-                        0.81,
+                        0.805,
                         f"End:  {end_day}-{end_month}-{end_year}",
                         fontsize=14,
                         fontweight="normal",
@@ -772,8 +791,8 @@ def main():
                     ),
                     annotation_list=annotation_list,
                     use_default_annotation=False,
-                    logo_image=logo_image,
-                    logo_position=logo_position,
+                    # logo_image=logo_image,
+                    # logo_position=logo_position,
                     figure_height=12,
                     figure_width=12,
                     image_format="webp",
@@ -837,7 +856,7 @@ def main():
                 annotation_list.append(
                     Annotation(
                         0.21,
-                        0.92,
+                        0.925,
                         si_param.long_name,
                         bbox=props,
                         fontsize=thisfontsize,
@@ -929,8 +948,8 @@ def main():
                     output_file=f"{mission}_{area}_{season.lower()}_{si_param.param.lower()}",
                     annotation_list=annotation_list,
                     use_default_annotation=False,
-                    logo_image=logo_image,
-                    logo_position=logo_position,
+                    # logo_image=logo_image,
+                    # logo_position=logo_position,
                     figure_height=12,
                     figure_width=12,
                     image_format="webp",

@@ -12,7 +12,7 @@ area_definition = {
     #   --------
     "round": True,  # False=rectangular, True = round map area
     "specify_by_bounding_lat": True,  # for round hemisphere views
-    "bounding_lat": 59.2,  # limiting latitude for round areas or None
+    "bounding_lat": 60.4,  # limiting latitude for round areas or None
     #   --------
     "specify_by_centre": False,  # specify plot area by centre lat/lon, width, height (km)
     "centre_lon": -45.0,  # degrees E
@@ -167,7 +167,7 @@ area_definition = {
     "draw_gridlabels": True,  # whether to draw the grid labels
     "inner_gridlabel_color": "white",  # color of grid labels
     "inner_gridlabel_size": 8,  # size of grid labels
-    "latitude_of_radial_labels": 57.5,  # latitude for radial grid line labels for circular plots
+    "latitude_of_radial_labels": 58.5,  # latitude for radial grid line labels for circular plots
     "labels_at_top": False,  # allow lat or lon labels at top of plot
     "labels_at_bottom": False,  # allow lat or lon labels at bottom of plot
     "labels_at_left": False,  # allow lat or lon labels at left of plot
