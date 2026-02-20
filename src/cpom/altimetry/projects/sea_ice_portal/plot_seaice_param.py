@@ -61,7 +61,8 @@ from cpom.areas.areas import Area  # cryosphere area definitions
 
 # pylint: disable=invalid-name
 
-PLOT_SCALE_FACTOR = 0.02
+PLOT_SCALE_FACTOR = 0.02  # was 0.02
+DPI = 85
 
 # ----------------------------------------------------------------------------------------------
 #  Command line option processing
@@ -109,6 +110,14 @@ def main():
     )
     parser.add_argument("--outdir", "-o", help="Output base directory for plots")
 
+    parser.add_argument(
+        "--latest",
+        "-la",
+        help="[optional] process latest 2 months of data (only for monthly processing)",
+        action="store_const",
+        const=1,
+    )
+
     # read arguments from the command line
     args = parser.parse_args()
 
@@ -138,8 +147,8 @@ def main():
             sys.exit("--season must also include --year")
 
     if not args.nrt:
-        if not (args.year or args.season):
-            sys.exit("Must include either --nrt, --year or --season")
+        if not (args.year or args.season or args.latest):
+            sys.exit("Must include either --nrt, --year, or --latest")
 
     hemisphere = "north"
     if args.south:
@@ -242,7 +251,7 @@ def main():
     #   also create an availability database of measurements per month
     # -------------------------------------------------------------------------------------
 
-    if args.year and not args.season:
+    if (args.year and not args.season) or args.latest:
         # --------------------------------------------------------------------------------------------
         #  Process Months
         # ==============================
@@ -266,6 +275,22 @@ def main():
         # <outdir>/<mission>/<arco,anto>/<YYYY>/<mission>_<YYYYMM>_<parameter>.<imagewidth>.png
         #
         # --------------------------------------------------------------------------------------------
+
+        if args.latest:
+            # get current month and year
+            from datetime import datetime
+
+            now = datetime.now()
+            current_year = now.year
+            current_month = now.month
+
+            # set year to current year and month to current month - 2 (or 12 if current month is January)
+            args.year = current_year
+            if current_month <= 2:
+                args.month = 11
+                args.year -= 1
+            else:
+                args.month = current_month - 2
 
         for month in range(1, 13):
             if args.month:
@@ -545,6 +570,7 @@ def main():
                             figure_height=12,
                             figure_width=12,
                             image_format="webp",
+                            dpi=DPI,
                         )
 
                     annotation_list.append(
@@ -584,6 +610,7 @@ def main():
                         figure_height=12,
                         figure_width=12,
                         image_format="webp",
+                        dpi=DPI,
                     )
 
     if args.nrt:
@@ -796,6 +823,7 @@ def main():
                     figure_height=12,
                     figure_width=12,
                     image_format="webp",
+                    dpi=DPI,
                 )
 
     if args.season:
@@ -953,6 +981,7 @@ def main():
                     figure_height=12,
                     figure_width=12,
                     image_format="webp",
+                    dpi=DPI,
                 )
 
 
