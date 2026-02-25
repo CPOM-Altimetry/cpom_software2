@@ -118,8 +118,19 @@ def main():
         const=1,
     )
 
+    parser.add_argument(
+        "--no_thickness",
+        "-nt",
+        help="[optional] do not process thickness (only for monthly processing)",
+        action="store_const",
+        const=1,
+    )
+
     # read arguments from the command line
     args = parser.parse_args()
+
+    if args.latest and (args.year or args.month):
+        sys.exit("Error: cannot use --latest with --year or --month")
 
     if not args.outdir:
         sys.exit("--outdir missing")
@@ -210,8 +221,41 @@ def main():
     #     logo_height,
     # )  # [left, bottom, width, height]
 
-    common_annotations = []
-    common_annotations.append(
+    common_anto_annotations = []
+
+    common_anto_annotations.append(
+        Annotation(
+            0.41,
+            0.41,
+            "80°S",
+            fontsize=9,
+            fontweight="normal",
+            color="#626262",
+        )
+    )
+    common_anto_annotations.append(
+        Annotation(
+            0.388,
+            0.295,
+            "70°S",
+            fontsize=9,
+            fontweight="normal",
+            color="#626262",
+        )
+    )
+    common_anto_annotations.append(
+        Annotation(
+            0.37,
+            0.195,
+            "60°S",
+            fontsize=9,
+            fontweight="normal",
+            color="#626262",
+        )
+    )
+
+    common_arco_annotations = []
+    common_arco_annotations.append(
         Annotation(
             0.388,
             0.310,
@@ -221,7 +265,7 @@ def main():
             color="#626262",
         )
     )
-    common_annotations.append(
+    common_arco_annotations.append(
         Annotation(
             0.37,
             0.212,
@@ -232,7 +276,7 @@ def main():
         )
     )
 
-    common_annotations.append(
+    common_arco_annotations.append(
         Annotation(
             0.354,
             0.115,
@@ -276,6 +320,7 @@ def main():
         #
         # --------------------------------------------------------------------------------------------
 
+        # Select month and year from current data (-2 months) if args.latest is set
         if args.latest:
             # get current month and year
             from datetime import datetime
@@ -292,6 +337,7 @@ def main():
             else:
                 args.month = current_month - 2
 
+        # Loop through months
         for month in range(1, 13):
             if args.month:
                 if month != int(args.month):
@@ -299,21 +345,49 @@ def main():
 
             latency = "Final, Precise Orbit"
 
-            # Find number of along track thickness measurements for this month
+            # Find number of measurements to store in the database
+            # This is done by counting the number of lines in the along track thickness file
+            # or the number of lines in the gridded map file if there is no along track thickness file
+            count = 0
 
+            # Firstly try and find the number of along-track thickness measurements
             along_track_thickness_file = (
                 f"/cpnet/altimetry/seaice/{mission.upper()}/"
                 f"{archive_area}/archive/{args.year}{month:02d}.thk"
             )
-            if not exists(along_track_thickness_file):
-                print(f"Along-track file{along_track_thickness_file} does not exist")
-                continue
 
-            count = 0
-            with open(along_track_thickness_file, "r", encoding="utf-8") as fp:
-                for count, line in enumerate(fp):
-                    pass
-            print("Total Lines", count + 1)
+            gridded_thickness_file = (
+                f"/cpnet/altimetry/seaice/{mission.upper()}/"
+                f"{archive_area}/archive/{args.year}{month:02d}.map"
+            )
+
+            gridded_freeboard_file = (
+                f"/cpnet/altimetry/seaice/{mission.upper()}/"
+                f"{archive_area}/archive/{args.year}{month:02d}.map"
+            )
+
+            if exists(along_track_thickness_file):
+                count = 0
+                with open(along_track_thickness_file, "r", encoding="utf-8") as fp:
+                    for count, line in enumerate(fp):
+                        pass
+                print("Total Lines", count + 1)
+
+            elif exists(gridded_thickness_file):
+                count = 0
+                with open(gridded_thickness_file, "r", encoding="utf-8") as fp:
+                    for count, line in enumerate(fp):
+                        pass
+                print("Total Lines", count + 1)
+
+            elif exists(gridded_freeboard_file):
+                count = 0
+                with open(gridded_freeboard_file, "r", encoding="utf-8") as fp:
+                    for count, line in enumerate(fp):
+                        pass
+                print("Total Lines", count + 1)
+            else:
+                print("No data found for this month")
 
             update_availability_database(
                 args.outdir, mission, archive_area, args.year, month, count + 1
@@ -389,7 +463,8 @@ def main():
                         )
 
                     if not exists(alongtrack_file):
-                        sys.exit(f"Along-track file {alongtrack_file} does not exist")
+                        print(f"Along-track file {alongtrack_file} does not exist")
+                        continue
 
                     print("Reading along track file: ", alongtrack_file)
 
@@ -487,15 +562,27 @@ def main():
                     )
 
                     # Area
-                    annotation_list.append(
-                        Annotation(
-                            0.40 - 0.005 * (len(thisarea.long_name) - 6),
-                            0.87,
-                            f"{thisarea.long_name}",
-                            fontsize=15,
-                            fontweight="normal",
+                    if archive_area == "anto":
+                        annotation_list.append(
+                            Annotation(
+                                0.40 - 0.005 * (len(thisarea.long_name) - 6),
+                                0.90,
+                                f"{thisarea.long_name}",
+                                fontsize=15,
+                                fontweight="normal",
+                            )
                         )
-                    )
+
+                    else:
+                        annotation_list.append(
+                            Annotation(
+                                0.40 - 0.005 * (len(thisarea.long_name) - 6),
+                                0.87,
+                                f"{thisarea.long_name}",
+                                fontsize=15,
+                                fontweight="normal",
+                            )
+                        )
 
                     # Mission:
                     annotation_list.append(
@@ -525,7 +612,10 @@ def main():
                         )
                     )
 
-                    annotation_list.extend(common_annotations)
+                    if archive_area == "arco":
+                        annotation_list.extend(common_arco_annotations)
+                    elif archive_area == "anto":
+                        annotation_list.extend(common_anto_annotations)
 
                     # Create output directories
                     #  <outdir>/<mission>/<arco,anto>/<YYYY>
@@ -579,7 +669,10 @@ def main():
                         )
                     )
 
-                    annotation_list.extend(common_annotations)
+                    if archive_area == "arco":
+                        annotation_list.extend(common_arco_annotations)
+                    elif archive_area == "anto":
+                        annotation_list.extend(common_anto_annotations)
 
                     dataset = {
                         "lats": lats,
@@ -780,7 +873,10 @@ def main():
                     )
                 )
 
-                annotation_list.extend(common_annotations)
+                if archive_area == "arco":
+                    annotation_list.extend(common_arco_annotations)
+                elif archive_area == "anto":
+                    annotation_list.extend(common_anto_annotations)
 
                 # Create output directories
                 #  <outdir>/<mission>/<arco,anto>/nrt
@@ -941,7 +1037,10 @@ def main():
                     Annotation(0.685, 0.76, f"{year}", fontsize=30, fontweight="bold")
                 )
 
-                annotation_list.extend(common_annotations)
+                if archive_area == "arco":
+                    annotation_list.extend(common_arco_annotations)
+                elif archive_area == "anto":
+                    annotation_list.extend(common_anto_annotations)
 
                 # Create output directories
                 #  <outdir>/<mission>/<arco,anto>/<YYYY>

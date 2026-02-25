@@ -13,21 +13,36 @@ Copyright: UCL/MSSL/CPOM. Not to be used outside CPOM/MSSL without permission of
 import logging
 import os
 import sys
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
 
 def update_availability_database(sidata_dir, mission, area, year, month, count):
     """
-    save database as <sidata_dir>/mission/availability.csv
+    save database as <sidata_dir>/mission/ntc/area/availability.csv
     """
-    this_dir = f"{sidata_dir}/{mission}/{area}"
+    this_dir = f"{sidata_dir}/{mission}/ntc/{area}"
     if not os.path.exists(this_dir):
         print(f"Creating directory: {this_dir}")
         os.makedirs(this_dir)
     filename = f"{this_dir}/availability.csv"
 
-    year_list = [[0 for m in range(1, 13)] for i in range(1990, 2030)]
+    if mission == "cs2":
+        start_year = 2010
+    elif mission == "s3a":
+        start_year = 2016
+    elif mission == "s3b":
+        start_year = 2018
+    elif mission == "env":
+        start_year = 2002
+    else:
+        sys.exit(f"Unknown mission: {mission}")
+
+    # Get current year
+    current_year = datetime.now().year
+
+    year_list = [[0 for m in range(1, 13)] for i in range(start_year, current_year + 1)]
 
     # read current year list
     try:
@@ -41,22 +56,22 @@ def update_availability_database(sidata_dir, mission, area, year, month, count):
                     y = int(item[0][0:4])
                     m = int(item[0][5:7])
                     c = int(item[1])
-                    if 1990 <= y <= 2030:
-                        year_list[y - 1990][m - 1] = c
+                    if start_year <= y <= current_year:
+                        year_list[y - start_year][m - 1] = c
     except IOError:
         pass
 
     # Add new entry to year_list
 
-    year_list[int(year) - 1990][int(month) - 1] = int(count)
+    year_list[int(year) - start_year][int(month) - 1] = int(count)
 
     # Write year list
     with open(filename, "w", encoding="utf-8") as file:
         file.write("Date,nvals\n")
-        for y in range(1990, 2030):
+        for y in range(start_year, current_year + 1):
             for m in range(0, 12):
-                if year_list[y - 1990][m] > 0:
-                    file.write(f"{y}-{m + 1:02d}-01,{year_list[y - 1990][m]}\n")
+                if year_list[y - start_year][m] > 0:
+                    file.write(f"{y}-{m + 1:02d}-01,{year_list[y - start_year][m]}\n")
                 else:
                     file.write(f"{y}-{m + 1:02d}-01,{0}\n")
 
