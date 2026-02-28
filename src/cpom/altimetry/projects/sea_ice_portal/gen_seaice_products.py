@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Generate CPOM sea ice thickness NetCDF products from input ascii .map files."""
 
 import argparse
