@@ -1235,6 +1235,8 @@ class Polarplot:
                 nan_lats,
                 marker=".",
                 c="r",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1251,6 +1253,8 @@ class Polarplot:
                 fv_lats,
                 marker=".",
                 c="orange",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1267,6 +1271,8 @@ class Polarplot:
                 outside_lats,
                 marker=".",
                 c="pink",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1276,7 +1282,9 @@ class Polarplot:
                 label=f"<|> {percent_outside:.2f}%",
             )
         if (nan_lons.size == 0) and (outside_lons.size == 0) and (fv_lons.size == 0):
-            ax_minimap.scatter([], [], marker=".", s=1, label="Bad Data")
+            ax_minimap.scatter(
+                [], [], marker=".", s=1, edgecolors="none", antialiaseds=False, label="Bad Data"
+            )
         ax_minimap.legend(
             loc="upper right", bbox_to_anchor=self.thisarea.bad_data_minimap_legend_pos
         )
@@ -1656,6 +1664,8 @@ class Polarplot:
                     marker=".",
                     c=flag_colors[flag_index],
                     s=scale_factor,
+                    edgecolors="none",
+                    antialiaseds=False,
                     transform=ccrs.PlateCarree(),
                     zorder=20,
                 )
@@ -1820,6 +1830,8 @@ class Polarplot:
                 cmap=new_cmap,
                 norm=norm,
                 s=scale_factor,
+                edgecolors="none",
+                antialiaseds=False,
                 alpha=plot_alpha,
                 transform=ccrs.PlateCarree(),
                 zorder=20,
@@ -1835,6 +1847,8 @@ class Polarplot:
                 c=np.ones_like(vals),
                 # cmap=thiscmap,
                 s=0,
+                edgecolors="none",
+                antialiaseds=False,
                 # vmin=minrange,
                 # vmax=maxrange,
                 alpha=0.0,

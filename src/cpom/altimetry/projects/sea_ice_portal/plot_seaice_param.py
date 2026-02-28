@@ -46,8 +46,14 @@ import os
 import sys
 from os.path import exists
 
+import cartopy.feature as cfeature
+import numpy as np
 import pandas as pd
+import shapely.prepared
 from cmocean import cm  # pylint: disable=unused-import, no-member # noqa
+from global_land_mask import globe
+from shapely.geometry import Point
+from shapely.ops import unary_union
 
 from cpom.altimetry.projects.sea_ice_portal.si_params import SIParams, all_si_params
 from cpom.altimetry.projects.sea_ice_portal.update_stats import (
@@ -62,7 +68,7 @@ from cpom.areas.areas import Area  # cryosphere area definitions
 # pylint: disable=invalid-name
 
 PLOT_SCALE_FACTOR = 0.02  # was 0.02
-DPI = 85
+DPI = 85  # was 85
 
 # ----------------------------------------------------------------------------------------------
 #  Command line option processing
@@ -94,7 +100,13 @@ def main():
         nargs=2,
     )
     parser.add_argument(
-        "--param", "-p", help="[optional] parameter_name: only plot this sea ice parameter"
+        "--param",
+        "-p",
+        help=(
+            "[optional] parameter_name: "
+            "only plot this sea ice parameter"
+            f"one of {all_si_params}"
+        ),
     )
     parser.add_argument("--year", "-y", help="YYYY")
     parser.add_argument(
@@ -432,6 +444,9 @@ def main():
 
                 pd_data.columns = ["lat", "lon", "thickness", "stdev", "numvals", "dist"]
 
+                # filter out points where dist is > 15km
+                pd_data = pd_data[pd_data["dist"] < 15]
+
                 lats = pd_data["lat"]
                 lons = pd_data["lon"]
                 vals = pd_data["thickness"]
@@ -674,10 +689,38 @@ def main():
                     elif archive_area == "anto":
                         annotation_list.extend(common_anto_annotations)
 
+                    # Add a land mask to keep only points over ocean or sea ice
+                    if len(lats) > 0:
+                        # Level 1: global-land-mask
+                        ocean_mask_1 = globe.is_ocean(lats, lons)
+                        lats_ocean = lats[ocean_mask_1]
+                        lons_ocean = lons[ocean_mask_1]
+                        vals_ocean = vals[ocean_mask_1]
+
+                        # Level 2: Cartopy precision filter
+                        merged_land = unary_union(list(cfeature.LAND.geometries()))
+                        prep_land = shapely.prepared.prep(merged_land)
+                        points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                        ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+
+                        filtered_lats = lats_ocean[ocean_mask_2]
+                        filtered_lons = lons_ocean[ocean_mask_2]
+                        filtered_vals = vals_ocean[ocean_mask_2]
+
+                        print("Measurements removed over broad land mask:", np.sum(~ocean_mask_1))
+                        print(
+                            "Measurements removed over precision coastal mask:",
+                            np.sum(~ocean_mask_2),
+                        )
+                    else:
+                        filtered_lats = lats
+                        filtered_lons = lons
+                        filtered_vals = vals
+
                     dataset = {
-                        "lats": lats,
-                        "lons": lons,
-                        "vals": vals,
+                        "lats": filtered_lats,
+                        "lons": filtered_lons,
+                        "vals": filtered_vals,
                         "name": si_param.long_name,
                         "units": si_param.units,
                         "plot_size_scale_factor": PLOT_SCALE_FACTOR,
@@ -754,6 +797,9 @@ def main():
                 continue
 
             pd_data.columns = ["lat", "lon", "thickness", "stdev", "numvals", "dist"]
+
+            # filter out points where dist is > 15km
+            pd_data = pd_data[pd_data["dist"] < 15]
 
             lats = pd_data["lat"]
             lons = pd_data["lon"]
@@ -891,10 +937,31 @@ def main():
                 else:
                     print("Output dir: ", outdir)
 
+                if len(lats) > 0:
+                    # Level 1: global-land-mask
+                    ocean_mask_1 = globe.is_ocean(lats, lons)
+                    lats_ocean = lats[ocean_mask_1]
+                    lons_ocean = lons[ocean_mask_1]
+                    vals_ocean = vals[ocean_mask_1]
+
+                    # Level 2: Cartopy precision filter
+                    merged_land = unary_union(list(cfeature.LAND.geometries()))
+                    prep_land = shapely.prepared.prep(merged_land)
+                    points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                    ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+
+                    filtered_lats = lats_ocean[ocean_mask_2]
+                    filtered_lons = lons_ocean[ocean_mask_2]
+                    filtered_vals = vals_ocean[ocean_mask_2]
+                else:
+                    filtered_lats = lats
+                    filtered_lons = lons
+                    filtered_vals = vals
+
                 dataset = {
-                    "lats": lats,
-                    "lons": lons,
-                    "vals": vals,
+                    "lats": filtered_lats,
+                    "lons": filtered_lons,
+                    "vals": filtered_vals,
                     "name": si_param.long_name,
                     "units": "m",
                     "plot_size_scale_factor": PLOT_SCALE_FACTOR,
@@ -955,6 +1022,9 @@ def main():
                 continue
 
             pd_data.columns = ["lat", "lon", "thickness", "stdev", "numvals", "dist"]
+
+            # filter out points where dist is > 15km
+            pd_data = pd_data[pd_data["dist"] < 15]
 
             lats = pd_data["lat"]
             lons = pd_data["lon"]
@@ -1055,10 +1125,31 @@ def main():
                 else:
                     print("Output dir: ", outdir)
 
+                if len(lats) > 0:
+                    # Level 1: global-land-mask
+                    ocean_mask_1 = globe.is_ocean(lats, lons)
+                    lats_ocean = lats[ocean_mask_1]
+                    lons_ocean = lons[ocean_mask_1]
+                    vals_ocean = vals[ocean_mask_1]
+
+                    # Level 2: Cartopy precision filter
+                    merged_land = unary_union(list(cfeature.LAND.geometries()))
+                    prep_land = shapely.prepared.prep(merged_land)
+                    points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                    ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+
+                    filtered_lats = lats_ocean[ocean_mask_2]
+                    filtered_lons = lons_ocean[ocean_mask_2]
+                    filtered_vals = vals_ocean[ocean_mask_2]
+                else:
+                    filtered_lats = lats
+                    filtered_lons = lons
+                    filtered_vals = vals
+
                 dataset = {
-                    "lats": lats,
-                    "lons": lons,
-                    "vals": vals,
+                    "lats": filtered_lats,
+                    "lons": filtered_lons,
+                    "vals": filtered_vals,
                     "name": si_param.long_name,
                     "units": "m",
                     "plot_size_scale_factor": PLOT_SCALE_FACTOR,
