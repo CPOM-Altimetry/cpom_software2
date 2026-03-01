@@ -41,6 +41,13 @@ def parse_args():
         default=15.0,
         help="Maximum COG distance in km (default: 15.0). Data points exceeding this are excluded.",
     )
+    parser.add_argument(
+        "--version",
+        "-v",
+        type=int,
+        default=1,
+        help="Product version number (default: 1).",
+    )
     # For testing and flexibility
     parser.add_argument(
         "--input-dir",
@@ -173,7 +180,7 @@ def to_snake_case(name):
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-def process_map_file(latency, input_dir, output_dir, max_cog_dist):
+def process_map_file(latency, input_dir, output_dir, max_cog_dist, version):
     """Process a single map file to generate a NetCDF product.
 
     Args:
@@ -182,6 +189,7 @@ def process_map_file(latency, input_dir, output_dir, max_cog_dist):
         output_dir (str): The directory where the output NetCDF file will be saved.
         max_cog_dist (float): The maximum centre of gravity distance in km to
         filter out data points.
+        version (int): The product version number.
     """
     map_filename = f"thk_{latency}.map"
     info_filename = f"thk_{latency}.info"
@@ -230,7 +238,8 @@ def process_map_file(latency, input_dir, output_dir, max_cog_dist):
 
     # Output file path
     out_filename = (
-        f"cpom_nrt_sea_ice_thickness_{latency}days_{start_str}_{end_str}_5km_sparse_grid.nc"
+        f"cpom_nrt_sea_ice_thickness_{latency}days_"
+        f"{start_str}_{end_str}_5km_sparse_grid_v{version:03d}.nc"
     )
     out_path = os.path.join(output_dir, out_filename)
 
@@ -331,7 +340,7 @@ def process_map_file(latency, input_dir, output_dir, max_cog_dist):
     print(f"Successfully created {out_path}")
 
 
-def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, process_anto):
+def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, process_anto, version):
     """Process NTC monthly products combining base thickness and parameter maps."""
     date_str = f"{year:04d}{month:02d}"
 
@@ -408,10 +417,11 @@ def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, pro
         length = len(df)
 
         # Output file path
-        out_filename = f"cpom_ntc_sea_ice_thickness_{date_str}_5km_sparse_grid.nc"
+        out_filename = f"cpom_ntc_sea_ice_thickness_{date_str}_5km_sparse_grid_v{version:03d}.nc"
         if hemisphere_name == "anto":
             out_filename = (
-                f"cpom_ntc_{hemisphere_name}_sea_ice_thickness_{date_str}_5km_sparse_grid.nc"
+                f"cpom_ntc_{hemisphere_name}_sea_ice_thickness_"
+                f"{date_str}_5km_sparse_grid_v{version:03d}.nc"
             )
 
         year_out_dir = os.path.join(output_dir, str(year))
@@ -545,7 +555,7 @@ def main():
     if args.nrt:
         latencies = ["02", "14", "28"]
         for lat in latencies:
-            process_map_file(lat, args.input_dir, args.output, args.max_cog_dist)
+            process_map_file(lat, args.input_dir, args.output, args.max_cog_dist, args.version)
     elif args.ntc:
         tasks = []
 
@@ -578,7 +588,9 @@ def main():
             sys.exit(1)
 
         for y, m, arco_flag, anto_flag in tasks:
-            process_ntc_monthly(y, m, args.output, args.max_cog_dist, arco_flag, anto_flag)
+            process_ntc_monthly(
+                y, m, args.output, args.max_cog_dist, arco_flag, anto_flag, args.version
+            )
     else:
         print("Please specify a processing mode, e.g. --nrt or --ntc")
         sys.exit(1)
