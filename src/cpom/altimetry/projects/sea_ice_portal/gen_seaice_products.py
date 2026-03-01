@@ -31,6 +31,9 @@ def parse_args():
     parser.add_argument(
         "--anto", action="store_true", help="Process only Antarctic (anto) region for NTC."
     )
+    parser.add_argument(
+        "--latest", action="store_true", help="Process the previous 2 months for NTC."
+    )
     parser.add_argument("-o", "--output", required=True, help="Path to output directory.")
     parser.add_argument(
         "--max-cog-dist",
@@ -411,8 +414,9 @@ def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, pro
                 f"cpom_ntc_{hemisphere_name}_sea_ice_thickness_{date_str}_5km_sparse_grid.nc"
             )
 
-        out_path = os.path.join(output_dir, out_filename)
-        os.makedirs(output_dir, exist_ok=True)
+        year_out_dir = os.path.join(output_dir, str(year))
+        out_path = os.path.join(year_out_dir, out_filename)
+        os.makedirs(year_out_dir, exist_ok=True)
 
         print(f"Generating NTC {out_path} ({length} points) with parameters: {processed_params}")
 
@@ -543,12 +547,35 @@ def main():
         for lat in latencies:
             process_map_file(lat, args.input_dir, args.output, args.max_cog_dist)
     elif args.ntc:
-        if args.month is None or args.year is None:
-            print("Error: --month and --year are required when using --ntc")
+        tasks = []
+
+        if args.latest:
+            now = datetime.now(timezone.utc)
+            for i in [2, 1]:  # Process the previous 2 months
+                m = now.month - i
+                y = now.year
+                if m < 1:
+                    m += 12
+                    y -= 1
+                tasks.append((y, m, args.arco, args.anto))
+        elif args.year is not None and args.month is None:
+            do_arco = args.arco or (not args.arco and not args.anto)
+            do_anto = args.anto or (not args.arco and not args.anto)
+
+            if do_arco:
+                for m in [1, 2, 3, 4, 5, 10, 11, 12]:
+                    tasks.append((args.year, m, True, False))
+            if do_anto:
+                for m in [6, 7, 8, 9]:
+                    tasks.append((args.year, m, False, True))
+        elif args.year is not None and args.month is not None:
+            tasks.append((args.year, args.month, args.arco, args.anto))
+        else:
+            print("Error: For NTC, provide --latest OR --year (and optionally --month).")
             sys.exit(1)
-        process_ntc_monthly(
-            args.year, args.month, args.output, args.max_cog_dist, args.arco, args.anto
-        )
+
+        for y, m, arco_flag, anto_flag in tasks:
+            process_ntc_monthly(y, m, args.output, args.max_cog_dist, arco_flag, anto_flag)
     else:
         print("Please specify a processing mode, e.g. --nrt or --ntc")
         sys.exit(1)
