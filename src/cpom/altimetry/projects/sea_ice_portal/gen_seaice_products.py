@@ -32,7 +32,7 @@ def parse_args():
         "--anto", action="store_true", help="Process only Antarctic (anto) region for NTC."
     )
     parser.add_argument(
-        "--latest", action="store_true", help="Process the previous 2 months for NTC."
+        "--latest", action="store_true", help="Process the previous 3 months for NTC."
     )
     parser.add_argument("-o", "--output", required=True, help="Path to output directory.")
     parser.add_argument(
@@ -551,7 +551,10 @@ def main():
 
         if args.latest:
             now = datetime.now(timezone.utc)
-            for i in [2, 1]:  # Process the previous 2 months
+            for i in [
+                3,
+                2,
+            ]:  # Process now - 3 months and 2 months
                 m = now.month - i
                 y = now.year
                 if m < 1:
