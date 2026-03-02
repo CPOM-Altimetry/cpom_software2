@@ -67,8 +67,11 @@ from cpom.areas.areas import Area  # cryosphere area definitions
 
 # pylint: disable=invalid-name
 
-PLOT_SCALE_FACTOR = 0.02  # was 0.02
+PLOT_SCALE_FACTOR = 0.02
 DPI = 85  # was 85
+CMAP_NAME = "YlGnBu_r"
+CMAP_OVER_COLOR = "#FCF55F"  # "yellow/orange"
+CMAP_UNDER_COLOR = "#081D58"  # "black"
 
 # ----------------------------------------------------------------------------------------------
 #  Command line option processing
@@ -657,9 +660,9 @@ def main():
                             "apply_area_mask_to_data": True,
                             "min_plot_range": si_param.plot_range_low,
                             "max_plot_range": si_param.plot_range_high,
-                            "cmap_name": "cmo.thermal",
-                            "cmap_over_color": "yellow",
-                            "cmap_under_color": "black",
+                            "cmap_name": CMAP_NAME,
+                            "cmap_over_color": CMAP_OVER_COLOR,
+                            "cmap_under_color": CMAP_UNDER_COLOR,
                         }
                         Polarplot(area).plot_points(
                             dataset,
@@ -727,9 +730,9 @@ def main():
                         "apply_area_mask_to_data": True,
                         "min_plot_range": si_param.plot_range_low,
                         "max_plot_range": si_param.plot_range_high,
-                        "cmap_name": "cmo.thermal",
-                        "cmap_over_color": "yellow",
-                        "cmap_under_color": "black",
+                        "cmap_name": CMAP_NAME,
+                        "cmap_over_color": CMAP_OVER_COLOR,
+                        "cmap_under_color": CMAP_UNDER_COLOR,
                     }
 
                     Polarplot(area).plot_points(
@@ -967,9 +970,9 @@ def main():
                     "plot_size_scale_factor": PLOT_SCALE_FACTOR,
                     "min_plot_range": 0.0,
                     "max_plot_range": 3.5,
-                    "cmap_name": "cmo.thermal",
-                    "cmap_over_color": "yellow",
-                    "cmap_under_color": "black",
+                    "cmap_name": CMAP_NAME,
+                    "cmap_over_color": CMAP_OVER_COLOR,
+                    "cmap_under_color": CMAP_UNDER_COLOR,
                 }
 
                 Polarplot(area).plot_points(
@@ -1155,9 +1158,9 @@ def main():
                     "plot_size_scale_factor": PLOT_SCALE_FACTOR,
                     "min_plot_range": 0.0,
                     "max_plot_range": 3.5,
-                    "cmap_name": "cmo.thermal",
-                    "cmap_over_color": "yellow",
-                    "cmap_under_color": "black",
+                    "cmap_name": CMAP_NAME,
+                    "cmap_over_color": CMAP_OVER_COLOR,
+                    "cmap_under_color": CMAP_UNDER_COLOR,
                 }
 
                 Polarplot(area).plot_points(
