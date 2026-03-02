@@ -2,18 +2,31 @@
 # -*- coding: utf-8 -*-
 """
 
-Update sea ice portal timeseries
+Create csv timeseries files for sea ice portal from input txt files
 
-Input:
+Input txt files:
 
 /cpnet/altimetry/seaice/<CS2>/<arco>/archive/\
     timeseries_<basin 0:17>_<thickness,volume,mass>.txt
 
-Output:
+format:
+<YYYYMMDD> <value of thickness or volume or mass> <Sea ice extent in km2>
+20101115    1.2567  9238672.63
+20101215    1.2944  11382515.17
+...
 
-</Users/alanmuir/Sites/seaice/sidata>/<cs2>/<arco>/\
+
+Output csv files:
+
+<outdir>/<cs2>/<arco>/\
     timeseries_<basin 0:17>_<thickness,volume,mass>.csv
 
+format of csv files:
+
+Date,Value,Sea_ice_extent_km2
+2010-11-15,1.2567,9238672.63
+2010-12-15,1.2944,11382515.17
+...
 
 Author: Alan Muir (MSSL)
 Date: 2024

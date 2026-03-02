@@ -63,6 +63,7 @@ import sys
 from typing import List
 
 import numpy as np
+from cmocean import cm  # pylint: disable=unused-import, no-member # noqa
 from matplotlib import use as use_headless
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
