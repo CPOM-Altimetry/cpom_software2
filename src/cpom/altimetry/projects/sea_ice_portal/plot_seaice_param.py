@@ -405,7 +405,7 @@ def main():
                 print("No data found for this month")
 
             update_availability_database(
-                args.outdir, mission, archive_area, args.year, month, count + 1
+                args.outdir, mission, archive_area, args.year, month, count
             )
 
             for i, param in enumerate(all_si_params):
