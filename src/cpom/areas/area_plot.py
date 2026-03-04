@@ -26,7 +26,6 @@ from matplotlib import colormaps
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from matplotlib.figure import Figure
-from numpy import ma  # masked arrays
 from PIL import Image
 
 from cpom.areas.areas import Area
@@ -494,7 +493,7 @@ class Polarplot:
             log.info("Loading %d data sets", num_data_sets)
 
             for ds_num, data_set in enumerate(data_sets):
-                print(f"loading data set {ds_num}: {data_set.get('name','unnamed')}")
+                print(f"loading data set {ds_num}: {data_set.get('name', 'unnamed')}")
 
                 is_flag_data = len(data_set.get("flag_values", [])) > 0
 
@@ -541,10 +540,14 @@ class Polarplot:
                 lons = np.array(lons, dtype=float)
 
                 # Test for masked arrays
-                if ma.is_masked(lats):
-                    lats[lats.mask.nonzero()] = np.nan
-                if ma.is_masked(lons):
-                    lons[lons.mask.nonzero()] = np.nan
+
+                if np.ma.is_masked(lats):
+                    # getmaskarray returns a boolean array even if lats isn't masked
+                    lats[np.ma.getmaskarray(lats)] = np.nan
+
+                if np.ma.is_masked(lons):
+                    # getmaskarray returns a boolean array even if lons isn't masked
+                    lons[np.ma.getmaskarray(lons)] = np.nan
 
                 # Step 1: Filter for valid values
                 # Assuming latitude values must be between -90 and 90, and longitude
@@ -1352,7 +1355,6 @@ class Polarplot:
 
         print(f"self.thisarea.masktype {self.thisarea.masktype} ")
         if self.thisarea.masktype in ("polygon", "xylimits"):
-
             self.draw_area_polygon_mask(
                 ax_minimap,
                 override_mask_display=True,
@@ -2160,8 +2162,8 @@ class Polarplot:
 
         print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
         xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
-        print(f"{xc - self.thisarea.width_km*1000/2 ,xc+ self.thisarea.width_km*1000/2}")
-        print(f"{yc - self.thisarea.height_km*1000/2 ,yc+ self.thisarea.height_km*1000/2}")
+        print(f"{xc - self.thisarea.width_km * 1000 / 2, xc + self.thisarea.width_km * 1000 / 2}")
+        print(f"{yc - self.thisarea.height_km * 1000 / 2, yc + self.thisarea.height_km * 1000 / 2}")
 
         polygon_color = "red"
         if override_mask_color:

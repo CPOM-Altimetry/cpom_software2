@@ -313,7 +313,8 @@ class DatasetHelper(DatasetConfig):
             if self.latitude_param is not None and nc is not None:
                 assert self.latitude_nadir_param is not None
                 latitude = self.get_variable(
-                    nc, self.latitude_nadir_param
+                    nc,
+                    self.latitude_nadir_param,
                 )  # type: ignore[assignment]
             else:
                 raise ValueError("No latitude data provided or available.")
@@ -401,13 +402,12 @@ class DatasetHelper(DatasetConfig):
                     var = var[part]
                     if var is None:
                         if raise_if_missing:
-                            raise KeyError(f"missing variable: {path}")
+                            raise KeyError(f"missing variable not found in NetCDF: {path}")
                         return np.array([])  # Variable not found
                 return var[:]
-            except KeyError as exc:
+            except (KeyError, RuntimeError) as e:
                 if raise_if_missing:
-                    exc.args = (f"missing variable: {path}",)
-                    raise
+                    raise KeyError(f"missing variable not found in NetCDF: {path}, {e}") from e 
                 return np.array([])  # Variable not found
 
         def _get_var_obj(dataset, path):

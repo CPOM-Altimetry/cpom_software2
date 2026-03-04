@@ -125,7 +125,7 @@ def parse_arguments(args):
         default=70.0,
         type=float,
         help="Minimum time-span in cell to perform plane fit as percent of (maxtime-mintime),"
-        " default is 70%",
+        " default is 70%%",
     )
     parser.add_argument(
         "--n_sigma",
@@ -755,7 +755,6 @@ def _get_fit_params(
     # Weighted surface fit
     # ---------------------------
     if params.weighted_surface_fit:
-
         weights = group_np[params.weight_column]
         w = np.where(weights > 0, 1.0 / (weights**2), 0.0)
         wt = w / np.nansum(w)
@@ -837,7 +836,6 @@ def fit_surface_model_per_group(
         return "n_cells_with_timespan_too_short"
 
     for _ in range(params.max_surfacefit_iterations):
-
         if group_np["height"].size < params.min_vals_in_cell:
             return "n_cells_with_too_few_measurements"
 
@@ -1005,7 +1003,6 @@ def fit_linear_fit_per_group(
             On failure, returns error status string.
     """
     for _ in range(params.max_linearfit_iterations):
-
         if (
             hasattr(params, "weighted_power_fit")
             and params.weighted_power_fit
@@ -1273,7 +1270,6 @@ def surface_fit(
 
             # 3c. Power Correction (if enabled)
             if params.powercorrect:
-
                 power_result = fit_power_correction_per_group(
                     params,
                     group_np,
