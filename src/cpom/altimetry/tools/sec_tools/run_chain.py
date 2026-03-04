@@ -140,16 +140,12 @@ def build_args(algo, config, mission=None):
     Returns:
         list: Complete list of command-line argument strings.
     """
-
     # Get algorithm configuration
     algo_config = config[algo].copy()
     # Get the mission overrides for the algorithm if they exist
-    if mission and algo in config[mission]:
+    if algo in config[mission]:
         # Add / Replace with mission-specific parameters
         algo_config.update(config[mission][algo])
-        # Add grid_info_json if specified at mission level
-        if "grid_info_json" in config[mission]:
-            algo_config["grid_info_json"] = config[mission]["grid_info_json"]
 
     # Convert to CLI args
     args = dict_to_cli_args(algo_config)
@@ -167,9 +163,12 @@ def build_args(algo, config, mission=None):
             args.extend(["--out_dir", str(out_dir)])
 
     # Grid metadata
-    if "grid_info_json" not in algo_config and requires_grid_metadata(algo):
+    if requires_grid_metadata(algo):
         metadata = None
-        if "in_dir" in algo_config:
+
+        if "grid_info_json" in config[mission]:
+            metadata = Path(config[mission]["grid_info_json"])
+        elif "in_dir" in algo_config:
             metadata = Path(algo_config["in_dir"]) / "metadata.json"
         elif mission and "grid_for_elev_change" in config:
             grid_path = build_path(
