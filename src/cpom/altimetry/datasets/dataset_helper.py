@@ -131,10 +131,8 @@ class DatasetHelper(DatasetConfig):
             directory = f"{self.data_dir}/{f}"
             if Path(directory).is_dir():
                 return Path(directory)
-        raise FileNotFoundError(
-            f"Cycle directory for cycle {cyclenum} \
-            not found in {directory} for formats {cycle_format}"
-        )
+        raise FileNotFoundError(f"Cycle directory for cycle {cyclenum} \
+            not found in {directory} for formats {cycle_format}")
 
     def get_product_startdate_from_filename(self, filename: Path) -> datetime:
         """Extract product start date from filename using configured indices.
@@ -373,7 +371,12 @@ class DatasetHelper(DatasetConfig):
         return asc_directions
 
     def get_variable(
-        self, nc: Dataset, nc_var_path: str, return_beams: bool = False, replace_fill: bool = True
+        self,
+        nc: Dataset,
+        nc_var_path: str,
+        return_beams: bool = False,
+        replace_fill: bool = True,
+        raise_if_missing: bool = False,
     ) -> np.ndarray:
         """Retrieve variable from NetCDF file, handling nested groups and beam data.
 
@@ -384,6 +387,8 @@ class DatasetHelper(DatasetConfig):
             nc_var_path (str): Variable path with groups separated by '/' (e.g., 'beam1/heights').
             return_beams (bool): If True with beams, return beam identifiers instead of data.
             replace_fill (bool): Replace fill values (scaled) with NaN.
+            raise_if_missing (bool): Raise KeyError with full variable path when the
+                variable is missing/empty instead of returning an empty array.
 
         Returns:
             np.ndarray: Variable data, or concatenated beam data, or beam identifiers.
@@ -395,20 +400,42 @@ class DatasetHelper(DatasetConfig):
                 for part in path.split("/"):
                     var = var[part]
                     if var is None:
+                        if raise_if_missing:
+                            raise KeyError(f"missing variable: {path}")
                         return np.array([])  # Variable not found
                 return var[:]
-            except KeyError:
+            except KeyError as exc:
+                if raise_if_missing:
+                    exc.args = (f"missing variable: {path}",)
+                    raise
                 return np.array([])  # Variable not found
+
+        def _get_var_obj(dataset, path):
+            var = dataset
+            for part in path.split("/"):
+                var = var[part]
+            return var
 
         if self.beams:
             data_list: list[np.ndarray] = []
+            missing_beams: list[str] = []
             for beam in self.beams:
-                var_data = _get_var(nc, f"{beam}/{nc_var_path}")
+                try:
+                    var_data = _get_var(nc, f"{beam}/{nc_var_path}")
+                except (IndexError, KeyError):
+                    missing_beams.append(beam)
+                    continue
                 if var_data.size > 0:
                     if return_beams:
                         data_list.append(np.full(var_data.shape[0], beam))
                     else:
                         data_list.append(var_data)
+
+            if raise_if_missing and not data_list:
+                raise KeyError(
+                    f"missing variable: {nc_var_path} for all beams {self.beams}; "
+                    f"missing_beams={missing_beams}"
+                )
 
             data_array = np.concatenate(data_list, axis=0) if data_list else np.array([])
             return data_array
@@ -416,8 +443,11 @@ class DatasetHelper(DatasetConfig):
         # No beams, just return the variable directly
         var_data = _get_var(nc, nc_var_path)
 
+        if raise_if_missing and var_data.size == 0:
+            raise KeyError(f"missing variable: {nc_var_path}")
+
         if replace_fill and var_data.size > 0:
-            var = nc[nc_var_path]
+            var = _get_var_obj(nc, nc_var_path)
             scale_factor = getattr(var, "scale_factor", 0.0)
             add_offset = getattr(var, "add_offset", 0.0)
             fill_value = getattr(var, "_FillValue", None)

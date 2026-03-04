@@ -67,10 +67,8 @@ def parse_arguments(args):
     Return:
         parser.parse_args(args)
     """
-    parser = argparse.ArgumentParser(
-        description="""Convert altimetry data into partitioned parquet
-        with ragged layout, storing each partition in a single file"""
-    )
+    parser = argparse.ArgumentParser(description="""Convert altimetry data into partitioned parquet
+        with ragged layout, storing each partition in a single file""")
     parser.add_argument(
         "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
     )
@@ -89,6 +87,14 @@ def parse_arguments(args):
         required=False,
         help="Optional Mask Name to apply instead of Area Mask",
     )
+    parser.add_argument(
+        "--mask_values",
+        default=None,
+        required=False,
+        nargs="+",
+        help="Optional list of values to filter the mask by, e.g. --mask_values 1 2 3. ",
+    )
+
     parser.add_argument("--gridarea", type=str, required=True, help="CPOM grid area object")
     parser.add_argument("--binsize", type=int, default=5000, help="Grid bin size in meters")
     parser.add_argument(
@@ -123,11 +129,29 @@ def parse_arguments(args):
         "This is specific to the FDR4ALT dataset.",
     )
     parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=max(1, min(8, os.cpu_count() or 1)),
+        help="Maximum worker processes for multiprocessing.",
+    )
+    parser.add_argument(
+        "--add_vars",
+        type=json.loads,
+        default="{}",
+        help="Optional extra variables as JSON dict, "
+        'e.g. {"tide_ocean":"land_ice_segments/geophysical/tide_ocean"}',
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable DEBUG level logging",
+        help="Enable DEBUG level logging and collect per-file processing stats",
     )
-
+    parser.add_argument(
+        "--hive_mode",
+        action="store_true",
+        help="Writes partitions slower, "
+        "but lower memory footprint. May be needed for antarctica is2",
+    )
     return parser.parse_args(args)
 
 
@@ -188,7 +212,7 @@ def get_processing_objects(params, dataset):
     thisgrid = GridArea(params.gridarea, params.binsize)
     thisarea = Area(params.area)
     if params.mask_name:
-        thismask = Mask(params.mask_name)
+        thismask = Mask(params.mask_name, params.mask_values)
     else:
         thismask = None
 
@@ -204,7 +228,9 @@ def get_processing_objects(params, dataset):
         this_grid=thisgrid,
         this_area=thisarea,
         this_mask=thismask,
+        add_vars=params.add_vars,
         fill_missing_poca=params.fill_missing_poca,
+        collect_stats=params.debug,
     )
 
     return file_and_dates, worker, thisgrid, logger
@@ -216,7 +242,7 @@ def get_processing_objects(params, dataset):
 
 
 def _fill_missing_poca_with_nadir_fdr4alt(
-    dataset: DatasetHelper, nc, lats: np.ndarray, lons: np.ndarray
+    dataset: DatasetHelper, nc, lats: np.ndarray, lons: np.ndarray, strict_missing: bool = False
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     FDR4ALT specific function to:
@@ -239,12 +265,19 @@ def _fill_missing_poca_with_nadir_fdr4alt(
 
         # Try to get the relocation failure variable
         relocation_failure = dataset.get_variable(
-            nc, "expert/ice_sheet_qual_relocation", replace_fill=False
+            nc,
+            "expert/ice_sheet_qual_relocation",
+            replace_fill=False,
+            raise_if_missing=strict_missing,
         )
 
         # Get nadir coordinates
-        latitude_nadir = dataset.get_variable(nc, dataset.latitude_nadir_param)
-        longitude_nadir = dataset.get_variable(nc, dataset.longitude_nadir_param)
+        latitude_nadir = dataset.get_variable(
+            nc, dataset.latitude_nadir_param, raise_if_missing=strict_missing
+        )
+        longitude_nadir = dataset.get_variable(
+            nc, dataset.longitude_nadir_param, raise_if_missing=strict_missing
+        )
 
         # Fill missing POCA locations with nadir values
         lats = np.where(relocation_failure > 0, latitude_nadir, lats)
@@ -258,7 +291,12 @@ def _fill_missing_poca_with_nadir_fdr4alt(
         return lats, lons
 
 
-def get_coordinates_from_file(dataset: DatasetHelper, nc, fill_missing_poca: bool = False) -> dict:
+def get_coordinates_from_file(
+    dataset: DatasetHelper,
+    nc,
+    fill_missing_poca: bool = False,
+    strict_missing: bool = False,
+) -> dict:
     """
     Get latitude and longitude arrays as arrays from a netCDF or HDF5 file.
     Optionally fills missing POCA lat/lons with nadir values for FDR4ALT datasets.
@@ -277,16 +315,21 @@ def get_coordinates_from_file(dataset: DatasetHelper, nc, fill_missing_poca: boo
     latitude_param = dataset.latitude_param
 
     if dataset.beams != []:
-        lats = dataset.get_variable(nc, latitude_param)
-        beams = dataset.get_variable(nc, latitude_param, return_beams=True)
+        lats = dataset.get_variable(nc, latitude_param, raise_if_missing=strict_missing)
+        beams = dataset.get_variable(
+            nc,
+            latitude_param,
+            return_beams=True,
+            raise_if_missing=strict_missing,
+        )
     else:
-        lats = dataset.get_variable(nc, latitude_param)
+        lats = dataset.get_variable(nc, latitude_param, raise_if_missing=strict_missing)
         beams = None
 
     if dataset.longitude_param is None:
         raise ValueError("dataset.longitude_param is required but None was provided")
     longitude_param = dataset.longitude_param
-    lons = dataset.get_variable(nc, longitude_param) % 360.0
+    lons = dataset.get_variable(nc, longitude_param, raise_if_missing=strict_missing) % 360.0
 
     if fill_missing_poca:
         lats, lons = _fill_missing_poca_with_nadir_fdr4alt(dataset, nc, lats, lons)
@@ -313,26 +356,33 @@ def get_spatial_filter(
             number of points inside area/mask, and the bounded mask object.
 
     """
-
-    bounded_lat, bounded_lon, bounded_mask, _ = this_area.inside_latlon_bounds(
+    bounded_lat, bounded_lon, bounded_indices, n_bounded = this_area.inside_latlon_bounds(
         variable_dict["latitude"], variable_dict["longitude"]
     )
+    if n_bounded == 0:
+        return variable_dict, 0, np.zeros_like(variable_dict["latitude"], dtype=bool)
 
     if this_mask is not None:
         area_mask_valid, n_inside = this_mask.points_inside(bounded_lat, bounded_lon)
-        x_coords, y_coords = this_mask.latlon_to_xy(
-            variable_dict["latitude"], variable_dict["longitude"]
+        x_in_area, y_in_area = this_mask.latlon_to_xy(
+            bounded_lat[area_mask_valid], bounded_lon[area_mask_valid]
         )
     else:
         area_mask_valid, n_inside = this_area.inside_area(bounded_lat, bounded_lon)
-        x_coords, y_coords = this_area.latlon_to_xy(
-            variable_dict["latitude"], variable_dict["longitude"]
+        x_in_area, y_in_area = this_area.latlon_to_xy(
+            bounded_lat[area_mask_valid], bounded_lon[area_mask_valid]
         )
 
     # Reconstruct full-size mask
     area_mask = np.zeros_like(variable_dict["latitude"], dtype=bool)
-    area_mask[bounded_mask.astype(int)] = area_mask_valid
+    valid_original_indices = bounded_indices[area_mask_valid]
+    area_mask[valid_original_indices] = True
 
+    # Reconstruct full-size x/y,
+    x_coords = np.full(variable_dict["latitude"].shape, np.nan, dtype=float)
+    y_coords = np.full(variable_dict["latitude"].shape, np.nan, dtype=float)
+    x_coords[area_mask] = x_in_area
+    y_coords[area_mask] = y_in_area
     variable_dict["x"] = x_coords
     variable_dict["y"] = y_coords
 
@@ -340,7 +390,12 @@ def get_spatial_filter(
 
 
 def get_variables_and_mask(
-    dataset: DatasetHelper, nc, variable_dict: dict, offset: float, area_mask: np.ndarray
+    dataset: DatasetHelper,
+    nc,
+    variable_dict: dict,
+    offset: float,
+    area_mask: np.ndarray,
+    strict_missing: bool = False,
 ):
     """
     Get elevation, time, and optional power/quality an open netCDF or HDF5 file.
@@ -365,22 +420,34 @@ def get_variables_and_mask(
     if dataset.elevation_param is None:
         raise ValueError("dataset.elevation_param is required but None was provided")
     elevation_param = dataset.elevation_param
-    variable_dict["elevation"] = dataset.get_variable(nc, elevation_param)
+    variable_dict["elevation"] = dataset.get_variable(
+        nc, elevation_param, raise_if_missing=strict_missing
+    )
     masks.append(np.isfinite(variable_dict["elevation"]))
 
     if dataset.time_param is None:
         raise ValueError("dataset.time_param is required but None was provided")
     time_param = dataset.time_param
-    variable_dict["time"] = dataset.get_variable(nc, time_param) + offset
+    variable_dict["time"] = (
+        dataset.get_variable(nc, time_param, raise_if_missing=strict_missing) + offset
+    )
     masks.append(np.isfinite(variable_dict["time"]))
     if dataset.power_param is not None:
-        variable_dict["power"] = dataset.get_variable(nc, dataset.power_param)
+        variable_dict["power"] = dataset.get_variable(
+            nc, dataset.power_param, raise_if_missing=strict_missing
+        )
         # masks.append(np.isfinite(variable_dict["power"]))
 
     # Fdr4alt quality mask
     if dataset.quality_param is not None:
         masks.append(
-            dataset.get_variable(nc, dataset.quality_param, replace_fill=False) == 0
+            dataset.get_variable(
+                nc,
+                dataset.quality_param,
+                replace_fill=False,
+                raise_if_missing=strict_missing,
+            )
+            == 0
         )  # 0 = good, bad = 1
 
     bool_mask = np.logical_and.reduce(masks)
@@ -390,16 +457,24 @@ def get_variables_and_mask(
 
     variable_dict["ascending"] = dataset.get_file_orbital_direction(
         latitude=(
-            dataset.get_variable(nc, dataset.latitude_nadir_param)
+            dataset.get_variable(
+                nc,
+                dataset.latitude_nadir_param,
+                raise_if_missing=strict_missing,
+            )
             if dataset.latitude_nadir_param is not None
             else variable_dict["latitude"]
         ),
         nc=nc,
     )
     if dataset.uncertainty_param is not None:
-        variable_dict["uncertainty"] = dataset.get_variable(nc, dataset.uncertainty_param)
+        variable_dict["uncertainty"] = dataset.get_variable(
+            nc, dataset.uncertainty_param, raise_if_missing=strict_missing
+        )
     if dataset.mode_param is not None:
-        variable_dict["mode"] = dataset.get_variable(nc, dataset.mode_param)
+        variable_dict["mode"] = dataset.get_variable(
+            nc, dataset.mode_param, raise_if_missing=strict_missing
+        )
 
     return variable_dict, bool_mask
 
@@ -434,8 +509,10 @@ def process_file(
     this_grid: GridArea,
     this_area: Area,
     this_mask: Mask,
+    add_vars: dict | None = None,
     fill_missing_poca: bool = False,
-) -> pl.LazyFrame | None:
+    collect_stats: bool = False,
+) -> tuple[pl.LazyFrame | None, dict]:
     """
     Extract and process data from a single altimetry file.
     To be run in parallel in get_data_and_status_multiprocessed.
@@ -456,11 +533,12 @@ def process_file(
         this_grid (GridArea): CPOM grid area object
         this_area (Area): CPOM area object
         this_mask (Mask): Optional CPOM mask object (None uses area mask)
+        add_vars (dict): Optional dict of additional variables to load {var_name: dataset_param}
         fill_missing_poca (bool): Fill missing POCA lat/lons with nadir (for FDR4ALT)
 
     Returns:
-        pl.LazyFrame: Processed data with elevation range filter applied,
-                        or None if insufficient valid data (< 2 points)
+        tuple[pl.LazyFrame | None, dict]:
+            Processed data with elevation range filter applied and per-file stats.
     """
 
     # Get filetype from search pattern
@@ -468,64 +546,159 @@ def process_file(
     if dataset.search_pattern is not None and dataset.search_pattern.endswith(".h5"):
         context_manager = h5py.File
 
+    add_vars = add_vars or {}
+    stats = {
+        "path": file_and_date["path"],
+        "accepted": 0,
+        "outside_area_or_mask": 0,
+        "outside_quality_time_or_nan": 0,
+        "outside_elevation_range": 0,
+        "file_reject_reason": None,
+        "file_reject_detail": None,
+        "total": 0,
+    }
+
     variable_dict = {}
-    with context_manager(file_and_date["path"]) as nc:
-        # 1. Get coordinates
-        variable_dict = get_coordinates_from_file(dataset, nc, fill_missing_poca=fill_missing_poca)
-        # 2. Get spatial filter
-        variable_dict, n_inside, bounded_mask = get_spatial_filter(
-            variable_dict, this_area, this_mask
-        )
-
-        if n_inside < 2:  # Number of points needed to get the heading
-            return None
-
-        # 3. Get variables and combined mask
-        variable_dict, bool_mask = get_variables_and_mask(
-            dataset, nc, variable_dict, offset, bounded_mask
-        )
-        if bool_mask is None:
-            return None
-
-        for variable in variable_dict:
-            if variable_dict[variable] is None:
-                continue
-            variable_dict[variable] = variable_dict[variable][bool_mask]
-
-        variable_dict = get_grid_cells(variable_dict, this_grid)
-
-        # 5. Cast to correct types
-        for var in [
-            "time",
-            "elevation",
-            "power",
-            "uncertainty",
-            "x",
-            "y",
-            "x_cell_offset",
-            "y_cell_offset",
-        ]:
-            if var in variable_dict:
-                variable_dict[var] = variable_dict[var].astype(np.float32)
-
-        return (
-            pl.LazyFrame(variable_dict)
-            .with_columns(
-                [
-                    pl.lit(file_and_date["year"]).alias("year"),
-                    pl.lit(file_and_date["month"]).alias("month"),
-                ]
+    try:
+        with context_manager(file_and_date["path"]) as nc:
+            # 1. Get coordinates
+            variable_dict = get_coordinates_from_file(
+                dataset,
+                nc,
+                fill_missing_poca=fill_missing_poca,
+                strict_missing=collect_stats,
             )
-            .cast({"elevation": pl.Float32})
-            .filter(
-                (pl.col("elevation") < 6000) & (pl.col("elevation") > -500)
-            )  # old_grid.py line 913
-        )
+            if collect_stats:
+                total = int(len(variable_dict["latitude"]))
+                stats["total"] = total
+
+            # 2. Get spatial filter
+            variable_dict, n_inside, area_mask = get_spatial_filter(
+                variable_dict, this_area, this_mask
+            )
+            if collect_stats:
+                stats["outside_area_or_mask"] = max(0, total - int(n_inside))
+
+            if n_inside < 2:  # Number of points needed to get the heading
+                if collect_stats:
+                    stats["file_reject_reason"] = "too_few_points_after_spatial_filter"
+                return None, stats
+
+            # 3. Get variables and combined mask
+            variable_dict, bool_mask = get_variables_and_mask(
+                dataset,
+                nc,
+                variable_dict,
+                offset,
+                area_mask,
+                strict_missing=collect_stats,
+            )
+            if bool_mask is None:
+                if collect_stats:
+                    stats["file_reject_reason"] = "too_few_points_after_quality_mask"
+                return None, stats
+
+            if collect_stats:
+                n_quality = int(bool_mask.sum())
+                stats["outside_quality_time_or_nan"] = max(0, n_inside - n_quality)
+
+            for var in add_vars:
+                variable_dict[var] = dataset.get_variable(
+                    nc,
+                    add_vars[var],
+                    raise_if_missing=collect_stats,
+                )
+
+            elevation_mask = (variable_dict["elevation"] < 6000) & (
+                variable_dict["elevation"] > -500
+            )
+            bool_mask &= elevation_mask
+
+            # Root-cause guard: never return empty frames downstream.
+            # Empty lazy frames can propagate null-typed columns (e.g. x_bin/y_bin).
+            n_after_elev = int(np.count_nonzero(bool_mask))
+            if n_after_elev < 1:
+                if collect_stats:
+                    stats["file_reject_reason"] = "no_points_after_elevation_filter"
+                return None, stats
+
+            if collect_stats:
+                stats["outside_elevation_range"] = max(0, n_quality - n_after_elev)
+
+            for variable in variable_dict:
+                if variable_dict[variable] is None:
+                    continue
+                variable_dict[variable] = (
+                    variable_dict[variable][bool_mask].astype(np.float32)
+                    if variable
+                    in [
+                        "time",
+                        "elevation",
+                        "power",
+                        "uncertainty",
+                        "x",
+                        "y",
+                        "x_cell_offset",
+                        "y_cell_offset",
+                    ]
+                    else variable_dict[variable][bool_mask]
+                )
+
+            variable_dict = get_grid_cells(variable_dict, this_grid)
+
+            return (
+                pl.LazyFrame(variable_dict).with_columns(
+                    [
+                        pl.lit(file_and_date["year"]).alias("year"),
+                        pl.lit(file_and_date["month"]).alias("month"),
+                    ]
+                )
+            ), stats
+
+    except KeyError as e:
+        if collect_stats:
+            stats["file_reject_reason"] = "missing_variable"
+            stats["file_reject_detail"] = str(e)
+        return None, stats
+    except (ValueError, OSError, RuntimeError, TypeError, AttributeError) as e:
+        if collect_stats:
+            stats["file_reject_reason"] = "processing_error"
+            stats["file_reject_detail"] = f"{type(e).__name__}: {e}"
+        return None, stats
 
 
 # --------------------------------------#
 # Multiprocessing Data Extraction  #
 # --------------------------------------#
+
+
+def _group_periods(file_and_dates, use_month):
+    """
+    Group files by processing period (year/month or just year).
+
+    Args:
+        file_and_dates (np.ndarray): Structured array with year/month data
+        use_month (bool): If True, group by year/month. If False, group by year only.
+
+    Yields:
+        tuple: (period_label, files_in_period)
+    """
+    if use_month:
+        # Group by year/month pairs
+        keys = np.unique(
+            np.stack([file_and_dates["year"], file_and_dates["month"]], axis=1),
+            axis=0,
+        )
+        for year, month in keys:
+            mask = (file_and_dates["year"] == year) & (file_and_dates["month"] == month)
+            period_label = f"{int(year)}-{int(month):02d}"
+            yield period_label, file_and_dates[mask]
+    else:
+        # Group by year only
+        years = sorted(set(file_and_dates["year"]))
+        for year in years:
+            mask = file_and_dates["year"] == year
+            yield str(int(year)), file_and_dates[mask]
 
 
 def get_data_and_status_multiprocessed(
@@ -536,7 +709,8 @@ def get_data_and_status_multiprocessed(
     in parallel and write the results to disk as a partitioned parquet file.
 
     Uses multiprocessing and writes on year of data at a time.
-    Calls :
+
+    Calls:
         process_file: Function to process a single file.
         write_partitions_to_disk: Function to write processed data to disk.
 
@@ -551,6 +725,7 @@ def get_data_and_status_multiprocessed(
     """
 
     status: dict = {
+        "empty_periods": [],
         "years_ingested": [],
         "years_files_ingested": [],
         "years_files_rejected": [],
@@ -559,61 +734,87 @@ def get_data_and_status_multiprocessed(
         "total_l2_files_ingested": 0,
         "total_rows_ingested": 0,
     }
-
-    # ----------------------------------------------------------------------
-    # Process each year
-    # ----------------------------------------------------------------------
-    # Get list of years from file_and_date from a tuple of (file_path, date)
-    # Extract unique years from the file_and_dates array
-    years = sorted(set(file_and_dates["year"]))
+    use_month = "month" in params.partition_columns
+    debug_stats = bool(params.debug)
 
     try:
-        with ProcessPoolExecutor() as executor:
-            for year in years:
-                logger.info("Processing year: %s", year)
-                big_rows_list = []
-                file_and_date_year = file_and_dates[file_and_dates["year"] == year]
-                logger.info(
-                    f"Number of files to process for year {year}: {len(file_and_date_year)}"
-                )
-                results = executor.map(
-                    worker,
-                    file_and_date_year,
-                    chunksize=max(15, len(file_and_date_year) // (10 * 4)),
-                )
-                try:
-                    big_rows_list = [r for r in results if r is not None]
-                except (ValueError, OSError, RuntimeError) as e:
-                    logger.error(f"Error collecting results for year {year}: {e}", exc_info=True)
-                    big_rows_list = []
+        with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
+            for period_label, files_in_period in _group_periods(file_and_dates, use_month):
+                logger.info("Processing period: %s", period_label)
 
-                logger.info(f"Collected {len(big_rows_list)} valid results for year {year}")
+                n_files = len(files_in_period)
+                logger.info(f"Number of files to process for period {period_label}: {n_files}")
 
-                if len(big_rows_list) == 0:
-                    logger.info(f"No valid data for year {year}, skipping...")
-                    status["years_files_rejected"].append(len(file_and_date_year))
-                    status["total_l2_files_rejected"] += len(file_and_date_year)
+                if n_files == 0:
                     continue
 
-                final = pl.concat(big_rows_list).collect()
-                logger.info(f"Final DataFrame shape: {final.shape}")
+                # Process files for this period
+                chunksize = max(8, n_files // (max(1, params.max_workers) * 4))
+                results = executor.map(worker, files_in_period, chunksize=chunksize)
 
-                total_rows = write_partitions_to_disk(
-                    final_df=final,
-                    partition_columns=params.partition_columns,
-                    partition_xy_chunking=params.partition_xy_chunking,
-                    out_dir=params.out_dir,
-                )
+                n_valid = 0
+                total_rows = 0
 
-                status["years_ingested"].append(int(year))
-                status["years_files_ingested"].append(len(big_rows_list))
-                status["years_files_rejected"].append(len(file_and_date_year) - len(big_rows_list))
+                try:
+                    big_rows_list = []
+                    for frame, file_stats in results:
+                        if debug_stats and file_stats is not None:
+                            logger.debug(
+                                "file=%s | accepted=%d/%d | "
+                                "rejected(area/mask=%d, quality/time/nan=%d, elev_range=%d)%s%s",
+                                file_stats.get("path"),
+                                int(file_stats.get("accepted", 0)),
+                                int(file_stats.get("total", 0)),
+                                int(file_stats.get("outside_area_or_mask", 0)),
+                                int(file_stats.get("outside_quality_time_or_nan", 0)),
+                                int(file_stats.get("outside_elevation_range", 0)),
+                                (
+                                    f" | reason={file_stats.get('file_reject_reason')}"
+                                    if file_stats.get("file_reject_reason")
+                                    else ""
+                                ),
+                                (
+                                    f" | detail={file_stats.get('file_reject_detail')}"
+                                    if file_stats.get("file_reject_detail")
+                                    else ""
+                                ),
+                            )
+                        if frame is not None:
+                            big_rows_list.append(frame)
+                    n_valid = len(big_rows_list)
+                except (ValueError, OSError, RuntimeError) as e:
+                    logger.error(
+                        f"Error collecting results for period {period_label}: {e}",
+                        exc_info=True,
+                    )
+                    big_rows_list = []
+
+                if n_valid > 0:
+                    final = pl.concat(big_rows_list, rechunk=False)  # .collect()
+                    logger.info("Starting to write partitions to disk for period %s", period_label)
+                    total_rows = write_partitions_to_disk(
+                        final_df=final,
+                        partition_columns=params.partition_columns,
+                        partition_xy_chunking=params.partition_xy_chunking,
+                        out_dir=params.out_dir,
+                        hive_mode=params.hive_mode,
+                    )
+
+                logger.info(f"Collected {n_valid} valid results for period {period_label}")
+
+                if n_valid == 0:
+                    status["empty_periods"].append(period_label)
+                    continue
+
+                status["years_ingested"].append(period_label)
+                status["years_files_ingested"].append(n_valid)
+                status["years_files_rejected"].append(n_files - n_valid)
                 status["years_rows_ingested"].append(total_rows)
-                status["total_l2_files_ingested"] += len(big_rows_list)
-                status["total_l2_files_rejected"] += len(file_and_date_year) - len(big_rows_list)
+                status["total_l2_files_ingested"] += n_valid
+                status["total_l2_files_rejected"] += n_files - n_valid
                 status["total_rows_ingested"] += total_rows
     except (OSError, ValueError) as e:
-        logger.error("Multiprocessing failed, exiting... %s", e)
+        logger.error("Multiprocessing failed: %s", e)
         sys.exit(1)
 
     return status
@@ -624,17 +825,27 @@ def get_data_and_status_multiprocessed(
 # --------------------------------------#
 
 
-def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking, out_dir):
+def write_partitions_to_disk(
+    final_df,
+    partition_columns,
+    partition_xy_chunking,
+    out_dir,
+    hive_mode=True,
+):
     """
-    Write  DataFrame of altimetry data to disk.
+    Write altimetry data to disk.
     Partitioned by ('year', 'month', 'x_part', 'y_part') or
     ('year', 'x_part', 'y_part')
 
+    Uses eager partitioning (in-memory) for fast writes.
+
     Args:
-        final_df (DataFrame): The final DataFrame to write.
+        final_df (DataFrame | LazyFrame): The data to write.
         partition_columns (list): List of columns to partition by.
         partition_xy_chunking (int): Chunking factor for spatial partitioning.
         out_dir (str): Full path to the output directory.
+        append (bool): If True, append via shared ParquetWriter per partition.
+        writer_cache (dict | None): Cache of open ParquetWriters keyed by output path.
 
     Returns:
         int: Total number of rows written to disk.
@@ -647,24 +858,45 @@ def write_partitions_to_disk(final_df, partition_columns, partition_xy_chunking,
             (pl.col("y_bin") / partition_xy_chunking).cast(pl.Int64).alias("y_part"),
         )
 
-    partitions = final_df.partition_by(partition_columns, as_dict=True)
+    if hive_mode:
 
-    total_rows = 0
-    for key, group in partitions.items():
-        subdir = os.path.join(
-            out_dir,
-            *[f"{group}={str(i)}" for group, i in zip(partition_columns, key)],
-        )
-        if not os.path.isdir(subdir):
-            os.makedirs(subdir, exist_ok=True)
+        def file_path_provider(args: pl.FileProviderArgs) -> str:
+            row = args.partition_keys.row(0, named=True)
+            sub_path = "/".join(f"{k}={v}" for k, v in row.items())
+            return f"{out_dir}/{sub_path}/data.parquet"
 
-        outfile = os.path.join(subdir, "data.parquet")
-        pq.write_table(
-            pa.Table.from_pandas(group.to_pandas()),
-            outfile,
+        total_rows = int(final_df.select(pl.len()).collect().item())
+
+        final_df.sink_parquet(
+            pl.PartitionBy(
+                out_dir,
+                key=partition_columns,
+                include_key=True,
+                file_path_provider=file_path_provider,
+            ),
             compression="zstd",
         )
-        total_rows += len(group)
+    else:
+        final_df = final_df.collect()
+
+        partitions = final_df.partition_by(partition_columns, as_dict=True)
+
+        total_rows = 0
+        for key, group in partitions.items():
+            subdir = os.path.join(
+                out_dir,
+                *[f"{group}={str(i)}" for group, i in zip(partition_columns, key)],
+            )
+            if not os.path.isdir(subdir):
+                os.makedirs(subdir, exist_ok=True)
+
+            outfile = os.path.join(subdir, "data.parquet")
+            pq.write_table(
+                pa.Table.from_pandas(group.to_pandas()),
+                outfile,
+                compression="zstd",
+            )
+            total_rows += len(group)
 
     return total_rows
 
