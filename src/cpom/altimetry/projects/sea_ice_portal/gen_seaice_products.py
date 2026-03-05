@@ -417,12 +417,10 @@ def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, pro
         length = len(df)
 
         # Output file path
-        out_filename = f"cpom_ntc_sea_ice_thickness_{date_str}_5km_sparse_grid_v{version:03d}.nc"
-        if hemisphere_name == "anto":
-            out_filename = (
-                f"cpom_ntc_{hemisphere_name}_sea_ice_thickness_"
-                f"{date_str}_5km_sparse_grid_v{version:03d}.nc"
-            )
+        out_filename = (
+            f"cpom_ntc_{hemisphere_name}_sea_ice_thickness_"
+            f"{date_str}_5km_sparse_grid_v{version:03d}.nc"
+        )
 
         year_out_dir = os.path.join(output_dir, str(year))
         out_path = os.path.join(year_out_dir, out_filename)
