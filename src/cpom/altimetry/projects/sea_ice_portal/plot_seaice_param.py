@@ -875,9 +875,9 @@ def main():
                     "alpha": 1.0,
                     "edgecolor": "lightgrey",
                 }
-                thisfontsize = 22
+                thisfontsize = 24
                 if len(si_param.long_name) > 25:
-                    thisfontsize = 16
+                    thisfontsize = 18
                 annotation_list.append(
                     Annotation(
                         0.21,
@@ -902,20 +902,36 @@ def main():
 
                 # Latency:
                 annotation_list.append(
-                    Annotation(0.02, 0.9, f"CPOM {latency}", fontsize=10, fontweight="normal")
+                    Annotation(0.02, 0.9, "CPOM NRT", fontsize=14, fontweight="normal")
                 )
                 # Latency:
                 annotation_list.append(
-                    Annotation(0.02, 0.88, "Sea Ice Processor", fontsize=10, fontweight="normal")
+                    Annotation(0.02, 0.88, "Sea Ice", fontsize=14, fontweight="normal")
+                )
+                # Latency:
+                annotation_list.append(
+                    Annotation(0.02, 0.86, "Processor", fontsize=14, fontweight="normal")
                 )
 
                 # Period:
                 annotation_list.append(
-                    Annotation(0.685, 0.91, "Latest:", fontsize=14, fontweight="normal")
+                    Annotation(0.685, 0.885, "Latest:", fontsize=14, fontweight="normal")
                 )
                 # Period:
                 annotation_list.append(
-                    Annotation(0.75, 0.91, f"{int(period)} days", fontsize=24, fontweight="bold")
+                    Annotation(
+                        0.76,
+                        0.885,
+                        f"{int(period)} days",
+                        fontsize=28,
+                        fontweight="bold",
+                        bbox={
+                            "boxstyle": "round",
+                            "facecolor": "white",
+                            "alpha": 1.0,
+                            "edgecolor": "lightgrey",
+                        },
+                    )
                 )
 
                 # Period:
@@ -924,7 +940,7 @@ def main():
                         0.03,
                         0.94,
                         "NRT",
-                        fontsize=24,
+                        fontsize=28,
                         fontweight="normal",
                         color="white",
                         bbox={
@@ -937,15 +953,15 @@ def main():
                 )
 
                 # Latency:
-                annotation_list.append(
-                    Annotation(
-                        0.685,
-                        0.87,
-                        f"Latency: {latency}",
-                        fontsize=14,
-                        fontweight="normal",
-                    )
-                )
+                # annotation_list.append(
+                #     Annotation(
+                #         0.685,
+                #         0.87,
+                #         f"Latency: {latency}",
+                #         fontsize=14,
+                #         fontweight="normal",
+                #     )
+                # )
 
                 # Start Date:
                 annotation_list.append(
