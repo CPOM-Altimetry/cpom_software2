@@ -93,6 +93,22 @@ def main():
         const=1,
     )
     parser.add_argument(
+        "--cartopy_land_filter",
+        "-c",
+        help="[optional] use cartopy land filter as well as global land mask",
+        action="store_const",
+        const=1,
+    )
+
+    parser.add_argument(
+        "--global_land_mask",
+        "-g",
+        help="[optional] use global land mask",
+        action="store_const",
+        const=1,
+    )
+
+    parser.add_argument(
         "--area",
         "-a",
         help=(
@@ -386,21 +402,21 @@ def main():
                 with open(along_track_thickness_file, "r", encoding="utf-8") as fp:
                     for count, line in enumerate(fp):
                         pass
-                print("Total Lines", count + 1)
+                print("Total Lines in along_track_thickness_file", count + 1)
 
             elif exists(gridded_thickness_file):
                 count = 0
                 with open(gridded_thickness_file, "r", encoding="utf-8") as fp:
                     for count, line in enumerate(fp):
                         pass
-                print("Total Lines", count + 1)
+                print("Total Lines in gridded_thickness_file", count + 1)
 
             elif exists(gridded_freeboard_file):
                 count = 0
                 with open(gridded_freeboard_file, "r", encoding="utf-8") as fp:
                     for count, line in enumerate(fp):
                         pass
-                print("Total Lines", count + 1)
+                print("Total Lines in gridded_freeboard_file", count + 1)
             else:
                 print("No data found for this month")
 
@@ -411,6 +427,9 @@ def main():
             for i, param in enumerate(all_si_params):
                 if args.param:
                     if param != args.param:
+                        continue
+                if args.south:
+                    if param == "WarrenSnowDepth":
                         continue
 
                 si_param = SIParams(param)
@@ -453,6 +472,8 @@ def main():
                 lats = pd_data["lat"]
                 lons = pd_data["lon"]
                 vals = pd_data["thickness"]
+
+                print("Number of thickness measurements: ", len(vals))
 
                 # ------------------------------------------------------------------------------------
                 # Read along-track parameter file
@@ -522,6 +543,8 @@ def main():
                     lats_alongtrack = []
                     lons_alongtrack = []
                     vals_alongtrack = []
+
+                print("Number of along track measurements: ", len(vals_alongtrack))
 
                 for i, area in enumerate(area_plot_list):
                     thisarea = Area(area)
@@ -657,7 +680,7 @@ def main():
                             "units": si_param.units,
                             "plot_size_scale_factor": PLOT_SCALE_FACTOR,
                             "plot_alpha": 1.0,
-                            "apply_area_mask_to_data": True,
+                            "apply_area_mask_to_data": not args.south,
                             "min_plot_range": si_param.plot_range_low,
                             "max_plot_range": si_param.plot_range_high,
                             "cmap_name": CMAP_NAME,
@@ -695,26 +718,39 @@ def main():
                     # Add a land mask to keep only points over ocean or sea ice
                     if len(lats) > 0:
                         # Level 1: global-land-mask
-                        ocean_mask_1 = globe.is_ocean(lats, lons)
-                        lats_ocean = lats[ocean_mask_1]
-                        lons_ocean = lons[ocean_mask_1]
-                        vals_ocean = vals[ocean_mask_1]
+                        if args.global_land_mask:
+                            ocean_mask_1 = globe.is_ocean(lats, lons)
+                            lats_ocean = lats[ocean_mask_1]
+                            lons_ocean = lons[ocean_mask_1]
+                            vals_ocean = vals[ocean_mask_1]
+                            print(
+                                "Measurements removed over broad land mask:", np.sum(~ocean_mask_1)
+                            )
+                        else:
+                            lats_ocean = lats
+                            lons_ocean = lons
+                            vals_ocean = vals
 
-                        # Level 2: Cartopy precision filter
-                        merged_land = unary_union(list(cfeature.LAND.geometries()))
-                        prep_land = shapely.prepared.prep(merged_land)
-                        points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
-                        ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+                        if args.cartopy_land_filter:
+                            # Level 2: Cartopy precision filter
+                            merged_land = unary_union(list(cfeature.LAND.geometries()))
+                            prep_land = shapely.prepared.prep(merged_land)
+                            points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                            ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
 
-                        filtered_lats = lats_ocean[ocean_mask_2]
-                        filtered_lons = lons_ocean[ocean_mask_2]
-                        filtered_vals = vals_ocean[ocean_mask_2]
+                            filtered_lats = lats_ocean[ocean_mask_2]
+                            filtered_lons = lons_ocean[ocean_mask_2]
+                            filtered_vals = vals_ocean[ocean_mask_2]
 
-                        print("Measurements removed over broad land mask:", np.sum(~ocean_mask_1))
-                        print(
-                            "Measurements removed over precision coastal mask:",
-                            np.sum(~ocean_mask_2),
-                        )
+                            print(
+                                "Measurements removed over precision coastal mask:",
+                                np.sum(~ocean_mask_2),
+                            )
+                        else:
+                            filtered_lats = lats_ocean
+                            filtered_lons = lons_ocean
+                            filtered_vals = vals_ocean
+
                     else:
                         filtered_lats = lats
                         filtered_lons = lons
@@ -727,7 +763,7 @@ def main():
                         "name": si_param.long_name,
                         "units": si_param.units,
                         "plot_size_scale_factor": PLOT_SCALE_FACTOR,
-                        "apply_area_mask_to_data": True,
+                        "apply_area_mask_to_data": not args.south,
                         "min_plot_range": si_param.plot_range_low,
                         "max_plot_range": si_param.plot_range_high,
                         "cmap_name": CMAP_NAME,
@@ -942,20 +978,31 @@ def main():
 
                 if len(lats) > 0:
                     # Level 1: global-land-mask
-                    ocean_mask_1 = globe.is_ocean(lats, lons)
-                    lats_ocean = lats[ocean_mask_1]
-                    lons_ocean = lons[ocean_mask_1]
-                    vals_ocean = vals[ocean_mask_1]
+                    if args.global_land_mask:
+                        ocean_mask_1 = globe.is_ocean(lats, lons)
+                        lats_ocean = lats[ocean_mask_1]
+                        lons_ocean = lons[ocean_mask_1]
+                        vals_ocean = vals[ocean_mask_1]
+                        print("Measurements removed over broad land mask:", np.sum(~ocean_mask_1))
+                    else:
+                        lats_ocean = lats
+                        lons_ocean = lons
+                        vals_ocean = vals
 
-                    # Level 2: Cartopy precision filter
-                    merged_land = unary_union(list(cfeature.LAND.geometries()))
-                    prep_land = shapely.prepared.prep(merged_land)
-                    points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
-                    ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+                    if args.cartopy_land_filter:
+                        # Level 2: Cartopy precision filter
+                        merged_land = unary_union(list(cfeature.LAND.geometries()))
+                        prep_land = shapely.prepared.prep(merged_land)
+                        points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                        ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
 
-                    filtered_lats = lats_ocean[ocean_mask_2]
-                    filtered_lons = lons_ocean[ocean_mask_2]
-                    filtered_vals = vals_ocean[ocean_mask_2]
+                        filtered_lats = lats_ocean[ocean_mask_2]
+                        filtered_lons = lons_ocean[ocean_mask_2]
+                        filtered_vals = vals_ocean[ocean_mask_2]
+                    else:
+                        filtered_lats = lats_ocean
+                        filtered_lons = lons_ocean
+                        filtered_vals = vals_ocean
                 else:
                     filtered_lats = lats
                     filtered_lons = lons
@@ -1130,20 +1177,31 @@ def main():
 
                 if len(lats) > 0:
                     # Level 1: global-land-mask
-                    ocean_mask_1 = globe.is_ocean(lats, lons)
-                    lats_ocean = lats[ocean_mask_1]
-                    lons_ocean = lons[ocean_mask_1]
-                    vals_ocean = vals[ocean_mask_1]
+                    if args.global_land_mask:
+                        ocean_mask_1 = globe.is_ocean(lats, lons)
+                        lats_ocean = lats[ocean_mask_1]
+                        lons_ocean = lons[ocean_mask_1]
+                        vals_ocean = vals[ocean_mask_1]
+                        print("Measurements removed over broad land mask:", np.sum(~ocean_mask_1))
+                    else:
+                        lats_ocean = lats
+                        lons_ocean = lons
+                        vals_ocean = vals
 
-                    # Level 2: Cartopy precision filter
-                    merged_land = unary_union(list(cfeature.LAND.geometries()))
-                    prep_land = shapely.prepared.prep(merged_land)
-                    points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
-                    ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
+                    if args.cartopy_land_filter:
+                        # Level 2: Cartopy precision filter
+                        merged_land = unary_union(list(cfeature.LAND.geometries()))
+                        prep_land = shapely.prepared.prep(merged_land)
+                        points = [Point(lon, lat) for lon, lat in zip(lons_ocean, lats_ocean)]
+                        ocean_mask_2 = np.array([not prep_land.contains(p) for p in points])
 
-                    filtered_lats = lats_ocean[ocean_mask_2]
-                    filtered_lons = lons_ocean[ocean_mask_2]
-                    filtered_vals = vals_ocean[ocean_mask_2]
+                        filtered_lats = lats_ocean[ocean_mask_2]
+                        filtered_lons = lons_ocean[ocean_mask_2]
+                        filtered_vals = vals_ocean[ocean_mask_2]
+                    else:
+                        filtered_lats = lats_ocean
+                        filtered_lons = lons_ocean
+                        filtered_vals = vals_ocean
                 else:
                     filtered_lats = lats
                     filtered_lons = lons
