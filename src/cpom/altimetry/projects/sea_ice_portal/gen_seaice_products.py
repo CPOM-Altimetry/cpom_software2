@@ -577,7 +577,7 @@ def main():
                 for m in [1, 2, 3, 4, 5, 10, 11, 12]:
                     tasks.append((args.year, m, True, False))
             if do_anto:
-                for m in [6, 7, 8, 9]:
+                for m in range(1, 13):
                     tasks.append((args.year, m, False, True))
         elif args.year is not None and args.month is not None:
             tasks.append((args.year, args.month, args.arco, args.anto))
