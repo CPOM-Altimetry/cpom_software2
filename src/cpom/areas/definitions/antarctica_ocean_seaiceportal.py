@@ -34,7 +34,7 @@ area_definition = {
     # --------------------------------------------
     "axes": [  # define plot axis position
         0.04,  # left
-        0.13,  # bottom
+        0.12,  # bottom
         0.757,  # width (axes fraction)
         0.757,  # height (axes fraction)
     ],

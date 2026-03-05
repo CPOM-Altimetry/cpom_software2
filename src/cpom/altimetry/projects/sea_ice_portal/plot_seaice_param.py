@@ -607,7 +607,7 @@ def main():
                         annotation_list.append(
                             Annotation(
                                 0.40 - 0.005 * (len(thisarea.long_name) - 6),
-                                0.90,
+                                0.89,
                                 f"{thisarea.long_name}",
                                 fontsize=15,
                                 fontweight="normal",
@@ -645,11 +645,21 @@ def main():
 
                     # Period:
                     annotation_list.append(
-                        Annotation(0.685, 0.88, "Month:", fontsize=12, fontweight="normal")
+                        Annotation(0.685, 0.86, "Month:", fontsize=12, fontweight="normal")
                     )
                     annotation_list.append(
                         Annotation(
-                            0.745, 0.87, f"{month:02d}/{args.year}", fontsize=28, fontweight="bold"
+                            0.765,
+                            0.85,
+                            f"{month:02d}/{args.year}",
+                            fontsize=34,
+                            fontweight="bold",
+                            bbox={
+                                "boxstyle": "round",
+                                "facecolor": "white",
+                                "alpha": 1.0,
+                                "edgecolor": "lightgrey",
+                            },
                         )
                     )
 
@@ -705,9 +715,10 @@ def main():
                         )
 
                     annotation_list.append(
-                        Annotation(
-                            0.685, 0.84, "Monthly Mean (5km grid)", fontsize=12, fontweight="normal"
-                        )
+                        Annotation(0.023, 0.84, "Monthly Mean", fontsize=22, fontweight="normal")
+                    )
+                    annotation_list.append(
+                        Annotation(0.023, 0.81, "(5km grid)", fontsize=16, fontweight="normal")
                     )
 
                     if archive_area == "arco":
