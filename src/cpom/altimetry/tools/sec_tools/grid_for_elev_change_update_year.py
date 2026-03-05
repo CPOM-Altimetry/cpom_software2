@@ -16,6 +16,7 @@ Output:
 import argparse
 import json
 import logging
+import os
 from functools import partial
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
@@ -156,6 +157,18 @@ def main():
         type=int,
         required=True,
         help="Year to update in the dataset (e.g., 2020)",
+    )
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=max(1, os.cpu_count() or 1),
+        help="Maximum worker processes for multiprocessing.",
+    )
+    parser.add_argument(
+        "--hive_mode",
+        action="store_true",
+        help="Writes partitions slower, "
+        "but lower memory footprint. May be needed for antarctica is2",
     )
     parser.add_argument(
         "--debug",
