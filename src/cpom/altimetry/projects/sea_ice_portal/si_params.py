@@ -41,7 +41,7 @@ class SIParams:  # pylint: disable=too-few-public-methods,too-many-instance-attr
         # ---------------------------------------------------------------------
         if param == "Thickness":
             self.plot_range_low = 0.0
-            self.plot_range_high = 3.0
+            self.plot_range_high = 4.0
             self.units = "m"
             self.long_name = "Sea Ice Thickness"
 
