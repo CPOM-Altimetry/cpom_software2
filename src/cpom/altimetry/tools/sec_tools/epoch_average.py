@@ -294,17 +294,13 @@ def get_epoch_lf(
                 )
             }
         )
-        # Get the end date and epoch number for each epoch
+        # Get the end date and absolute epoch number for each epoch
         .with_columns(
             (pl.col("epoch_lo_dt") + pl.duration(days=params.epoch_length)).alias("epoch_hi_dt"),
             pl.arange(0, pl.len()).alias("epoch_number"),
         )
         # Filter the epochs to only include those that overlap with the data time range
         .filter(pl.col("epoch_hi_dt") > data_mintime, pl.col("epoch_lo_dt") < data_maxtime)
-        # Assign epoch numbers after filtering
-        .with_columns(
-            pl.arange(0, pl.len()).alias("epoch_number"),
-        )
         # Calculate the midpoint datetime and fractional year of each epoch
         .with_columns(
             ((pl.col("epoch_lo_dt").cast(pl.Int64) + pl.col("epoch_hi_dt").cast(pl.Int64)) // 2)
@@ -386,24 +382,33 @@ def get_gia_correction_lf(
 def assign_epochs_lf(
     surface_fit_lf: pl.LazyFrame,
     epoch_lf: pl.LazyFrame,
+    epoch_start_dt: datetime,
+    epoch_length_days: int,
 ) -> pl.LazyFrame:
-    """Assign each surface-fit observation to an epoch interval.
-
-    Uses a range join to match time_dt against epoch boundaries, then computes
-    time deltas within each (cell, epoch) group.
+    """Assign each surface-fit observation to an epoch interval using arithmetic and join.
 
     Args:
         surface_fit_lf: Surface fit data with time_dt.
         epoch_lf: Epoch interval definitions.
+        epoch_start_dt: Start time of the first epoch.
+        epoch_length_days: Length of each epoch in days.
 
     Returns:
         Surface fit data with epoch assignments and time deltas.
     """
-    sf_with_epochs_lf = surface_fit_lf.join_where(
-        epoch_lf,
-        pl.col("time_dt") >= pl.col("epoch_lo_dt"),
-        pl.col("time_dt") < pl.col("epoch_hi_dt"),
-    ).filter(pl.col("epoch_number").is_not_null())
+    epoch_length_seconds = epoch_length_days * 86400
+
+    # Calculate absolute epoch number from the start date
+    # This replaces the expensive join_where non-equi join
+    sf_with_epochs_lf = surface_fit_lf.with_columns(
+        ((pl.col("time_dt") - epoch_start_dt).dt.total_seconds() / epoch_length_seconds)
+        .floor()
+        .cast(pl.Int64)
+        .alias("epoch_number")
+    )
+
+    # Join with the filtered epoch_lf to get epoch metadata and ensure within valid range
+    sf_with_epochs_lf = sf_with_epochs_lf.join(epoch_lf, on="epoch_number", how="inner")
 
     # Compute time delta from start of epoch within each cell
     sf_with_epochs_lf = sf_with_epochs_lf.with_columns(
@@ -521,6 +526,7 @@ def filter_surface_fit_lf(
 
 def get_sigma_clipped_stats(
     surface_fit_lf: pl.LazyFrame,
+    logger: logging.Logger,
     sigma: float = 3.0,
     max_iter: int = 5,
     group_by_columns: list[str] | None = None,
@@ -531,7 +537,8 @@ def get_sigma_clipped_stats(
     using the default parameters.
 
     Args:
-        lf (pl.LazyFrame): Input LazyFrame containing elevation and time data.
+        surface_fit_lf (pl.LazyFrame): Input LazyFrame containing elevation and time data.
+        logger (logging.Logger): Logger for progress messages.
         sigma (float): Number of standard deviations for clipping threshold. Default is 3.0.
         max_iter (int): Maximum number of clipping iterations. Default is 5.
         group_by_columns (list[str] | None): Columns to group by. Default is
@@ -552,7 +559,8 @@ def get_sigma_clipped_stats(
     if group_by_columns is None:
         group_by_columns = ["x_bin", "y_bin", "epoch_number"]
 
-    for _ in range(max_iter):
+    for i in range(max_iter):
+        logger.debug("Sigma-clipping iteration %d of %d", i + 1, max_iter)
         surface_fit_lf = (
             surface_fit_lf.with_columns(
                 pl.col("dh_corrected").median().over(group_by_columns).alias("dh_median"),
@@ -564,7 +572,11 @@ def get_sigma_clipped_stats(
             )
             .drop(["dh_median", "dh_std"])
         )
+        # To avoid an infinitely deep lazy plan which can cause hangs on large data,
+        # we periodically collect if max_iter is large, but for 5 its usually okay.
+        # However, to help debugging the hang, we'll keep it lazy but add the logs.
 
+    logger.debug("Grouping and aggregating clipped statistics")
     epoch_stats_lf = surface_fit_lf.group_by(group_by_columns).agg(
         [
             pl.col("dh_corrected").mean().alias("dh_ave"),
@@ -698,21 +710,27 @@ def process_partition(
         Epoch statistics LazyFrame.
     """
     # 1. Load surface fit
+    t0 = time.time()
     logger.info("Loading surface fit data")
     surface_fit_lf = pl.scan_parquet(params.parquet_glob).with_columns(
         (pl.lit(params.epoch_time) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
     )
 
     # 2. Assign epochs
-    logger.info("Assigning epochs")
-    surface_fit_lf = assign_epochs_lf(surface_fit_lf, epoch_lf)
+    t1 = time.time()
+    logger.info("Assigning epochs (took %.2fs)", t1 - t0)
+    # Get the start date of the first epoch for arithmetic assignment
+    epoch_start_dt = epoch_lf.select(pl.col("epoch_lo_dt").min()).collect().item()
+    surface_fit_lf = assign_epochs_lf(surface_fit_lf, epoch_lf, epoch_start_dt, params.epoch_length)
 
     # 3. Apply GIA correction
-    logger.info("Applying GIA correction (if provided)")
+    t2 = time.time()
+    logger.info("Applying GIA correction (if provided) (took %.2fs)", t2 - t1)
     surface_fit_lf = apply_gia_lf(surface_fit_lf, uplift_lf, logger)
 
     # 4. Filter bad surface fits
-    logger.info("Applying surface-fit quality filters")
+    t3 = time.time()
+    logger.info("Applying surface-fit quality filters (took %.2fs)", t3 - t2)
     surface_fit_lf = filter_surface_fit_lf(
         params,
         surface_fit_lf,
@@ -720,13 +738,17 @@ def process_partition(
     )
 
     # 5. Compute epoch statistics
-    logger.info("Computing sigma-clipped epoch statistics")
-    epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf)
+    t4 = time.time()
+    logger.info("Computing sigma-clipped epoch statistics (took %.2fs)", t4 - t3)
+    epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf, logger)
 
     # 6. Filter epochs by coverage
     if params.epoch_filter_threshold is not None:
+        t5 = time.time()
         logger.info(
-            "Filtering epochs by spatial coverage (threshold=%.2f)", params.epoch_filter_threshold
+            "Filtering epochs by spatial coverage (threshold=%.2f) (took %.2fs)",
+            params.epoch_filter_threshold,
+            t5 - t4,
         )
         epoch_stats_lf = filter_epochs_by_coverage_lf(
             epoch_stats_lf, threshold=params.epoch_filter_threshold
