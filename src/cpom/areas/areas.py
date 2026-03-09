@@ -270,7 +270,8 @@ class Area:
             "use_antarctica_medium_coastline", False
         )
         self.use_cartopy_coastline = area_definition.get("use_cartopy_coastline", None)
-        self.show_gridlines: bool = area_definition.get("show_gridlines", True)
+        self.show_land_overlay = area_definition.get("show_land_overlay", False)
+        self.show_gridlines = area_definition.get("show_gridlines", True)
         # Annotation
         self.varname_annotation_position_xy = area_definition.get(
             "varname_annotation_position_xy", (0.1, 0.95)

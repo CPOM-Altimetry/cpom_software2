@@ -160,6 +160,8 @@ class Polarplot:
         avif_settings: tuple[int, int] = (60, 4),
         webp_settings: tuple[int, int] = (80, 6),
         use_cmap_in_hist: bool = True,
+        figure_width: int = 0,
+        figure_height: int = 0,
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -237,6 +239,9 @@ class Polarplot:
         - `use_cmap_in_hist` (bool, default: True) : if True colour first
            histogram using plots cmap, otherwise just plot in single dark colour
 
+        - `figure_width` (int, optional, default: 10) : width of the figure in inches
+        - `figure_height` (int, optional, default: 10) : height of the figure in inches
+
         ### Raises
 
         - `ValueError`:
@@ -247,11 +252,25 @@ class Polarplot:
         # Default plot configuration
         # -----------------------------------------------------------------------------------------
 
+        # set default figure dimensions depending upon the map_only setting
+        # and if the figure width and height have been set in the function args
+        if map_only and figure_width == 0:
+            figure_width = 12
+
+        if map_only and figure_height == 0:
+            figure_height = 12
+
+        if not map_only and figure_width == 0:
+            figure_width = 12
+
+        if not map_only and figure_height == 0:
+            figure_height = 10
+
         # Default plot parameters. If these are set to None, then the equivalent settings
         # in self.thisarea are used instead if set
         plot_params = {
-            "fig_width": 12,
-            "fig_height": 10,
+            "fig_width": figure_width,
+            "fig_height": figure_height,
             "draw_axis_frame": False,  # (bool|None)
             #  alpha value transparency (alpha value) of background. Float between 0 and
             #   1, or list of floats for multiple backgrounds.
@@ -885,10 +904,9 @@ class Polarplot:
                 plot_filename = f"{output_dir}/param_{_ds_name_0}_{self.area}.png"
             else:
                 raise ValueError("Neither outputdir or output_file provided")
-            print("Saving plot", plot_filename, image_format)
             if f"{image_format}" not in plot_filename[-6:]:
                 plot_filename += f".{image_format}"
-            print("Saving plot to %s at %d dpi", plot_filename, dpi)
+            print(f"Saving plot to {plot_filename} at {dpi} dpi")
             if image_format == "avif":
                 # Save to an in-memory PNG
                 buf = io.BytesIO()
@@ -1220,6 +1238,8 @@ class Polarplot:
                 nan_lats,
                 marker=".",
                 c="r",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1236,6 +1256,8 @@ class Polarplot:
                 fv_lats,
                 marker=".",
                 c="orange",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1252,6 +1274,8 @@ class Polarplot:
                 outside_lats,
                 marker=".",
                 c="pink",
+                edgecolors="none",
+                antialiaseds=False,
                 s=36
                 * dataset_params.get(
                     "bad_data_minimap_val_scalefactor",
@@ -1261,7 +1285,9 @@ class Polarplot:
                 label=f"<|> {percent_outside:.2f}%",
             )
         if (nan_lons.size == 0) and (outside_lons.size == 0) and (fv_lons.size == 0):
-            ax_minimap.scatter([], [], marker=".", s=1, label="Bad Data")
+            ax_minimap.scatter(
+                [], [], marker=".", s=1, edgecolors="none", antialiaseds=False, label="Bad Data"
+            )
         ax_minimap.legend(
             loc="upper right", bbox_to_anchor=self.thisarea.bad_data_minimap_legend_pos
         )
@@ -1641,6 +1667,8 @@ class Polarplot:
                     marker=".",
                     c=flag_colors[flag_index],
                     s=scale_factor,
+                    edgecolors="none",
+                    antialiaseds=False,
                     transform=ccrs.PlateCarree(),
                     zorder=20,
                 )
@@ -1805,6 +1833,8 @@ class Polarplot:
                 cmap=new_cmap,
                 norm=norm,
                 s=scale_factor,
+                edgecolors="none",
+                antialiaseds=False,
                 alpha=plot_alpha,
                 transform=ccrs.PlateCarree(),
                 zorder=20,
@@ -1820,6 +1850,8 @@ class Polarplot:
                 c=np.ones_like(vals),
                 # cmap=thiscmap,
                 s=0,
+                edgecolors="none",
+                antialiaseds=False,
                 # vmin=minrange,
                 # vmax=maxrange,
                 alpha=0.0,

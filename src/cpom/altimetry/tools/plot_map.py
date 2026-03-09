@@ -63,6 +63,7 @@ import sys
 from typing import List
 
 import numpy as np
+from cmocean import cm  # pylint: disable=unused-import, no-member # noqa
 from matplotlib import use as use_headless
 from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 
@@ -468,6 +469,16 @@ def main(args):
         "-f",
         help=("[Optional] path of a single input netcdf file"),
         required=False,
+    )
+
+    parser.add_argument(
+        "--figure_size",
+        "-fs",
+        help=("[Optional] set the figure size (default is 12,10)"),
+        required=False,
+        default=(12, 10),
+        type=int,
+        nargs=2,
     )
 
     parser.add_argument(
@@ -1095,12 +1106,16 @@ def main(args):
     if args.hillshade:
         area_overrides["apply_hillshade_to_vals"] = True
 
+    log.info("figure size: %s", str(args.figure_size))
+
     Polarplot(def_area, area_overrides=area_overrides, area_file=args.areadef_file).plot_points(
         *datasets,
         output_file=args.out_file,
         output_dir=args.out_dir,
         map_only=args.map_only,
         dpi=85 if not args.dpi else args.dpi,
+        figure_width=args.figure_size[0],
+        figure_height=args.figure_size[1],
     )
 
     log.info("plot completed ok")

@@ -36,8 +36,6 @@ pyarrow = "^22.0.0"
 statsmodels = "^0.14.6"
 envyaml = "^1.10.211231"
 
-
-
 [tool.poetry.group.dev.dependencies]
 black = "*"
 pre-commit = "*"
