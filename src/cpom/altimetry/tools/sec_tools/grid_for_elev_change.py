@@ -54,6 +54,8 @@ from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
 
+# pylint: disable=too-many-lines,too-many-locals,too-many-statements
+
 # --------------------------------------#
 # Set up Functions                     #
 # --------------------------------------#
@@ -66,10 +68,8 @@ def parse_arguments(args):
     Return:
         parser.parse_args(args)
     """
-    parser = argparse.ArgumentParser(
-        description="""Convert altimetry data into partitioned parquet
-        with ragged layout, storing each partition in a single file"""
-    )
+    parser = argparse.ArgumentParser(description="""Convert altimetry data into partitioned parquet
+        with ragged layout, storing each partition in a single file""")
     parser.add_argument(
         "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
     )
@@ -586,7 +586,7 @@ def process_file(
                 fill_missing_poca=fill_missing_poca,
                 strict_missing=collect_stats,
             )
-            if collect_stats:
+            if collect_stats and stats is not None:
                 total = int(len(variable_dict["latitude"]))
                 stats["total"] = total
 
@@ -594,7 +594,7 @@ def process_file(
             variable_dict, n_inside, area_mask = get_spatial_filter(
                 variable_dict, this_area, this_mask
             )
-            if collect_stats:
+            if collect_stats and stats is not None:
                 stats["outside_area_or_mask"] = max(0, total - int(n_inside))
 
             if n_inside < 2:  # Number of points needed to get the heading
