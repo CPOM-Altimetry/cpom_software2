@@ -41,6 +41,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -947,14 +948,17 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
     ds_dict = vars(dataset)
     params_dict = vars(params)
 
+    output: dict[str, Any] = {}
     if ".yml" in params.dataset or ".yaml" in params.dataset:
-        output = {
-            **{k: v for k, v in params_dict.items() if k not in ds_dict.keys()},
-            **ds_dict,
-            **status,
-        }
+        output.update(
+            {
+                **{k: v for k, v in params_dict.items() if k not in ds_dict.keys()},
+                **ds_dict,
+                **status,
+            }
+        )
     else:
-        output = {**params_dict, **status}
+        output.update({**params_dict, **status})
 
     output["grid_xmin"] = thisgrid.minxm
     output["grid_ymin"] = thisgrid.minym
