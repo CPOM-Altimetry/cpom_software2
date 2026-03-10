@@ -34,7 +34,11 @@ from typing import Optional
 
 
 def convert_timeseries(
-    outdir: str, mission: str, area: str, select_basin: Optional[int | str] = None
+    outdir: str,
+    mission: str,
+    area: str,
+    select_basin: Optional[int | str] = None,
+    ignore_zeros: bool = False,
 ) -> None:
     """Convert sea ice portal txt timeseries files to csv format.
 
@@ -44,6 +48,7 @@ def convert_timeseries(
         area (str): Area name (e.g., 'arco' or 'anto').
         select_basin (Optional[int | str]): Specific basin index (0-17)
             to process, or None to process all basins.
+        ignore_zeros (bool): If True, lines where the value is zero are ignored.
     """
     timeseries_types = ["thickness", "volume", "mass"]
     mission_upper = mission.upper()
@@ -65,7 +70,7 @@ def convert_timeseries(
             print(f"Reading: {filename}")
             output_dir = os.path.join(outdir, mission, area)
             os.makedirs(output_dir, exist_ok=True)
-            output_filename = os.path.join(output_dir, f"timeseries_{basin}_{ts_type}.csv")
+            output_filename = os.path.join(output_dir, f"timeseries_{basin:02d}_{ts_type}.csv")
 
             try:
                 with open(filename, "r", encoding="utf-8") as file:
@@ -87,6 +92,14 @@ def convert_timeseries(
 
                             if not datestr.isdigit() or len(datestr) != 8:
                                 continue
+
+                            # Check for zero value if ignore_zeros is set
+                            if ignore_zeros:
+                                try:
+                                    if float(value) == 0.0:
+                                        continue
+                                except ValueError:
+                                    pass
 
                             year = datestr[0:4]
                             month = datestr[4:6]
@@ -117,6 +130,12 @@ if __name__ == "__main__":
         help="directory to store output .csv files",
         default="/Users/alanmuir/Sites/seaice/sidata",
     )
+    parser.add_argument(
+        "--ignore-zeros",
+        "-iz",
+        action="store_true",
+        help="ignore lines where thickness, mass or volume are zero",
+    )
 
     args = parser.parse_args()
 
@@ -125,4 +144,4 @@ if __name__ == "__main__":
     if not args.area:
         sys.exit("--area missing, = arco, anto")
 
-    convert_timeseries(args.outdir, args.mission, args.area, args.basin)
+    convert_timeseries(args.outdir, args.mission, args.area, args.basin, args.ignore_zeros)
