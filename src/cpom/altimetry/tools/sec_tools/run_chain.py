@@ -30,6 +30,7 @@ Usage: python run_chain.py --config path/to/config.yml
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -237,14 +238,14 @@ def main(args):
         for mission in config["missions_to_run"]:
             for algo in config[mission]["algorithm_list"]:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
-                args = build_args(algo, config, mission)
-                print(f"Running {algo}.py with args: {args}")
-                subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
+                cmd = ["python", f"{algo}.py"] + args + debug_args
+                print(f"Running: {shlex.join(cmd)}")
+                subprocess.run(cmd, check=True)
     else:
         for algo in config["algorithm_list"]:
-            args = build_args(algo, config)
-            print(f"Running {algo}.py with args: {args}")
-            subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
+            cmd = ["python", f"{algo}.py"] + args + debug_args
+            print(f"Running: {shlex.join(cmd)}")
+            subprocess.run(cmd, check=True)
 
 
 if __name__ == "__main__":
