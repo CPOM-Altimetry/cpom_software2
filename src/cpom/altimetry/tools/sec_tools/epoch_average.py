@@ -652,8 +652,12 @@ def get_metadata_json(
         start_time (float): Start time of the processing.
     """
     print("Writing metadata file")
+
     epochs_with_data = stats.select("epoch_number").collect().n_unique()
     ncells_with_data = stats.select(["x_bin", "y_bin"]).collect().n_unique()
+
+    print("epochs_with_data", epochs_with_data)
+    print("ncells_with_data", ncells_with_data)
 
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
