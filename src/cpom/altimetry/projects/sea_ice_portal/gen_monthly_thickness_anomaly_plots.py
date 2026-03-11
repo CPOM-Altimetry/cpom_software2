@@ -136,8 +136,8 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         "units": "m",
         "plot_size_scale_factor": PLOT_SCALE_FACTOR,
         "apply_area_mask_to_data": not args.south,
-        "min_plot_range": -1.5,
-        "max_plot_range": 1.5,
+        "min_plot_range": -1.0,
+        "max_plot_range": 1.0,
         "cmap_name": CMAP_NAME,
         "cmap_over_color": CMAP_OVER_COLOR,
         "cmap_under_color": CMAP_UNDER_COLOR,
@@ -245,9 +245,9 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         )
 
     # Output directory per requirement
-    archive_outdir = os.path.join(args.outdir, mission.upper(), archive_area, "archive")
+    archive_outdir = os.path.join(args.outdir, mission.lower(), "ntc", archive_area, str(year))
     os.makedirs(archive_outdir, exist_ok=True)
-    output_file = f"{year}{month:02d}.thk_anomalies"
+    output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_anomaly_grid"
 
     Polarplot(area_name).plot_points(
         dataset,
