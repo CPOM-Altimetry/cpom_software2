@@ -239,9 +239,8 @@ def main(args):
             for algo in config[mission]["algorithm_list"]:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
                 args = build_args(algo, config, mission)
-                print(f"Running {algo}.py with args: {args}")
                 full_cmd = ["python", f"{algo}.py"] + args + debug_args
-                print(f"Running: {shlex.join(full_cmd)}")
+                print(f"Running command: {shlex.join(full_cmd)}")
                 subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
     else:
         for algo in config["algorithm_list"]:
