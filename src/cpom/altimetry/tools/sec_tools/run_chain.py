@@ -238,14 +238,16 @@ def main(args):
         for mission in config["missions_to_run"]:
             for algo in config[mission]["algorithm_list"]:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
-                cmd = ["python", f"{algo}.py"] + args + debug_args
-                print(f"Running: {shlex.join(cmd)}")
-                subprocess.run(cmd, check=True)
+                args = build_args(algo, config, mission)
+                print(f"Running {algo}.py with args: {args}")
+                full_cmd = ["python", f"{algo}.py"] + args + debug_args
+                print(f"Running: {shlex.join(full_cmd)}")
+                subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
     else:
         for algo in config["algorithm_list"]:
-            cmd = ["python", f"{algo}.py"] + args + debug_args
-            print(f"Running: {shlex.join(cmd)}")
-            subprocess.run(cmd, check=True)
+            args = build_args(algo, config)
+            print(f"Running {algo}.py with args: {args}")
+            subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
 
 
 if __name__ == "__main__":
