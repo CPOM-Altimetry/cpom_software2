@@ -131,6 +131,11 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
     # Plotting setup
     area_name = "antarctica_ocean_seaiceportal" if args.south else "arctic0_seaiceportal"
 
+    min_plot_range = -1.0
+    max_plot_range = 1.0
+    if args.south:
+        min_plot_range = -1.5
+        max_plot_range = 1.5
     dataset = {
         "lats": lats,
         "lons": lons,
@@ -139,8 +144,8 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         "units": "m",
         "plot_size_scale_factor": PLOT_SCALE_FACTOR,
         "apply_area_mask_to_data": not args.south,
-        "min_plot_range": -1.0,
-        "max_plot_range": 1.0,
+        "min_plot_range": min_plot_range,
+        "max_plot_range": max_plot_range,
         "cmap_name": CMAP_NAME,
         "cmap_over_color": CMAP_OVER_COLOR,
         "cmap_under_color": CMAP_UNDER_COLOR,
@@ -177,7 +182,7 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         annotation_list.append(
             Annotation(
                 0.40 - 0.005 * (len(area_obj.long_name) - 6),
-                0.88,
+                0.89,
                 area_obj.long_name,
                 fontsize=15,
                 fontweight="normal",
@@ -185,8 +190,8 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         )
         annotation_list.append(
             Annotation(
-                0.5 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
-                0.88,
+                0.49 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
+                0.89,
                 "(5km grid)",
                 fontsize=12,
                 fontweight="normal",
