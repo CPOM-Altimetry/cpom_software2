@@ -136,12 +136,12 @@ def save_anomaly_plot(
 
     annotation_list = []
     annotation_list.append(
-        Annotation(0.027, 0.965, "Parameter:", fontsize=10, fontweight="normal", color="grey")
+        Annotation(0.027, 0.915, "Parameter:", fontsize=10, fontweight="normal", color="grey")
     )
     annotation_list.append(
         Annotation(
             0.03,
-            0.925,
+            0.895,
             param_name,
             bbox={
                 "boxstyle": "round",
