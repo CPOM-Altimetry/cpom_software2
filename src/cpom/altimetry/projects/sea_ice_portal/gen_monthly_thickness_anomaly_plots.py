@@ -134,8 +134,8 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
     min_plot_range = -1.0
     max_plot_range = 1.0
     if args.south:
-        min_plot_range = -1.5
-        max_plot_range = 1.5
+        min_plot_range = -2.0
+        max_plot_range = 2.0
     dataset = {
         "lats": lats,
         "lons": lons,
