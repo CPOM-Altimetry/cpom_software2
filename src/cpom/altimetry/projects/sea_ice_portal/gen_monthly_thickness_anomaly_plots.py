@@ -97,17 +97,20 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         print("Empty cache, nothing to plot.")
         return
 
-    # Filter cache for this specific month across all years to build the baseline
+    # Filter cache for this specific month across all years >= 2011 to build the baseline
     month_cache = cache_df[cache_df["month"] == month]
 
-    baseline_df = month_cache[month_cache["year"] <= year]
+    baseline_df = month_cache[month_cache["year"] >= 2011]
     if baseline_df.empty:
         print(f"No baseline data available for {month:02d}.")
         return
 
-    # Calculate mean thickness per grid cell
+    # Calculate mean thickness per grid cell using all available years in the cache
     mean_thickness = baseline_df.groupby(["x_bin", "y_bin"])["thickness"].mean().reset_index()
     mean_thickness.rename(columns={"thickness": "mean_thickness"}, inplace=True)
+
+    # Get the latest year in the baseline for the annotation
+    end_year_baseline = baseline_df["year"].max()
 
     # Get the current month data
     current_month_df = month_cache[month_cache["year"] == year]
@@ -217,10 +220,10 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
 
     month_str = calendar.month_name[month]
     annotation_list.append(
-        Annotation(0.023, 0.81, f"(Diff. to the {month_str}", fontsize=12, fontweight="normal")
+        Annotation(0.023, 0.81, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
     )
     annotation_list.append(
-        Annotation(0.023, 0.78, "Mean Thickness)", fontsize=12, fontweight="normal")
+        Annotation(0.023, 0.78, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
     )
     # Add reference annotations common to plot_seaice_param
     if not args.south:
@@ -276,11 +279,29 @@ def update_cache(args, grid_area, archive_area, mission):
         cache_df = pd.DataFrame(columns=["year", "month", "x_bin", "y_bin", "thickness", "count"])
         existing_months = set()
 
-    # Generate list of (year, month) from Nov 2010 to args.year, args.month (or Dec)
+    # Scan the archive directory to find the actual latest year and month
+    archive_dir = f"/cpnet/altimetry/seaice/{mission.upper()}/{archive_area}/archive/"
+    latest_year = 2010
+    latest_month = 12
+
+    if os.path.exists(archive_dir):
+        map_files = [f for f in os.listdir(archive_dir) if f.endswith(".map")]
+        if map_files:
+            years_months = []
+            for f in map_files:
+                try:
+                    ym = int(f.replace(".map", ""))
+                    years_months.append((ym // 100, ym % 100))
+                except ValueError:
+                    continue
+            if years_months:
+                latest_year, latest_month = max(years_months)
+
+    # Generate list of (year, month) from Nov 2010 to latest available data
     start_year = 2010
     start_month = 11
-    end_year = args.year
-    end_month = args.month if args.month else 12
+    end_year = latest_year
+    end_month = latest_month
 
     new_data_frames = []
 
