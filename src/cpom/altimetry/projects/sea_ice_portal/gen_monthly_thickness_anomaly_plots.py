@@ -185,7 +185,7 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         )
         annotation_list.append(
             Annotation(
-                0.43 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
+                0.45 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
                 0.88,
                 "(5km grid)",
                 fontsize=12,
@@ -234,22 +234,28 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
             },
         )
     )
+    month_str = calendar.month_name[month]
+
     if args.south:
         annotation_list.append(
-            Annotation(0.023, 0.85, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+            Annotation(0.023, 0.86, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+        )
+        annotation_list.append(
+            Annotation(0.023, 0.83, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
+        )
+        annotation_list.append(
+            Annotation(0.023, 0.81, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
         )
     else:
         annotation_list.append(
             Annotation(0.023, 0.84, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
         )
-
-    month_str = calendar.month_name[month]
-    annotation_list.append(
-        Annotation(0.023, 0.81, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
-    )
-    annotation_list.append(
-        Annotation(0.023, 0.78, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
-    )
+        annotation_list.append(
+            Annotation(0.023, 0.81, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
+        )
+        annotation_list.append(
+            Annotation(0.023, 0.78, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
+        )
     # Add reference annotations common to plot_seaice_param
     if not args.south:
         annotation_list.append(
