@@ -173,24 +173,44 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
     )
 
     area_obj = Area(area_name)
-    annotation_list.append(
-        Annotation(
-            0.40 - 0.005 * (len(area_obj.long_name) - 6),
-            0.87,
-            area_obj.long_name,
-            fontsize=15,
-            fontweight="normal",
+    if args.south:
+        annotation_list.append(
+            Annotation(
+                0.40 - 0.005 * (len(area_obj.long_name) - 6),
+                0.88,
+                area_obj.long_name,
+                fontsize=15,
+                fontweight="normal",
+            )
         )
-    )
-    annotation_list.append(
-        Annotation(
-            0.40 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
-            0.87,
-            "(5km grid)",
-            fontsize=12,
-            fontweight="normal",
+        annotation_list.append(
+            Annotation(
+                0.43 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
+                0.88,
+                "(5km grid)",
+                fontsize=12,
+                fontweight="normal",
+            )
         )
-    )
+    else:
+        annotation_list.append(
+            Annotation(
+                0.40 - 0.005 * (len(area_obj.long_name) - 6),
+                0.87,
+                area_obj.long_name,
+                fontsize=15,
+                fontweight="normal",
+            )
+        )
+        annotation_list.append(
+            Annotation(
+                0.40 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
+                0.87,
+                "(5km grid)",
+                fontsize=12,
+                fontweight="normal",
+            )
+        )
 
     annotation_list.append(
         Annotation(0.685, 0.96, f"Mission: {mission_longname}", fontsize=18, fontweight="bold")
