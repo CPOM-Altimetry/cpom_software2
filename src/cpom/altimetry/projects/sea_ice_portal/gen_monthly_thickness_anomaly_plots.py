@@ -91,56 +91,39 @@ def get_mission_longname(mission):
     return mission.upper()
 
 
-def process_month(args, year, month, cache_df, grid_area, archive_area, mission, mission_longname):
-    """Calculate the anomaly and save the plot for a specific month."""
-    if cache_df is None or cache_df.empty:
-        print("Empty cache, nothing to plot.")
-        return
-
-    # Filter cache for this specific month across all years >= 2011 to build the baseline
-    month_cache = cache_df[cache_df["month"] == month]
-
-    baseline_df = month_cache[month_cache["year"] >= 2011]
-    if baseline_df.empty:
-        print(f"No baseline data available for {month:02d}.")
-        return
-
-    # Calculate mean thickness per grid cell using all available years in the cache
-    mean_thickness = baseline_df.groupby(["x_bin", "y_bin"])["thickness"].mean().reset_index()
-    mean_thickness.rename(columns={"thickness": "mean_thickness"}, inplace=True)
-
-    # Get the latest year in the baseline for the annotation
-    end_year_baseline = baseline_df["year"].max()
-
-    # Get the current month data
-    current_month_df = month_cache[month_cache["year"] == year]
-    if current_month_df.empty:
-        print(f"No data available for the target month {year}-{month:02d}.")
-        return
-
-    # Merge to calculate anomaly
-    anomaly_df = pd.merge(current_month_df, mean_thickness, on=["x_bin", "y_bin"], how="inner")
-    anomaly_df["anomaly"] = anomaly_df["thickness"] - anomaly_df["mean_thickness"]
-
-    # Convert x_bin, y_bin back to lat, lon
-    lats, lons = grid_area.get_cellcentre_lat_lon_from_col_row(
-        col=anomaly_df["x_bin"].values, row=anomaly_df["y_bin"].values
-    )
-    vals = anomaly_df["anomaly"].values
-
+def save_anomaly_plot(
+    args,
+    year,
+    month,
+    archive_area,
+    mission,
+    mission_longname,
+    lats,
+    lons,
+    vals,
+    plot_type,
+    baseline_desc,
+    baseline_years="",
+):
+    """
+    Common function to render and save an anomaly/difference plot.
+    """
     # Plotting setup
-    area_name = "antarctica_ocean_seaiceportal" if args.south else "arctic0_seaiceportal"
+    area_name = "antarctic_ocean_seaiceportal" if args.south else "arctic0_seaiceportal"
 
     min_plot_range = -1.0
     max_plot_range = 1.0
     if args.south:
         min_plot_range = -2.0
         max_plot_range = 2.0
+
+    param_name = "Thickness Anomaly" if plot_type == "anomaly" else "Thickness Difference"
+
     dataset = {
         "lats": lats,
         "lons": lons,
         "vals": vals,
-        "name": "Thickness Anomaly",
+        "name": param_name,
         "units": "m",
         "plot_size_scale_factor": PLOT_SCALE_FACTOR,
         "apply_area_mask_to_data": not args.south,
@@ -159,7 +142,7 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         Annotation(
             0.03,
             0.925,
-            "Thickness Anomaly",
+            param_name,
             bbox={
                 "boxstyle": "round",
                 "facecolor": "aliceblue",
@@ -239,28 +222,49 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
             },
         )
     )
-    month_str = calendar.month_name[month]
 
+    if plot_type == "anomaly":
+        header_text = "Monthly Mean Anomaly"
+    elif plot_type == "prev_year":
+        header_text = "Annual Month Difference"
+    elif plot_type == "prev_month":
+        header_text = "Diff. to Previous Month"
+    else:
+        header_text = "Monthly Difference"
+    full_baseline_text = (
+        f"({baseline_desc} {baseline_years})" if baseline_years else f"({baseline_desc})"
+    )
     if args.south:
         annotation_list.append(
-            Annotation(0.023, 0.86, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+            Annotation(0.023, 0.86, header_text, fontsize=18, fontweight="normal")
         )
-        annotation_list.append(
-            Annotation(0.023, 0.83, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
-        )
-        annotation_list.append(
-            Annotation(0.023, 0.81, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
-        )
+        if plot_type == "anomaly":
+            annotation_list.append(
+                Annotation(0.023, 0.83, f"({baseline_desc}", fontsize=12, fontweight="normal")
+            )
+            annotation_list.append(
+                Annotation(0.023, 0.81, f"{baseline_years})", fontsize=12, fontweight="normal")
+            )
+        else:
+            annotation_list.append(
+                Annotation(0.023, 0.83, full_baseline_text, fontsize=12, fontweight="normal")
+            )
     else:
         annotation_list.append(
-            Annotation(0.023, 0.84, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+            Annotation(0.023, 0.84, header_text, fontsize=18, fontweight="normal")
         )
-        annotation_list.append(
-            Annotation(0.023, 0.81, f"(Diff. to {month_str} mean", fontsize=12, fontweight="normal")
-        )
-        annotation_list.append(
-            Annotation(0.023, 0.78, f"2011-{end_year_baseline})", fontsize=12, fontweight="normal")
-        )
+        if plot_type == "anomaly":
+            annotation_list.append(
+                Annotation(0.023, 0.81, f"({baseline_desc}", fontsize=12, fontweight="normal")
+            )
+            annotation_list.append(
+                Annotation(0.023, 0.78, f"{baseline_years})", fontsize=12, fontweight="normal")
+            )
+        else:
+            annotation_list.append(
+                Annotation(0.023, 0.81, full_baseline_text, fontsize=12, fontweight="normal")
+            )
+
     # Add reference annotations common to plot_seaice_param
     if not args.south:
         annotation_list.append(
@@ -283,10 +287,18 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
             Annotation(0.37, 0.195, "60°S", fontsize=9, fontweight="normal", color="#626262")
         )
 
-    # Output directory per requirement
+    # Output directory architecture
     archive_outdir = os.path.join(args.outdir, mission.lower(), "ntc", archive_area, str(year))
     os.makedirs(archive_outdir, exist_ok=True)
-    output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_anomaly_grid"
+
+    if plot_type == "anomaly":
+        output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_anomaly_grid"
+    elif plot_type == "prev_year":
+        output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_diff_prev_year_grid"
+    elif plot_type == "prev_month":
+        output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_diff_prev_month_grid"
+    else:
+        output_file = f"{mission}_{archive_area}_{year}{month:02d}_thickness_diff_grid"
 
     Polarplot(area_name).plot_points(
         dataset,
@@ -299,7 +311,104 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         image_format="webp",
         dpi=DPI,
     )
-    print(f"Saved anomaly plot to {archive_outdir}/{output_file}.webp")
+    print(f"Saved {plot_type} plot to {os.path.join(archive_outdir, output_file)}.webp")
+
+
+def process_month(args, year, month, cache_df, grid_area, archive_area, mission, mission_longname):
+    """Calculate the anomaly and save the plot types for a specific month."""
+    if cache_df is None or cache_df.empty:
+        print("Empty cache, nothing to plot.")
+        return
+
+    # 1. Prepare Target Month Data
+    target_month_df = cache_df[(cache_df["year"] == year) & (cache_df["month"] == month)]
+    if target_month_df.empty:
+        print(f"No data available for the target month {year}-{month:02d}.")
+        return
+
+    # Helper to calculate differences
+    def get_lat_lon_diff(current_df, baseline_df_full):
+        # Calculate mean thickness for the baseline period
+        mean_baseline = (
+            baseline_df_full.groupby(["x_bin", "y_bin"])["thickness"].mean().reset_index()
+        )
+        mean_baseline.rename(columns={"thickness": "mean_thickness"}, inplace=True)
+
+        merged = pd.merge(current_df, mean_baseline, on=["x_bin", "y_bin"], how="inner")
+        merged["diff"] = merged["thickness"] - merged["mean_thickness"]
+
+        lats, lons = grid_area.get_cellcentre_lat_lon_from_col_row(
+            col=merged["x_bin"].values, row=merged["y_bin"].values
+        )
+        return lats, lons, merged["diff"].values
+
+    # --- PLOT A: Long-term Anomaly (2011 to latest) ---
+    month_cache = cache_df[cache_df["month"] == month]
+    baseline_lt = month_cache[month_cache["year"] >= 2011]
+    if not baseline_lt.empty:
+        end_year_baseline = baseline_lt["year"].max()
+        lats, lons, vals = get_lat_lon_diff(target_month_df, baseline_lt)
+        save_anomaly_plot(
+            args,
+            year,
+            month,
+            archive_area,
+            mission,
+            mission_longname,
+            lats,
+            lons,
+            vals,
+            "anomaly",
+            baseline_desc=f"Diff. to {calendar.month_name[month]} mean",
+            baseline_years=f"2011-{end_year_baseline}",
+        )
+
+    # --- PLOT B: Difference to Previous Year ---
+    baseline_py = month_cache[month_cache["year"] == (year - 1)]
+    if not baseline_py.empty:
+        lats, lons, vals = get_lat_lon_diff(target_month_df, baseline_py)
+        save_anomaly_plot(
+            args,
+            year,
+            month,
+            archive_area,
+            mission,
+            mission_longname,
+            lats,
+            lons,
+            vals,
+            "prev_year",
+            baseline_desc=f"Diff. to {calendar.month_name[month]}",
+            baseline_years=f"{year - 1}",
+        )
+    else:
+        print(f"No data for previous year ({year - 1}) to calculate difference.")
+
+    # --- PLOT C: Difference to Previous Month ---
+    if month == 1:
+        prev_month, prev_year = 12, year - 1
+    else:
+        prev_month, prev_year = month - 1, year
+
+    baseline_pm = cache_df[(cache_df["year"] == prev_year) & (cache_df["month"] == prev_month)]
+    if not baseline_pm.empty:
+        lats, lons, vals = get_lat_lon_diff(target_month_df, baseline_pm)
+        save_anomaly_plot(
+            args,
+            year,
+            month,
+            archive_area,
+            mission,
+            mission_longname,
+            lats,
+            lons,
+            vals,
+            "prev_month",
+            baseline_desc=f"Diff. to {calendar.month_name[prev_month]}",
+            baseline_years=f"{prev_year}",
+        )
+    else:
+        print(f"No data for previous month ({prev_year}-{prev_month:02d}) to calculate difference.")
 
 
 def update_cache(args, grid_area, archive_area, mission):
