@@ -185,7 +185,7 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
         )
         annotation_list.append(
             Annotation(
-                0.45 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
+                0.5 - 0.005 * (len(area_obj.long_name) - 6) + 0.06,
                 0.88,
                 "(5km grid)",
                 fontsize=12,
