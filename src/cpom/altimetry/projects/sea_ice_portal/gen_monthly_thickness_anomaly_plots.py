@@ -234,9 +234,14 @@ def process_month(args, year, month, cache_df, grid_area, archive_area, mission,
             },
         )
     )
-    annotation_list.append(
-        Annotation(0.023, 0.84, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
-    )
+    if args.south:
+        annotation_list.append(
+            Annotation(0.023, 0.85, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+        )
+    else:
+        annotation_list.append(
+            Annotation(0.023, 0.84, "Monthly Mean Anomaly", fontsize=18, fontweight="normal")
+        )
 
     month_str = calendar.month_name[month]
     annotation_list.append(
