@@ -135,9 +135,9 @@ def save_anomaly_plot(
     }
 
     annotation_list = []
-    annotation_list.append(
-        Annotation(0.027, 0.915, "Parameter:", fontsize=10, fontweight="normal", color="grey")
-    )
+    # annotation_list.append(
+    #     Annotation(0.027, 0.915, "Parameter:", fontsize=10, fontweight="normal", color="grey")
+    # )
     annotation_list.append(
         Annotation(
             0.03,
