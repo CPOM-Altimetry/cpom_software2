@@ -109,7 +109,7 @@ def save_anomaly_plot(
     Common function to render and save an anomaly/difference plot.
     """
     # Plotting setup
-    area_name = "antarctic_ocean_seaiceportal" if args.south else "arctic0_seaiceportal"
+    area_name = "antarctica_ocean_seaiceportal" if args.south else "arctic0_seaiceportal"
 
     min_plot_range = -1.0
     max_plot_range = 1.0
