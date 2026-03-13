@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from cpom.altimetry.tools.sec_tools.run_chain import build_args, get_algorithms_to_run
+from cpom.altimetry.tools.sec_tools.run_chain import (
+    build_args,
+    get_algorithms_to_run,
+)
 
 
 def test_build_args_accepts_empty_root_algo_section(tmp_path: Path) -> None:
@@ -36,6 +39,37 @@ def test_build_args_accepts_empty_root_algo_section(tmp_path: Path) -> None:
     assert "--out_dir" in args
     assert str(Path(config["base_out"]) / "ais_cs2" / "epoch_average") in args
     assert str(metadata_file) in args
+
+
+def test_build_args_resolves_in_step_from_mission_override_when_root_is_empty(
+    tmp_path: Path,
+) -> None:
+    """Build in_dir from the mission override of a
+    referenced step when the root section is empty."""
+
+    config: dict[str, Any] = {
+        "base_out": str(tmp_path / "outputs"),
+        "epoch_average": None,
+        "calculate_dhdt": {"out_folder_name": "single_mission_dhdt"},
+        "cs2": {
+            "algorithm_list": ["epoch_average", "calculate_dhdt"],
+            "base_folder": "ais_cs2",
+            "epoch_average": {
+                "out_folder_name": "epoch_average",
+                "epoch_length": 140,
+            },
+            "calculate_dhdt": {
+                "in_step": "epoch_average",
+            },
+        },
+    }
+
+    args = build_args("calculate_dhdt", config, "cs2")
+
+    assert "--in_dir" in args
+    assert str(Path(config["base_out"]) / "ais_cs2" / "epoch_average") in args
+    assert "--out_dir" in args
+    assert str(Path(config["base_out"]) / "ais_cs2" / "single_mission_dhdt") in args
 
 
 def test_get_algorithms_to_run_starts_at_requested_algorithm() -> None:

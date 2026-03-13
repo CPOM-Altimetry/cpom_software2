@@ -129,6 +129,30 @@ def get_algorithms_to_run(algorithm_list, start_alg=None):
     return list(algorithm_list[algorithm_list.index(start_alg) :])
 
 
+def get_merged_algo_config(config, algo, mission=None):
+    """Return root config merged with any mission-specific override for one algorithm."""
+
+    root_algo_config = config.get(algo) or {}
+    if not isinstance(root_algo_config, dict):
+        raise TypeError(f"Config section '{algo}' must be a mapping, got {type(root_algo_config)}")
+    algo_config = root_algo_config.copy()
+
+    mission_config = config.get(mission) if mission else None
+    if mission_config is None:
+        mission_config = {}
+    if not isinstance(mission_config, dict):
+        raise TypeError(f"Mission config '{mission}' must be a mapping, got {type(mission_config)}")
+
+    mission_algo_config = mission_config.get(algo) or {}
+    if not isinstance(mission_algo_config, dict):
+        raise TypeError(
+            f"Mission override section '{mission}.{algo}' must be a mapping, "
+            f"got {type(mission_algo_config)}"
+        )
+    algo_config.update(mission_algo_config)
+    return algo_config, mission_config
+
+
 def build_args(algo, config, mission=None):
     """
     Build complete command-line arguments for an algorithm from merged configuration.
@@ -158,24 +182,7 @@ def build_args(algo, config, mission=None):
     Returns:
         list: Complete list of command-line argument strings.
     """
-    root_algo_config = config.get(algo) or {}
-    if not isinstance(root_algo_config, dict):
-        raise TypeError(f"Config section '{algo}' must be a mapping, got {type(root_algo_config)}")
-    algo_config = root_algo_config.copy()
-
-    mission_config = config.get(mission) if mission else None
-    if mission_config is None:
-        mission_config = {}
-    if not isinstance(mission_config, dict):
-        raise TypeError(f"Mission config '{mission}' must be a mapping, got {type(mission_config)}")
-
-    mission_algo_config = mission_config.get(algo) or {}
-    if not isinstance(mission_algo_config, dict):
-        raise TypeError(
-            f"Mission override section '{mission}.{algo}' must be a mapping, "
-            f"got {type(mission_algo_config)}"
-        )
-    algo_config.update(mission_algo_config)
+    algo_config, mission_config = get_merged_algo_config(config, algo, mission)
 
     # Convert to CLI args
     args = dict_to_cli_args(algo_config)
@@ -184,7 +191,8 @@ def build_args(algo, config, mission=None):
     if get_auto_path(algo):
         # Input directory
         if "in_dir" not in algo_config and "in_step" in algo_config:
-            in_dir = build_path(config["base_out"], base_folder, config[algo_config["in_step"]])
+            in_step_config, _ = get_merged_algo_config(config, algo_config["in_step"], mission)
+            in_dir = build_path(config["base_out"], base_folder, in_step_config)
             args.extend(["--in_dir", str(in_dir)])
 
         # Output directory
