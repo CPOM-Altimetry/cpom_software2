@@ -110,8 +110,6 @@ cs2:
     basin_structure: False
 
   dhdt_plots:
-    in_dir: "single_mission_dhdt" 
-    out_dir: "single_mission_dhdt_plots" 
     in_step: calculate_dhdt   # Uses output from calculate_dhdt
     out_folder_name: dhdt_plots
     parquet_glob: "dhdt.parquet"
