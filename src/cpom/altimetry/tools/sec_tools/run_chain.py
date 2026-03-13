@@ -114,6 +114,21 @@ def get_auto_path(algo):
     return algo not in ["grid_for_elev_change_update_year"]
 
 
+def get_algorithms_to_run(algorithm_list, start_alg=None):
+    """Return the algorithm sub-list starting at start_alg, if provided."""
+
+    if start_alg is None:
+        return list(algorithm_list)
+
+    if start_alg not in algorithm_list:
+        raise ValueError(
+            f"Start algorithm '{start_alg}' not found in algorithm list: "
+            f"{', '.join(algorithm_list)}"
+        )
+
+    return list(algorithm_list[algorithm_list.index(start_alg) :])
+
+
 def build_args(algo, config, mission=None):
     """
     Build complete command-line arguments for an algorithm from merged configuration.
@@ -235,6 +250,14 @@ def main(args):
             " specific missions). Comma-separated list of missions to run, e.g. --mission cs2,env"
         ),
     )
+    parser.add_argument(
+        "--start_alg",
+        "-sa",
+        help=(
+            "Optional algorithm name to start processing from. Any earlier algorithms in the "
+            "configured algorithm list are skipped."
+        ),
+    )
     parsed_args = parser.parse_args(args)
 
     yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
@@ -250,14 +273,26 @@ def main(args):
             config["missions_to_run"] = [m.strip() for m in parsed_args.missions.split(",")]
             print(f"Overriding missions_to_run with: {config['missions_to_run']}")
         for mission in config["missions_to_run"]:
-            for algo in config[mission]["algorithm_list"]:
+            try:
+                algorithms_to_run = get_algorithms_to_run(
+                    config[mission]["algorithm_list"], parsed_args.start_alg
+                )
+            except ValueError as exc:
+                parser.error(f"{exc} (mission: {mission})")
+            for algo in algorithms_to_run:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
                 args = build_args(algo, config, mission)
                 full_cmd = ["python", f"{algo}.py"] + args + debug_args
                 print(f"Running command: {shlex.join(full_cmd)}")
                 subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
     else:
-        for algo in config["algorithm_list"]:
+        try:
+            algorithms_to_run = get_algorithms_to_run(
+                config["algorithm_list"], parsed_args.start_alg
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        for algo in algorithms_to_run:
             args = build_args(algo, config)
             print(f"Running {algo}.py with args: {args}")
             subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)

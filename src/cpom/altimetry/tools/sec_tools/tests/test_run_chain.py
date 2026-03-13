@@ -3,7 +3,9 @@
 from pathlib import Path
 from typing import Any
 
-from cpom.altimetry.tools.sec_tools.run_chain import build_args
+import pytest
+
+from cpom.altimetry.tools.sec_tools.run_chain import build_args, get_algorithms_to_run
 
 
 def test_build_args_accepts_empty_root_algo_section(tmp_path: Path) -> None:
@@ -34,3 +36,24 @@ def test_build_args_accepts_empty_root_algo_section(tmp_path: Path) -> None:
     assert "--out_dir" in args
     assert str(Path(config["base_out"]) / "ais_cs2" / "epoch_average") in args
     assert str(metadata_file) in args
+
+
+def test_get_algorithms_to_run_starts_at_requested_algorithm() -> None:
+    """Skip earlier algorithms when a valid starting algorithm is provided."""
+
+    algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
+
+    assert get_algorithms_to_run(algorithm_list, "epoch_average") == [
+        "epoch_average",
+        "calculate_dhdt",
+        "dhdt_plots",
+    ]
+
+
+def test_get_algorithms_to_run_raises_for_unknown_algorithm() -> None:
+    """Reject a start algorithm that is not present in the configured algorithm list."""
+
+    algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
+
+    with pytest.raises(ValueError, match="Start algorithm 'clip_to_basins' not found"):
+        get_algorithms_to_run(algorithm_list, "clip_to_basins")
