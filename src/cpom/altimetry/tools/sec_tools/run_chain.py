@@ -143,17 +143,29 @@ def build_args(algo, config, mission=None):
     Returns:
         list: Complete list of command-line argument strings.
     """
-    # Get algorithm configuration
-    algo_config = config[algo].copy()
-    # Get the mission overrides for the algorithm if they exist
-    if algo in config[mission]:
-        # Add / Replace with mission-specific parameters
-        algo_config.update(config[mission][algo])
+    root_algo_config = config.get(algo) or {}
+    if not isinstance(root_algo_config, dict):
+        raise TypeError(f"Config section '{algo}' must be a mapping, got {type(root_algo_config)}")
+    algo_config = root_algo_config.copy()
+
+    mission_config = config.get(mission) if mission else None
+    if mission_config is None:
+        mission_config = {}
+    if not isinstance(mission_config, dict):
+        raise TypeError(f"Mission config '{mission}' must be a mapping, got {type(mission_config)}")
+
+    mission_algo_config = mission_config.get(algo) or {}
+    if not isinstance(mission_algo_config, dict):
+        raise TypeError(
+            f"Mission override section '{mission}.{algo}' must be a mapping, "
+            f"got {type(mission_algo_config)}"
+        )
+    algo_config.update(mission_algo_config)
 
     # Convert to CLI args
     args = dict_to_cli_args(algo_config)
 
-    base_folder = config[mission]["base_folder"] if mission else None
+    base_folder = mission_config.get("base_folder") if mission else None
     if get_auto_path(algo):
         # Input directory
         if "in_dir" not in algo_config and "in_step" in algo_config:
@@ -169,13 +181,13 @@ def build_args(algo, config, mission=None):
     if requires_grid_metadata(algo):
         metadata = None
 
-        if "grid_info_json" in config[mission]:
-            metadata = Path(config[mission]["grid_info_json"])
+        if "grid_info_json" in mission_config:
+            metadata = Path(mission_config["grid_info_json"])
         elif "in_dir" in algo_config:
             metadata = Path(algo_config["in_dir"]) / "metadata.json"
         elif mission and "grid_for_elev_change" in config:
             grid_path = build_path(
-                config["base_out"], config[mission]["base_folder"], config["grid_for_elev_change"]
+                config["base_out"], mission_config["base_folder"], config["grid_for_elev_change"]
             )
             metadata = grid_path / "metadata.json"
 
