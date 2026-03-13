@@ -52,14 +52,10 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(
-        description=(
-            """
+    parser = argparse.ArgumentParser(description="""
         Processor to take an epoch-averaged dh and 
         calculate surface elevation change rate in each grid cell, for given time limits.
-        """
-        )
-    )
+        """)
     # I/O Arguments
     parser.add_argument(
         "--in_dir",
@@ -179,6 +175,34 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
 # ----------------------------------------------
 
 
+def _has_glob_magic(path_pattern: str) -> bool:
+    """Return True if the path pattern contains shell-style glob syntax."""
+
+    return any(char in path_pattern for char in "*?[]")
+
+
+def resolve_input_parquet_path(in_path: Path, parquet_glob: str, logger: logging.Logger) -> str:
+    """Resolve the parquet input pattern, expanding partitioned epoch-average outputs."""
+
+    requested_path = in_path / parquet_glob
+    if _has_glob_magic(parquet_glob):
+        return str(requested_path)
+
+    metadata_file = in_path / "epoch_avg_meta.json"
+    if metadata_file.exists():
+        with open(metadata_file, "r", encoding="utf-8") as f_meta:
+            metadata = json.load(f_meta)
+        if metadata.get("partitioned") is True:
+            resolved_path = in_path / "**" / parquet_glob
+            logger.info(
+                "Input metadata indicates partitioned epoch-average output; scanning %s",
+                resolved_path,
+            )
+            return str(resolved_path)
+
+    return str(requested_path)
+
+
 def get_start_end_dates_for_calculation(
     input_df: pl.LazyFrame, dhdt_start: str | None, dhdt_end: str | None, dh_time_var: str
 ) -> tuple[datetime, datetime]:
@@ -220,7 +244,15 @@ def get_start_end_dates_for_calculation(
         ]
     ).collect()
 
-    return result["min_time"][0], result["max_time"][0]
+    start_time = result["min_time"][0]
+    end_time = result["max_time"][0]
+    if start_time is None or end_time is None:
+        raise ValueError(
+            f"No non-null values found in '{dh_time_var}' for dh/dt calculation. "
+            "Check --in_dir/--parquet_glob and whether the selected parquet files contain data."
+        )
+
+    return start_time, end_time
 
 
 def get_period_limits_df(
@@ -269,8 +301,7 @@ def get_period_limits_df(
         dhdt_period_value = (dhdt_end - dhdt_start).days / 365.25
     else:
         con = duckdb.connect()
-        usable_periods = con.execute(
-            f"""
+        usable_periods = con.execute(f"""
             WITH periods AS (
                 SELECT 
                     period_lo, 
@@ -282,8 +313,7 @@ def get_period_limits_df(
                 {_parse_period_string(step_length, True)} ) AS t(period_lo)
             )
             SELECT * FROM periods
-        """
-        ).pl()
+        """).pl()
 
         dhdt_period_parsed = _parse_period_string(dhdt_period)
         assert isinstance(dhdt_period_parsed, float)  # Type narrowing for mypy
@@ -315,8 +345,7 @@ def get_input_df(
     con = duckdb.connect()
     con.register("epoch_avg_df", input_df)
     con.register("usable_periods", dhdt_periods_df)
-    dh_input = con.execute(
-        f"""
+    dh_input = con.execute(f"""
         SELECT 
             a.*, 
             b.*,
@@ -325,8 +354,7 @@ def get_input_df(
             ON a.{dh_time_var} BETWEEN b.period_lo AND b.period_hi
         WHERE b.period_lo IS NOT NULL AND b.period_hi IS NOT NULL
         AND b.period_id IS NOT NULL
-    """
-    ).pl()
+    """).pl()
     con.close()
     return dh_input
 
@@ -644,8 +672,9 @@ def main(args: list[str]) -> None:
     # Loop through each basin/root dataset and execute processing workflow
     for in_path, out_path, basin in paths:
         # 1. Read epoch-averaged elevation data from Parquet files
-        logger.info("Processing data in %s", in_path / params.parquet_glob)
-        input_df = pl.scan_parquet(in_path / params.parquet_glob).select(base_columns)
+        input_path = resolve_input_parquet_path(in_path, params.parquet_glob, logger)
+        logger.info("Processing data in %s", input_path)
+        input_df = pl.scan_parquet(input_path).select(base_columns)
 
         out_path.mkdir(parents=True, exist_ok=True)
         logger.info("Output directory:  %s ", out_path)

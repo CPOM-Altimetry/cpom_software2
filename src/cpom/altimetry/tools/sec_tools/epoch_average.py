@@ -382,7 +382,7 @@ def get_gia_correction_lf(
 def assign_epochs_lf(
     surface_fit_lf: pl.LazyFrame,
     epoch_lf: pl.LazyFrame,
-    epoch_start_dt: datetime,
+    epoch_origin_dt: datetime,
     epoch_length_days: int,
 ) -> pl.LazyFrame:
     """Assign each surface-fit observation to an epoch interval using arithmetic and join.
@@ -390,7 +390,7 @@ def assign_epochs_lf(
     Args:
         surface_fit_lf: Surface fit data with time_dt.
         epoch_lf: Epoch interval definitions.
-        epoch_start_dt: Start time of the first epoch.
+        epoch_origin_dt: Datetime used for epoch number zero.
         epoch_length_days: Length of each epoch in days.
 
     Returns:
@@ -401,7 +401,7 @@ def assign_epochs_lf(
     # Calculate absolute epoch number from the start date
     # This replaces the expensive join_where non-equi join
     sf_with_epochs_lf = surface_fit_lf.with_columns(
-        ((pl.col("time_dt") - epoch_start_dt).dt.total_seconds() / epoch_length_seconds)
+        ((pl.col("time_dt") - epoch_origin_dt).dt.total_seconds() / epoch_length_seconds)
         .floor()
         .cast(pl.Int64)
         .alias("epoch_number")
@@ -418,6 +418,22 @@ def assign_epochs_lf(
     )
 
     return sf_with_epochs_lf
+
+
+def infer_epoch_origin_dt(epoch_lf: pl.LazyFrame, epoch_length_days: int) -> datetime:
+    """Infer the datetime used for epoch number zero from a filtered epoch table."""
+
+    epoch_bounds = epoch_lf.select(
+        pl.col("epoch_lo_dt").min().alias("first_epoch_lo_dt"),
+        pl.col("epoch_number").min().alias("first_epoch_number"),
+    ).collect()
+
+    first_epoch_lo_dt = epoch_bounds["first_epoch_lo_dt"][0]
+    first_epoch_number = epoch_bounds["first_epoch_number"][0]
+    if first_epoch_lo_dt is None or first_epoch_number is None:
+        raise ValueError("Cannot infer epoch origin from an empty epoch table.")
+
+    return first_epoch_lo_dt - timedelta(days=first_epoch_number * epoch_length_days)
 
 
 def apply_gia_lf(
@@ -621,15 +637,23 @@ def filter_epochs_by_coverage_lf(epoch_stats_lf: pl.LazyFrame, threshold: float)
 # ----------------------- #
 # Data output functions  #
 # ----------------------- #
-def write_epoch_stats_lf(epoch_stats_lf: pl.LazyFrame, output_path: Path) -> None:
+def write_epoch_stats_lf(
+    epoch_stats_lf: pl.LazyFrame, output_path: Path, logger: logging.Logger | None = None
+) -> None:
     """Write epoch statistics to parquet file.
 
     Args:
         epoch_stats_lf: Epoch statistics LazyFrame.
         output_path: Output parquet file path.
+        logger: Optional logger for write progress messages.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    if logger is not None:
+        logger.info("Materializing epoch statistics to %s", output_path)
     epoch_stats_lf.sink_parquet(output_path, compression="zstd")
+    if logger is not None:
+        logger.info("Finished writing epoch statistics in %.2fs", time.time() - t0)
 
 
 def get_metadata_json(
@@ -690,6 +714,7 @@ def get_metadata_json(
 # ----------------------- #
 def process_partition(
     params: argparse.Namespace,
+    parquet_glob: str,
     epoch_lf: pl.LazyFrame,
     uplift_lf: pl.LazyFrame | None,
     logger: logging.Logger,
@@ -716,16 +741,17 @@ def process_partition(
     # 1. Load surface fit
     t0 = time.time()
     logger.info("Loading surface fit data")
-    surface_fit_lf = pl.scan_parquet(params.parquet_glob).with_columns(
+    surface_fit_lf = pl.scan_parquet(parquet_glob).with_columns(
         (pl.lit(params.epoch_time) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
     )
 
     # 2. Assign epochs
     t1 = time.time()
     logger.info("Assigning epochs (took %.2fs)", t1 - t0)
-    # Get the start date of the first epoch for arithmetic assignment
-    epoch_start_dt = epoch_lf.select(pl.col("epoch_lo_dt").min()).collect().item()
-    surface_fit_lf = assign_epochs_lf(surface_fit_lf, epoch_lf, epoch_start_dt, params.epoch_length)
+    epoch_origin_dt = infer_epoch_origin_dt(epoch_lf, params.epoch_length)
+    surface_fit_lf = assign_epochs_lf(
+        surface_fit_lf, epoch_lf, epoch_origin_dt, params.epoch_length
+    )
 
     # 3. Apply GIA correction
     t2 = time.time()
@@ -743,7 +769,7 @@ def process_partition(
 
     # 5. Compute epoch statistics
     t4 = time.time()
-    logger.info("Computing sigma-clipped epoch statistics (took %.2fs)", t4 - t3)
+    logger.info("Prepared sigma-clipped epoch statistics lazy plan in %.2fs", t4 - t3)
     epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf, logger)
 
     # 6. Filter epochs by coverage
@@ -808,9 +834,10 @@ def main(args: list[str] | None = None) -> None:
     )
 
     for in_dir, out_dir in paths:
+        base_parquet_glob = params.parquet_glob
         # Build epoch intervals once per basin/dataset
         logger.info("Get epoch intervals for %s", in_dir)
-        epoch_lf = get_epoch_lf(params, f"{in_dir}/x_part=*/y_part=*/{params.parquet_glob}", logger)
+        epoch_lf = get_epoch_lf(params, f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}", logger)
 
         params.grid_params_glob = f"{in_dir}/{params.grid_params_parquet_glob}"
 
@@ -819,19 +846,25 @@ def main(args: list[str] | None = None) -> None:
                 logger.info(
                     "Processing partition x_part=%s, y_part=%s", row["x_part"], row["y_part"]
                 )
-                params.parquet_glob = (
-                    f"{in_dir}/x_part={row['x_part']}/y_part={row['y_part']}/{params.parquet_glob}"
+                partition_parquet_glob = (
+                    f"{in_dir}/x_part={row['x_part']}/y_part={row['y_part']}/{base_parquet_glob}"
                 )
 
                 epoch_stats_lf = process_partition(
                     params,
+                    partition_parquet_glob,
                     epoch_lf,
                     uplift_lf,
                     logger,
                 )
 
-                output_path = out_dir / "epoch_average.parquet"
-                write_epoch_stats_lf(epoch_stats_lf, output_path)
+                output_path = (
+                    out_dir
+                    / f"x_part={row['x_part']}"
+                    / f"y_part={row['y_part']}"
+                    / "epoch_average.parquet"
+                )
+                write_epoch_stats_lf(epoch_stats_lf, output_path, logger)
                 logger.info("Wrote partition results to %s", output_path)
 
             # Write metadata once after all partitions - scan all written files for accurate stats
@@ -847,21 +880,24 @@ def main(args: list[str] | None = None) -> None:
 
         else:
             logger.info("Processing all data.")
-            params.parquet_glob = f"{in_dir}/x_part=*/y_part=*/{params.parquet_glob}"
+            parquet_glob = f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}"
 
             epoch_stats_lf = process_partition(
                 params,
+                parquet_glob,
                 epoch_lf,
                 uplift_lf,
                 logger,
             )
 
             output_path = out_dir / "epoch_average.parquet"
-            write_epoch_stats_lf(epoch_stats_lf, output_path)
+            write_epoch_stats_lf(epoch_stats_lf, output_path, logger)
             logger.info("Wrote combined results to %s", output_path)
 
+            logger.info("Computing metadata from written parquet")
+            written_stats_lf = pl.scan_parquet(str(output_path))
             get_metadata_json(
-                stats=epoch_stats_lf,
+                stats=written_stats_lf,
                 args=params,
                 grid_meta=grid_meta,
                 start_time=start_time,

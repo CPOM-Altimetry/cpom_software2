@@ -182,6 +182,8 @@ def build_args(algo, config, mission=None):
         # Only add if metadata file exists
         if metadata and metadata.exists():
             args.extend(["--grid_info_json", str(metadata)])
+        else:
+            print(f"Metadata file not found: {metadata}")
 
     return args
 
