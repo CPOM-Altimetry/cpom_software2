@@ -114,19 +114,35 @@ def get_auto_path(algo):
     return algo not in ["grid_for_elev_change_update_year"]
 
 
-def get_algorithms_to_run(algorithm_list, start_alg=None):
-    """Return the algorithm sub-list starting at start_alg, if provided."""
+def get_algorithms_to_run(algorithm_list, start_alg=None, end_alg=None):
+    """Return the algorithm sub-list bounded by start_alg/end_alg, if provided."""
 
-    if start_alg is None:
-        return list(algorithm_list)
+    start_index = 0
+    end_index = len(algorithm_list)
 
-    if start_alg not in algorithm_list:
+    if start_alg is not None:
+        if start_alg not in algorithm_list:
+            raise ValueError(
+                f"Start algorithm '{start_alg}' not found in algorithm list: "
+                f"{', '.join(algorithm_list)}"
+            )
+        start_index = algorithm_list.index(start_alg)
+
+    if end_alg is not None:
+        if end_alg not in algorithm_list:
+            raise ValueError(
+                f"End algorithm '{end_alg}' not found in algorithm list: "
+                f"{', '.join(algorithm_list)}"
+            )
+        end_index = algorithm_list.index(end_alg) + 1
+
+    if start_index >= end_index:
         raise ValueError(
-            f"Start algorithm '{start_alg}' not found in algorithm list: "
-            f"{', '.join(algorithm_list)}"
+            f"Start algorithm '{start_alg}' must come before or equal to end algorithm "
+            f"'{end_alg}' in the algorithm list."
         )
 
-    return list(algorithm_list[algorithm_list.index(start_alg) :])
+    return list(algorithm_list[start_index:end_index])
 
 
 def get_merged_algo_config(config, algo, mission=None):
@@ -266,6 +282,14 @@ def main(args):
             "configured algorithm list are skipped."
         ),
     )
+    parser.add_argument(
+        "--end_alg",
+        "-ea",
+        help=(
+            "Optional algorithm name to stop processing at. Any later algorithms in the "
+            "configured algorithm list are skipped."
+        ),
+    )
     parsed_args = parser.parse_args(args)
 
     yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
@@ -283,7 +307,7 @@ def main(args):
         for mission in config["missions_to_run"]:
             try:
                 algorithms_to_run = get_algorithms_to_run(
-                    config[mission]["algorithm_list"], parsed_args.start_alg
+                    config[mission]["algorithm_list"], parsed_args.start_alg, parsed_args.end_alg
                 )
             except ValueError as exc:
                 parser.error(f"{exc} (mission: {mission})")
@@ -296,7 +320,7 @@ def main(args):
     else:
         try:
             algorithms_to_run = get_algorithms_to_run(
-                config["algorithm_list"], parsed_args.start_alg
+                config["algorithm_list"], parsed_args.start_alg, parsed_args.end_alg
             )
         except ValueError as exc:
             parser.error(str(exc))

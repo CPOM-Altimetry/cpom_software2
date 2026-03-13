@@ -77,11 +77,33 @@ def test_get_algorithms_to_run_starts_at_requested_algorithm() -> None:
 
     algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
 
-    assert get_algorithms_to_run(algorithm_list, "epoch_average") == [
+    assert get_algorithms_to_run(algorithm_list, start_alg="epoch_average") == [
         "epoch_average",
         "calculate_dhdt",
         "dhdt_plots",
     ]
+
+
+def test_get_algorithms_to_run_stops_at_requested_algorithm() -> None:
+    """Skip later algorithms when a valid ending algorithm is provided."""
+
+    algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
+
+    assert get_algorithms_to_run(algorithm_list, end_alg="calculate_dhdt") == [
+        "surface_fit",
+        "epoch_average",
+        "calculate_dhdt",
+    ]
+
+
+def test_get_algorithms_to_run_can_run_single_algorithm() -> None:
+    """Allow start and end to be the same algorithm to run only that step."""
+
+    algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
+
+    assert get_algorithms_to_run(
+        algorithm_list, start_alg="calculate_dhdt", end_alg="calculate_dhdt"
+    ) == ["calculate_dhdt"]
 
 
 def test_get_algorithms_to_run_raises_for_unknown_algorithm() -> None:
@@ -90,4 +112,13 @@ def test_get_algorithms_to_run_raises_for_unknown_algorithm() -> None:
     algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
 
     with pytest.raises(ValueError, match="Start algorithm 'clip_to_basins' not found"):
-        get_algorithms_to_run(algorithm_list, "clip_to_basins")
+        get_algorithms_to_run(algorithm_list, start_alg="clip_to_basins")
+
+
+def test_get_algorithms_to_run_raises_when_start_is_after_end() -> None:
+    """Reject incompatible start/end bounds."""
+
+    algorithm_list = ["surface_fit", "epoch_average", "calculate_dhdt", "dhdt_plots"]
+
+    with pytest.raises(ValueError, match="must come before or equal to end algorithm"):
+        get_algorithms_to_run(algorithm_list, start_alg="dhdt_plots", end_alg="epoch_average")
