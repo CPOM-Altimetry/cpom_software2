@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------------#
 # Example Run Control file to produce single mission Antarctic Ice Sheet wide 
-# dhdt estimates and plots for ENVISAT (FDR4ALT)
+# dhdt estimates and plots for ERS-2 (FDR4ALT)
 #
 # This covers just a subset of optional steps and parameters available. 
 # See the documentation for full details of command line arguments and 
@@ -39,7 +39,7 @@ base_out: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/"
 #-------------------------------------------------------------------------------------#
 
 # Defining the first mission: env steps to be run
-env:
+e2:
   # Algorithm chain: No grid_for_elev_change because grid already exists
   algorithm_list:
       - grid_for_elev_change       # Step 1: Create new grid from raw data
