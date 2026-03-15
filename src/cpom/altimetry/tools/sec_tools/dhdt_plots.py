@@ -30,7 +30,7 @@ from cpom.altimetry.tools.sec_tools.epoch_average_plots import (
     get_objects,
     get_shapefile,
 )
-from cpom.areas.area_plot import Polarplot
+from cpom.areas.area_plot import Annotation, Polarplot
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -294,6 +294,18 @@ def plot_icesheet(
         end_time_str = str(end_time).replace(":", "-").replace(" ", "_")
         Path(params.out_dir).mkdir(parents=True, exist_ok=True)
 
+        annotation_list = []
+        annotation_list.append(
+            Annotation(
+                0.8,
+                0.9,
+                f"Mission: {params.mission_name}",
+                None,
+                12,
+                fontweight="normal",
+            )
+        )
+
         Polarplot(this_area.name, area_overrides={"show_bad_data_map": False}).plot_points(
             {
                 "name": f"dhdt_{period_id}",
@@ -311,6 +323,7 @@ def plot_icesheet(
                 "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
                 "cmap_extend": "both",  # Optional: Extend colormap
             },
+            annotation_list=annotation_list,
             output_dir=str(Path(params.out_dir)),
             output_file=f"dhdt_period_{period_id}_{start_time_str}-{end_time_str}.png",
         )
