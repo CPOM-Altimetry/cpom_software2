@@ -68,7 +68,7 @@ s3b:
     gridarea: 'antarctica'
     binsize: 5000
     mask_name: 'antarctica_bedmachine_v2_grid_mask'
-    data_input_dir: "${CPDATA_DIR}/SATS/RA/s3b/L2/THEMATIC/BC005/LI"
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/S3B/L2/THEMATIC/BC005/LI"
     dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3b_thematic_bc005.yml"
 
 
