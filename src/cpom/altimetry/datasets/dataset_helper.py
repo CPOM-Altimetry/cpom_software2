@@ -254,6 +254,7 @@ class DatasetHelper(DatasetConfig):
 
         valid_files = []
         for file in Path(search_dir).rglob(self.search_pattern):
+            log.debug("file %s", file)
             date_obj = self.get_product_startdate_from_filename(file)
             if not isinstance(date_obj, datetime):
                 continue
