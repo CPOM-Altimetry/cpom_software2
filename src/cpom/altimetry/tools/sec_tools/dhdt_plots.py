@@ -294,15 +294,22 @@ def plot_icesheet(
         end_time_str = str(end_time).replace(":", "-").replace(" ", "_")
         Path(params.out_dir).mkdir(parents=True, exist_ok=True)
 
-        Polarplot(this_area.name).plot_points(
+        Polarplot(this_area.name, area_overrides={"show_bad_data_map": False}).plot_points(
             {
                 "name": f"dhdt_{period_id}",
                 "lats": period_data["latitude"],
                 "lons": period_data["longitude"],
                 "vals": period_data[params.plotting_column],
-                "valid_range": tuple(params.plot_range),
+                # "valid_range": tuple(params.plot_range),
+                "min_plot_range": params.plot_range[0],
+                "max_plot_range": params.plot_range[1],
                 "units": "m",
-                "cmap_name": "coolwarm",
+                # "cmap_name": "coolwarm_r",
+                "plot_size_scale_factor": 0.04,
+                "cmap_name": "RdBu",  # Colormap name, could use RdYlBu
+                "cmap_over_color": "#150685",  # Optional: Over color for colormap
+                "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
+                "cmap_extend": "both",  # Optional: Extend colormap
             },
             output_dir=str(Path(params.out_dir)),
             output_file=f"dhdt_period_{period_id}_{start_time_str}-{end_time_str}.png",

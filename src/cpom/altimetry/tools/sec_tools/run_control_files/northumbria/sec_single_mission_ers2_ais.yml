@@ -113,12 +113,12 @@ e2:
     in_step: calculate_dhdt   # Uses output from calculate_dhdt
     out_folder_name: dhdt_plots
     parquet_glob: "dhdt.parquet"
-    area_name: "antarctica"
+    area_name: "antarctica_cci"
     grid_area: "antarctica"
     binsize: 5000
     plotting_column: "dhdt"
     period_column: "period"
-    plot_range: [-2, 2]
+    plot_range: [-1, 1]
     basin_structure: False
 
 #-------------------------------------------------------------------------#
