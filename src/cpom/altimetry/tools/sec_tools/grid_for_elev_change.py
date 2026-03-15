@@ -227,7 +227,11 @@ def get_processing_objects(params, dataset):
     else:
         thismask = None
 
+    logger.info("finding files and dates...")
+
     file_and_dates = dataset.get_files_and_dates(hemisphere=thisarea.hemisphere)
+
+    logger.info("found %s files", len(file_and_dates))
 
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(params.standard_epoch, dataset.dataset_epoch)
