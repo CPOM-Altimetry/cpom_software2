@@ -13,7 +13,9 @@ It will print out the path of any files that do not meet these criteria.
 
 import argparse
 import logging
+import multiprocessing
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from netCDF4 import Dataset  # pylint: disable=E0611
@@ -25,15 +27,15 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 
-def check_file(file_path: Path, required_params: list[str]) -> bool:
+def check_file(file_path: str, required_params: list[str]) -> tuple[str, bool, str | None]:
     """Check if a NetCDF file is valid and contains all required parameters.
 
     Args:
-        file_path (Path): Path to the NetCDF file.
+        file_path (str): Path to the NetCDF file.
         required_params (list[str]): List of required parameter names.
 
     Returns:
-        bool: True if the file is valid and contains all parameters, False otherwise.
+        tuple[str, bool, str | None]: (file_path, is_valid, error_message)
     """
     try:
         with Dataset(file_path, "r") as nc:
@@ -55,12 +57,12 @@ def check_file(file_path: Path, required_params: list[str]) -> bool:
                         break
 
                 if not found:
-                    log.error("File %s is missing parameter: %s", file_path, param)
-                    return False
-        return True
+                    return file_path, False, f"missing parameter: {param}"
+        return file_path, True, None
     except (OSError, RuntimeError) as e:
-        log.error("File %s is corrupted or cannot be opened: %s", file_path, e)
-        return False
+        return file_path, False, f"corrupted or cannot be opened: {e}"
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return file_path, False, f"unexpected error: {e}"
 
 
 def main():
@@ -81,6 +83,13 @@ def main():
         "-r",
         "--results_file",
         help="Optional path to save full paths of corrupted/incomplete files.",
+    )
+    parser.add_argument(
+        "-j",
+        "--max_workers",
+        type=int,
+        default=multiprocessing.cpu_count(),
+        help="Number of worker processes (default: CPU count).",
     )
     parser.add_argument(
         "--verbose", action="store_true", help="Enable verbose output (DEBUG level)."
@@ -107,7 +116,6 @@ def main():
         dataset = DatasetHelper(data_dir=str(base_dir), dataset_yaml=str(dataset_yaml))
 
         # Get list of required parameters from the YAML
-        # These fields match the ones in DatasetConfig
         required_params = [
             dataset.latitude_param,
             dataset.longitude_param,
@@ -126,43 +134,65 @@ def main():
         log.info("Searching for files matching pattern: %s", dataset.search_pattern)
 
         # Find all files matching the search pattern
-        files = list(base_dir.rglob(dataset.search_pattern))
-        log.info("Found %d files to check.", len(files))
+        files = [str(f) for f in base_dir.rglob(dataset.search_pattern)]
+        num_files = len(files)
+        log.info("Found %d files to check.", num_files)
+
+        if num_files == 0:
+            log.info("No files found to check.")
+            sys.exit(0)
 
         corrupted_files = []
-        num_files = len(files)
-        for i, file_path in enumerate(files):
-            log.debug("Checking file: %s", file_path)
-            if not check_file(file_path, required_params):
-                corrupted_files.append(file_path)
+        checked_count = 0
+        progress_interval = max(1, num_files // 100)
 
-            # Simple progress indicator - updates every 1%
-            if (i + 1) % max(1, (num_files // 100)) == 0 or (i + 1) == num_files:
-                percent = ((i + 1) / num_files) * 100
-                print(
-                    f"\rProgress: {percent:.1f}% ({i+1}/{num_files} files checked)",
-                    end="",
-                    flush=True,
-                )
+        log.info("Starting check with %d workers...", args.max_workers)
+
+        with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
+            # Use submit to get futures so we can handle crashes
+            future_to_file = {executor.submit(check_file, f, required_params): f for f in files}
+
+            for future in as_completed(future_to_file):
+                file_path = future_to_file[future]
+                checked_count += 1
+                try:
+                    _, is_valid, err_msg = future.result()
+                    if not is_valid:
+                        log.error("File %s error: %s", file_path, err_msg)
+                        corrupted_files.append(file_path)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    log.error("File %s caused a process crash or exception: %s", file_path, e)
+                    corrupted_files.append(file_path)
+
+                # Update progress indicator every 1%
+                if checked_count % progress_interval == 0 or checked_count == num_files:
+                    percent = (checked_count / num_files) * 100
+                    print(
+                        f"\rProgress: {percent:.1f}% ({checked_count}/{num_files} files checked)",
+                        end="",
+                        flush=True,
+                    )
 
         print()  # New line after progress
 
         if corrupted_files:
-            print("\nFound corrupted or incomplete files:")
-            for f in corrupted_files:
-                print(f)
-
+            print(f"\nFound {len(corrupted_files)} corrupted or incomplete files.")
             if args.results_file:
                 try:
                     results_path = Path(args.results_file)
                     results_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(results_path, "w", encoding="utf-8") as f:
+                    with open(results_path, "w", encoding="utf-8") as rf:
                         for corrupted_file in corrupted_files:
-                            f.write(f"{corrupted_file}\n")
-                    log.info("Corrupted files saved to: %s", args.results_file)
+                            rf.write(f"{corrupted_file}\n")
+                    log.info("List of bad files saved to: %s", args.results_file)
                 except OSError as e:
                     log.error("Failed to write results file %s: %s", args.results_file, e)
-
+            else:
+                log.info("Bad files (first 10):")
+                for f in corrupted_files[:10]:
+                    print(f)
+                if len(corrupted_files) > 10:
+                    print("...")
             sys.exit(1)
         else:
             log.info("All files are valid and complete.")
