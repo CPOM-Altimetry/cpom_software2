@@ -39,7 +39,6 @@ import shutil
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -56,7 +55,7 @@ from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
 
-# pylint: disable=too-many-lines,too-many-locals,too-many-statements,too-many-nested-blocks
+# pylint: disable=too-many-lines,too-many-locals,too-many-statements
 
 # --------------------------------------#
 # Set up Functions                     #
@@ -729,62 +728,6 @@ def _group_periods(file_and_dates, use_month):
             yield str(int(year)), file_and_dates[mask]
 
 
-def _get_file_path(file_entry: Any) -> str:
-    """Return a readable file path string from a file metadata object."""
-
-    try:
-        return str(file_entry["path"])
-    except (TypeError, KeyError, IndexError, ValueError):
-        return str(file_entry)
-
-
-def _run_worker_batch(worker, file_batch, max_workers):
-    """Run a batch of files in a fresh worker pool and return all results."""
-
-    if len(file_batch) == 0:
-        return []
-
-    batch_workers = max(1, min(max_workers, len(file_batch)))
-    chunksize = max(1, len(file_batch) // (batch_workers * 4))
-    with ProcessPoolExecutor(max_workers=batch_workers) as executor:
-        return list(executor.map(worker, file_batch, chunksize=chunksize))
-
-
-def _collect_results_with_fault_isolation(worker, file_batch, max_workers, logger, period_label):
-    """Recursively split a crashing batch to isolate and skip worker-killing files."""
-
-    if len(file_batch) == 0:
-        return [], []
-
-    try:
-        return _run_worker_batch(worker, file_batch, max_workers), []
-    except BrokenProcessPool:
-        if len(file_batch) == 1:
-            bad_path = _get_file_path(file_batch[0])
-            logger.error(
-                "Worker crashed while processing %s in period %s; skipping file. "
-                "This often indicates a corrupted input file or a low-level library crash.",
-                bad_path,
-                period_label,
-            )
-            return [], [bad_path]
-
-        logger.warning(
-            "Worker pool crashed while processing %d files in period %s; splitting batch to "
-            "isolate failing file(s).",
-            len(file_batch),
-            period_label,
-        )
-        midpoint = len(file_batch) // 2
-        left_results, left_skipped = _collect_results_with_fault_isolation(
-            worker, file_batch[:midpoint], max_workers, logger, period_label
-        )
-        right_results, right_skipped = _collect_results_with_fault_isolation(
-            worker, file_batch[midpoint:], max_workers, logger, period_label
-        )
-        return left_results + right_results, left_skipped + right_skipped
-
-
 def get_data_and_status_multiprocessed(
     params, file_and_dates: np.ndarray, worker, logger
 ):  # pylint: disable=too-many-arguments
@@ -820,36 +763,28 @@ def get_data_and_status_multiprocessed(
     }
     use_month = "month" in params.partition_columns
     debug_stats = bool(params.debug)
-    batch_size = max(1, params.max_workers * 64)
 
     try:
-        for period_label, files_in_period in _group_periods(file_and_dates, use_month):
-            logger.info("Processing period: %s", period_label)
+        with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
+            for period_label, files_in_period in _group_periods(file_and_dates, use_month):
+                logger.info("Processing period: %s", period_label)
 
-            n_files = len(files_in_period)
-            logger.info(f"Number of files to process for period {period_label}: {n_files}")
+                n_files = len(files_in_period)
+                logger.info(f"Number of files to process for period {period_label}: {n_files}")
 
-            if n_files == 0:
-                continue
+                if n_files == 0:
+                    continue
 
-            n_valid = 0
-            total_rows = 0
-            skipped_worker_crash_files: list[str] = []
+                # Process files for this period
+                chunksize = max(1, n_files // (params.max_workers * 4))
+                results = executor.map(worker, files_in_period, chunksize=chunksize)
 
-            try:
-                big_rows_list = []
-                for batch_start in range(0, n_files, batch_size):
-                    file_batch = files_in_period[batch_start : batch_start + batch_size]
-                    batch_results, batch_skipped_files = _collect_results_with_fault_isolation(
-                        worker,
-                        file_batch,
-                        params.max_workers,
-                        logger,
-                        period_label,
-                    )
-                    skipped_worker_crash_files.extend(batch_skipped_files)
+                n_valid = 0
+                total_rows = 0
 
-                    for result in batch_results:
+                try:
+                    big_rows_list = []
+                    for result in results:
                         frame = None
                         file_stats = None
                         if isinstance(result, tuple) and len(result) == 2:
@@ -880,47 +815,40 @@ def get_data_and_status_multiprocessed(
                             )
                         if frame is not None:
                             big_rows_list.append(frame)
-                n_valid = len(big_rows_list)
-            except (ValueError, OSError, RuntimeError) as e:
-                logger.error(
-                    f"Error collecting results for period {period_label}: {e}",
-                    exc_info=True,
-                )
-                big_rows_list = []
+                    n_valid = len(big_rows_list)
+                except (ValueError, OSError, RuntimeError) as e:
+                    logger.error(
+                        f"Error collecting results for period {period_label}: {e}",
+                        exc_info=True,
+                    )
+                    big_rows_list = []
 
-            if skipped_worker_crash_files:
-                logger.warning(
-                    "Skipped %d files in period %s after worker crashes.",
-                    len(skipped_worker_crash_files),
-                    period_label,
-                )
+                if n_valid > 0:
+                    final_df = pl.concat(big_rows_list, rechunk=False)
+                    final_df = final_df.collect() if not params.hive_mode else final_df
+                    logger.info("Starting to write partitions to disk for period %s", period_label)
+                    total_rows = write_partitions_to_disk(
+                        final_df=final_df,
+                        partition_columns=params.partition_columns,
+                        partition_xy_chunking=params.partition_xy_chunking,
+                        out_dir=params.out_dir,
+                        hive_mode=params.hive_mode,
+                    )
 
-            if n_valid > 0:
-                final_df = pl.concat(big_rows_list, rechunk=False)
-                final_df = final_df.collect() if not params.hive_mode else final_df
-                logger.info("Starting to write partitions to disk for period %s", period_label)
-                total_rows = write_partitions_to_disk(
-                    final_df=final_df,
-                    partition_columns=params.partition_columns,
-                    partition_xy_chunking=params.partition_xy_chunking,
-                    out_dir=params.out_dir,
-                    hive_mode=params.hive_mode,
-                )
+                logger.info(f"Collected {n_valid} valid results for period {period_label}")
 
-            logger.info(f"Collected {n_valid} valid results for period {period_label}")
+                if n_valid == 0:
+                    status["empty_periods"].append(period_label)
+                    continue
 
-            if n_valid == 0:
-                status["empty_periods"].append(period_label)
-                continue
-
-            status["years_ingested"].append(period_label)
-            status["years_files_ingested"].append(n_valid)
-            status["years_files_rejected"].append(n_files - n_valid)
-            status["years_rows_ingested"].append(total_rows)
-            status["total_l2_files_ingested"] += n_valid
-            status["total_l2_files_rejected"] += n_files - n_valid
-            status["total_rows_ingested"] += total_rows
-    except (OSError, ValueError, BrokenProcessPool) as e:
+                status["years_ingested"].append(period_label)
+                status["years_files_ingested"].append(n_valid)
+                status["years_files_rejected"].append(n_files - n_valid)
+                status["years_rows_ingested"].append(total_rows)
+                status["total_l2_files_ingested"] += n_valid
+                status["total_l2_files_rejected"] += n_files - n_valid
+                status["total_rows_ingested"] += total_rows
+    except (OSError, ValueError) as e:
         logger.error("Multiprocessing failed: %s", e)
         sys.exit(1)
 
