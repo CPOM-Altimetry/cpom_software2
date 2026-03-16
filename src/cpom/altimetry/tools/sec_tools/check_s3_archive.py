@@ -19,9 +19,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
-from netCDF4 import Dataset  # pylint: disable=E0611
-
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
+
+# NOTE: DO NOT import netCDF4 at the top level.
+# This prevents the main process from loading the C-library,
+# protecting it from C-level 'double free' or 'Abort' errors.
+
+# pylint: disable=broad-exception-caught
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -31,6 +35,8 @@ log = logging.getLogger(__name__)
 def check_file(file_path: str, required_params: list[str]) -> tuple[str, bool, str | None]:
     """Check if a NetCDF file is valid and contains all required parameters.
 
+    Importing netCDF4 here ensures it's only loaded in the worker process.
+
     Args:
         file_path (str): Path to the NetCDF file.
         required_params (list[str]): List of required parameter names.
@@ -39,6 +45,9 @@ def check_file(file_path: str, required_params: list[str]) -> tuple[str, bool, s
         tuple[str, bool, str | None]: (file_path, is_valid, error_message)
     """
     try:
+        # Local import to isolate C-library from main process
+        from netCDF4 import Dataset  # pylint: disable=import-outside-toplevel,E0611
+
         with Dataset(file_path, "r") as nc:
             for param in required_params:
                 if param is None:
@@ -181,7 +190,8 @@ def main():
                         file_path = future_to_file[future]
                         try:
                             _, is_valid, err_msg = future.result()
-                            # If we get here, the check actually finished
+                            # If we get here, the check actually finished successfully or
+                            # failed via Python
                             finished_in_chunk.add(file_path)
                             checked_count += 1
                             if not is_valid:
@@ -189,15 +199,14 @@ def main():
                                 corrupted_files.append(file_path)
 
                         except (BrokenProcessPool, RuntimeError) as e:
-                            # RuntimeError often contains "terminated abruptly" in BrokenProcessPool
-                            # scenarios
+                            # RuntimeError often contains "terminated abruptly" in
+                            # BrokenProcessPool scenarios
                             if "terminated abruptly" in str(e) or isinstance(e, BrokenProcessPool):
                                 log.warning(
                                     "\nDetected pool death while checking %s. Breaking for triage.",
                                     file_path,
                                 )
                                 # DO NOT add to finished_in_chunk or corrupted_files
-                                # The 'with' block will clean up and we'll hit the except/fallback
                                 raise BrokenProcessPool(str(e)) from e
 
                             # Other RuntimeErrors get handled as general exceptions
@@ -232,14 +241,37 @@ def main():
                     e,
                 )
 
-                # Falling back to sequential triage ONLY for files not in finished_in_chunk
+                # Falling back to sequential triage ONLY for files not in finished_in_chunk.
+                # To protect the main process from C-level errors during triage,
+                # we even run THESE in a tiny 1-worker pool (which spawns a subprocess).
                 remaining_in_chunk = [f for f in chunk if f not in finished_in_chunk]
 
-                log.info("Checking %d remaining files sequentially...", len(remaining_in_chunk))
+                log.info(
+                    "Checking %d remaining files sequentially via subprocess...",
+                    len(remaining_in_chunk),
+                )
 
                 for file_path in remaining_in_chunk:
                     checked_count += 1
-                    _, is_valid, err_msg = check_file(file_path, required_params)
+                    is_valid = False
+                    err_msg = "unknown error during sequential triage"
+
+                    # Use a tiny pool to ensure this check runs in a subprocess,
+                    # isolating the main process from any C-level Abort.
+                    try:
+                        with ProcessPoolExecutor(max_workers=1) as triage_executor:
+                            t_future = triage_executor.submit(
+                                check_file, file_path, required_params
+                            )
+                            _, is_valid, err_msg = t_future.result()
+                    except (
+                        BrokenProcessPool,
+                        RuntimeError,
+                        Exception,
+                    ) as fallback_e:  # pylint: disable=broad-exception-caught
+                        is_valid = False
+                        err_msg = f"Sequential triage crashed: {fallback_e}"
+
                     if not is_valid:
                         log.error("File %s error (sequential fallback): %s", file_path, err_msg)
                         corrupted_files.append(file_path)
