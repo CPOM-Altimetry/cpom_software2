@@ -166,6 +166,7 @@ def main():
             start = chunk_idx * args.chunk_size
             end = min(start + args.chunk_size, num_files)
             chunk = files[start:end]
+            finished_in_chunk = set()
 
             log.debug("Processing chunk %d/%d (%d files)", chunk_idx + 1, num_chunks, len(chunk))
 
@@ -178,6 +179,9 @@ def main():
 
                     for future in as_completed(future_to_file):
                         file_path = future_to_file[future]
+                        # Track that this file's future was processed (even if it crashed)
+                        # so we don't triage it again sequentially if the pool breaks LATER.
+                        finished_in_chunk.add(file_path)
                         checked_count += 1
 
                         try:
@@ -186,9 +190,8 @@ def main():
                                 log.error("File %s error: %s", file_path, err_msg)
                                 corrupted_files.append(file_path)
                         except Exception as e:  # pylint: disable=broad-exception-caught
-                            log.error(
-                                "File %s caused a process crash or exception: %s", file_path, e
-                            )
+                            # This is a specific file error, not necessarily a pool crash
+                            log.error("File %s caused an exception in worker: %s", file_path, e)
                             corrupted_files.append(file_path)
 
                         # Update progress indicator every 1%
@@ -206,17 +209,15 @@ def main():
 
             except BrokenProcessPool as e:
                 log.warning(
-                    "\nProcess pool failed in chunk %d: %s. Falling back to sequential triage.",
+                    "\nProcess pool failed in chunk %d: %s. Triaging unchecked files...",
                     chunk_idx + 1,
                     e,
                 )
-                # Find which files in the chunk were NOT completed
-                # Simpler: just process remaining files in this chunk one by one.
-                # Since we track checked_count, we know how many were completed in this chunk.
-                files_processed_this_chunk = checked_count - start
-                remaining_in_chunk = chunk[files_processed_this_chunk:]
 
-                log.info("Triaging %d remaining files in crashed chunk...", len(remaining_in_chunk))
+                # Falling back to sequential triage ONLY for files not in finished_in_chunk
+                remaining_in_chunk = [f for f in chunk if f not in finished_in_chunk]
+
+                log.info("Checking %d remaining files sequentially...", len(remaining_in_chunk))
 
                 for file_path in remaining_in_chunk:
                     checked_count += 1
