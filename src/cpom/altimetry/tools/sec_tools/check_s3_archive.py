@@ -16,6 +16,7 @@ import logging
 import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from netCDF4 import Dataset  # pylint: disable=E0611
@@ -92,6 +93,13 @@ def main():
         help="Number of worker processes (default: CPU count).",
     )
     parser.add_argument(
+        "-c",
+        "--chunk_size",
+        type=int,
+        default=2000,
+        help="Number of files per processing chunk (default: 2000).",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", help="Enable verbose output (DEBUG level)."
     )
 
@@ -144,34 +152,88 @@ def main():
 
         corrupted_files = []
         checked_count = 0
-        progress_interval = max(1, num_files // 100)
 
-        log.info("Starting check with %d workers...", args.max_workers)
+        # Process files in chunks for better robustness against pool crashes
+        num_chunks = (num_files + args.chunk_size - 1) // args.chunk_size
 
-        with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-            # Use submit to get futures so we can handle crashes
-            future_to_file = {executor.submit(check_file, f, required_params): f for f in files}
+        log.info(
+            "Starting check with %d workers and chunk size %d...",
+            args.max_workers,
+            args.chunk_size,
+        )
 
-            for future in as_completed(future_to_file):
-                file_path = future_to_file[future]
-                checked_count += 1
-                try:
-                    _, is_valid, err_msg = future.result()
+        for chunk_idx in range(num_chunks):
+            start = chunk_idx * args.chunk_size
+            end = min(start + args.chunk_size, num_files)
+            chunk = files[start:end]
+
+            log.debug("Processing chunk %d/%d (%d files)", chunk_idx + 1, num_chunks, len(chunk))
+
+            # Attempt parallel processing for the chunk
+            try:
+                with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
+                    future_to_file = {
+                        executor.submit(check_file, f, required_params): f for f in chunk
+                    }
+
+                    for future in as_completed(future_to_file):
+                        file_path = future_to_file[future]
+                        checked_count += 1
+
+                        try:
+                            _, is_valid, err_msg = future.result()
+                            if not is_valid:
+                                log.error("File %s error: %s", file_path, err_msg)
+                                corrupted_files.append(file_path)
+                        except Exception as e:  # pylint: disable=broad-exception-caught
+                            log.error(
+                                "File %s caused a process crash or exception: %s", file_path, e
+                            )
+                            corrupted_files.append(file_path)
+
+                        # Update progress indicator every 1%
+                        if (
+                            checked_count % max(1, num_files // 100) == 0
+                            or checked_count == num_files
+                        ):
+                            percent = (checked_count / num_files) * 100
+                            print(
+                                f"\rProgress: {percent:.1f}% "
+                                f"({checked_count}/{num_files} files checked)",
+                                end="",
+                                flush=True,
+                            )
+
+            except BrokenProcessPool as e:
+                log.warning(
+                    "\nProcess pool failed in chunk %d: %s. Falling back to sequential triage.",
+                    chunk_idx + 1,
+                    e,
+                )
+                # Find which files in the chunk were NOT completed
+                # Simpler: just process remaining files in this chunk one by one.
+                # Since we track checked_count, we know how many were completed in this chunk.
+                files_processed_this_chunk = checked_count - start
+                remaining_in_chunk = chunk[files_processed_this_chunk:]
+
+                log.info("Triaging %d remaining files in crashed chunk...", len(remaining_in_chunk))
+
+                for file_path in remaining_in_chunk:
+                    checked_count += 1
+                    _, is_valid, err_msg = check_file(file_path, required_params)
                     if not is_valid:
-                        log.error("File %s error: %s", file_path, err_msg)
+                        log.error("File %s error (sequential fallback): %s", file_path, err_msg)
                         corrupted_files.append(file_path)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    log.error("File %s caused a process crash or exception: %s", file_path, e)
-                    corrupted_files.append(file_path)
 
-                # Update progress indicator every 1%
-                if checked_count % progress_interval == 0 or checked_count == num_files:
-                    percent = (checked_count / num_files) * 100
-                    print(
-                        f"\rProgress: {percent:.1f}% ({checked_count}/{num_files} files checked)",
-                        end="",
-                        flush=True,
-                    )
+                    # Update progress
+                    if checked_count % max(1, num_files // 100) == 0 or checked_count == num_files:
+                        percent = (checked_count / num_files) * 100
+                        print(
+                            f"\rProgress: {percent:.1f}% "
+                            f"({checked_count}/{num_files} files checked)",
+                            end="",
+                            flush=True,
+                        )
 
         print()  # New line after progress
 
