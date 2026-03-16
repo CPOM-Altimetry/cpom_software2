@@ -125,10 +125,22 @@ def main():
         log.info("Found %d files to check.", len(files))
 
         corrupted_files = []
-        for file_path in files:
+        num_files = len(files)
+        for i, file_path in enumerate(files):
             log.debug("Checking file: %s", file_path)
             if not check_file(file_path, required_params):
                 corrupted_files.append(file_path)
+
+            # Simple progress indicator
+            if (i + 1) % max(1, (num_files // 20)) == 0 or (i + 1) == num_files:
+                percent = ((i + 1) / num_files) * 100
+                print(
+                    f"\rProgress: {percent:.1f}% ({i+1}/{num_files} files checked)",
+                    end="",
+                    flush=True,
+                )
+
+        print()  # New line after progress
 
         if corrupted_files:
             print("\nFound corrupted or incomplete files:")
