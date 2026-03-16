@@ -1,14 +1,14 @@
 """
-Check S3 archive for corrupted files
+Check S3 archive for corrupted files using h5py
 
 This script will take as input a base directory and a YAML dataset definition
 as per src/cpom/altimetry/datasets/definitions/s3<a,b>_thematic_bc005.yml
 
 It will find all files that match the search pattern and check if they are
-valid NetCDF files and contain the parameters specified in the YAML file.
+valid NetCDF/HDF5 files and contain the parameters specified in the YAML file.
 
-It will print out the path of any files that do not meet these criteria.
-
+Uses h5py for maximum robustness against corrupted files.
+Prints each filename before checking to identify potential crash-causers.
 """
 
 import argparse
@@ -16,7 +16,7 @@ import logging
 import sys
 from pathlib import Path
 
-from netCDF4 import Dataset  # pylint: disable=E0611
+import h5py
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 
@@ -25,48 +25,35 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 
-def check_file(file_path: Path, required_params: list[str]) -> bool:
-    """Check if a NetCDF file is valid and contains all required parameters.
+def check_file(file_path: str, required_params: list[str]) -> tuple[str, bool, str | None]:
+    """Check if a file is valid and contains all required parameters using h5py.
 
     Args:
-        file_path (Path): Path to the NetCDF file.
+        file_path (str): Path to the NetCDF/HDF5 file.
         required_params (list[str]): List of required parameter names.
 
     Returns:
-        bool: True if the file is valid and contains all parameters, False otherwise.
+        tuple[str, bool, str | None]: (file_path, is_valid, error_message)
     """
     try:
-        with Dataset(file_path, "r") as nc:
+        with h5py.File(file_path, "r") as h5:
             for param in required_params:
                 if param is None:
                     continue
-                # Split param by '/' to handle nested groups
-                parts = param.split("/")
-                current_group = nc
-                found = True
-                for part in parts:
-                    if part in current_group.groups:
-                        current_group = current_group.groups[part]
-                    elif part in current_group.variables:
-                        # Reached the variable
-                        break
-                    else:
-                        found = False
-                        break
-
-                if not found:
-                    log.error("File %s is missing parameter: %s", file_path, param)
-                    return False
-        return True
+                # h5py uses group/dataset access. Param is already / separated.
+                if param not in h5:
+                    return file_path, False, f"missing parameter: {param}"
+        return file_path, True, None
     except (OSError, RuntimeError) as e:
-        log.error("File %s is corrupted or cannot be opened: %s", file_path, e)
-        return False
+        return file_path, False, f"corrupted or cannot be opened: {e}"
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return file_path, False, f"unexpected error: {e}"
 
 
 def main():
     """Main function to parse arguments and run the archive check."""
     parser = argparse.ArgumentParser(
-        description="Check S3 archive for corrupted or incomplete NetCDF files."
+        description="Check S3 archive for corrupted or incomplete files using h5py."
     )
     parser.add_argument(
         "-d", "--base_dir", required=True, help="Base directory for the S3 archive."
@@ -82,15 +69,11 @@ def main():
         "--results_file",
         help="Optional path to save full paths of corrupted/incomplete files.",
     )
-    parser.add_argument(
-        "--verbose", action="store_true", help="Enable verbose output (DEBUG level)."
-    )
+    parser.add_argument("--verbose", action="store_true", help="Log every file *before* checking.")
 
     args = parser.parse_args()
 
-    if args.verbose:
-        log.setLevel(logging.DEBUG)
-
+    # If verbose is not set, we still want to show progress
     base_dir = Path(args.base_dir)
     dataset_yaml = Path(args.dataset_yaml)
 
@@ -107,7 +90,6 @@ def main():
         dataset = DatasetHelper(data_dir=str(base_dir), dataset_yaml=str(dataset_yaml))
 
         # Get list of required parameters from the YAML
-        # These fields match the ones in DatasetConfig
         required_params = [
             dataset.latitude_param,
             dataset.longitude_param,
@@ -126,43 +108,70 @@ def main():
         log.info("Searching for files matching pattern: %s", dataset.search_pattern)
 
         # Find all files matching the search pattern
-        files = list(base_dir.rglob(dataset.search_pattern))
-        log.info("Found %d files to check.", len(files))
+        files = [str(f) for f in base_dir.rglob(dataset.search_pattern)]
+        num_files = len(files)
+        log.info("Found %d files to check.", num_files)
+
+        if num_files == 0:
+            log.info("No files found to check.")
+            sys.exit(0)
 
         corrupted_files = []
-        num_files = len(files)
-        for i, file_path in enumerate(files):
-            log.debug("Checking file: %s", file_path)
-            if not check_file(file_path, required_params):
+        checked_count = 0
+
+        # Simple sequential loop for absolute stability
+        for file_path in files:
+            checked_count += 1
+
+            # Print before check so user identifies which file crashes the script
+            if args.verbose:
+                print(f"Checking: {file_path}")
+
+            try:
+                # Actual validation
+                _, is_valid, err_msg = check_file(file_path, required_params)
+
+                if not is_valid:
+                    # In verbose mode, the file path was just printed,
+                    # but we still log the error properly.
+                    log.error("File %s error: %s", file_path, err_msg)
+                    corrupted_files.append(file_path)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                log.error("File %s caused an unexpected exception: %s", file_path, e)
                 corrupted_files.append(file_path)
 
-            # Simple progress indicator - updates every 1%
-            if (i + 1) % max(1, (num_files // 100)) == 0 or (i + 1) == num_files:
-                percent = ((i + 1) / num_files) * 100
-                print(
-                    f"\rProgress: {percent:.1f}% ({i+1}/{num_files} files checked)",
-                    end="",
-                    flush=True,
-                )
+            # Update progress indicator every 1% or for the last file
+            # Only if NOT in verbose mode (unbalanced output otherwise)
+            if not args.verbose:
+                if checked_count % max(1, num_files // 100) == 0 or checked_count == num_files:
+                    percent = (checked_count / num_files) * 100
+                    print(
+                        f"\rProgress: {percent:.1f}% ({checked_count}/{num_files} files checked)",
+                        end="",
+                        flush=True,
+                    )
 
-        print()  # New line after progress
+        if not args.verbose:
+            print()  # New line after progress
 
         if corrupted_files:
-            print("\nFound corrupted or incomplete files:")
-            for f in corrupted_files:
-                print(f)
-
+            print(f"\nFound {len(corrupted_files)} corrupted or incomplete files.")
             if args.results_file:
                 try:
                     results_path = Path(args.results_file)
                     results_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(results_path, "w", encoding="utf-8") as f:
+                    with open(results_path, "w", encoding="utf-8") as rf:
                         for corrupted_file in corrupted_files:
-                            f.write(f"{corrupted_file}\n")
-                    log.info("Corrupted files saved to: %s", args.results_file)
+                            rf.write(f"{corrupted_file}\n")
+                    log.info("List of bad files saved to: %s", args.results_file)
                 except OSError as e:
                     log.error("Failed to write results file %s: %s", args.results_file, e)
-
+            else:
+                log.info("Bad files (first 10):")
+                for f in corrupted_files[:10]:
+                    print(f)
+                if len(corrupted_files) > 10:
+                    print("...")
             sys.exit(1)
         else:
             log.info("All files are valid and complete.")
