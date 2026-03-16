@@ -179,19 +179,37 @@ def main():
 
                     for future in as_completed(future_to_file):
                         file_path = future_to_file[future]
-                        # Track that this file's future was processed (even if it crashed)
-                        # so we don't triage it again sequentially if the pool breaks LATER.
-                        finished_in_chunk.add(file_path)
-                        checked_count += 1
-
                         try:
                             _, is_valid, err_msg = future.result()
+                            # If we get here, the check actually finished
+                            finished_in_chunk.add(file_path)
+                            checked_count += 1
                             if not is_valid:
                                 log.error("File %s error: %s", file_path, err_msg)
                                 corrupted_files.append(file_path)
-                        except Exception as e:  # pylint: disable=broad-exception-caught
-                            # This is a specific file error, not necessarily a pool crash
+
+                        except (BrokenProcessPool, RuntimeError) as e:
+                            # RuntimeError often contains "terminated abruptly" in BrokenProcessPool
+                            # scenarios
+                            if "terminated abruptly" in str(e) or isinstance(e, BrokenProcessPool):
+                                log.warning(
+                                    "\nDetected pool death while checking %s. Breaking for triage.",
+                                    file_path,
+                                )
+                                # DO NOT add to finished_in_chunk or corrupted_files
+                                # The 'with' block will clean up and we'll hit the except/fallback
+                                raise BrokenProcessPool(str(e)) from e
+
+                            # Other RuntimeErrors get handled as general exceptions
                             log.error("File %s caused an exception in worker: %s", file_path, e)
+                            finished_in_chunk.add(file_path)
+                            checked_count += 1
+                            corrupted_files.append(file_path)
+
+                        except Exception as e:  # pylint: disable=broad-exception-caught
+                            log.error("File %s caused an unexpected exception: %s", file_path, e)
+                            finished_in_chunk.add(file_path)
+                            checked_count += 1
                             corrupted_files.append(file_path)
 
                         # Update progress indicator every 1%
