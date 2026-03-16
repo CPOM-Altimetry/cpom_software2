@@ -1,6 +1,6 @@
 mission: "is1"
 long_name: "ICESat GLAH 12.34"
-
+file_backend: "h5py"
 dataset_epoch: "2000-01-01T00:00:00"
 search_pattern: "**/GLAH12*_*.H5"
 # Variables are relative to each beam's group in the file

@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
 
+import h5py  # type: ignore[import-untyped]
 import numpy as np
 import yaml  # type: ignore[import-untyped]
 from netCDF4 import Dataset  # pylint: disable=E0611,W0611
@@ -34,6 +35,7 @@ class DatasetConfig:
     long_name: Optional[str] = None  # Name to describe the dataset
     # Pattern to match files (e.g., "**/CS_OFFL_SIR_TDP_LI*.nc" for cryotempo data)
     search_pattern: Optional[str] = None
+    file_backend: Optional[str] = None  # "netcdf4" or "h5py"
     yyyymm_str_fname_indices: Optional[List[int]] = (
         None  # [start, end] indices for date in filename
     )
@@ -109,6 +111,22 @@ class DatasetHelper(DatasetConfig):
                 result: dict[str, Any] = yaml.safe_load(f)
                 return result
         raise FileNotFoundError(f"YAML config file not found: {yaml_file}")
+
+    def get_file_handle(self, file_path: Path) -> Any:
+        """Return a file handler for a given file path.
+        Returns a netCDF4.Dataset or h5py.File object
+        depending on the dataset.file_backend configuration.
+
+        Args:
+            file_path (Path): Path to the data file.
+        """
+        if self.file_backend == "netcdf4":
+            return Dataset(file_path, "r")
+        if self.file_backend == "h5py":
+            return h5py.File(file_path, "r")
+        raise ValueError(
+            f"Unsupported file backend: {self.file_backend} must" " be 'netcdf4' or 'h5py'."
+        )
 
     def get_files_dir(
         self,

@@ -43,11 +43,9 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-import h5py
 import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
-from netCDF4 import Dataset  # pylint: disable=E0611
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change_corrections import (
@@ -572,9 +570,6 @@ def process_file(
             In debug mode, returns `(frame_or_none, stats)`; otherwise returns `frame` or `None`.
     """
     # Get filetype from search pattern
-    context_manager = Dataset
-    if dataset.search_pattern is not None and dataset.search_pattern.endswith(".h5"):
-        context_manager = h5py.File
 
     stats: dict | None = None
     if params.debug:
@@ -590,7 +585,7 @@ def process_file(
 
     variable_dict = {}
     try:
-        with context_manager(file_and_date["path"]) as nc:
+        with dataset.get_file_handle(file_and_date["path"]) as nc:
             # 1. Get coordinates
             variable_dict = get_coordinates_from_file(
                 dataset,
@@ -852,9 +847,6 @@ def get_data_and_status_multiprocessed(
     try:
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
             for period_label, files_in_period in _group_periods(file_and_dates, use_month):
-                logger.info("Processing period %s (%d files)", period_label, len(files_in_period))
-                if len(files_in_period) == 0:
-                    continue
 
                 n_valid = n_rejected = total_rows = 0
                 writer_cache: dict[str, pq.ParquetWriter] = {}
@@ -863,6 +855,7 @@ def get_data_and_status_multiprocessed(
 
                 try:
                     for result in executor.map(worker, files_in_period, chunksize=chunksize):
+
                         frame, file_stats = (
                             result
                             if isinstance(result, tuple) and len(result) == 2
