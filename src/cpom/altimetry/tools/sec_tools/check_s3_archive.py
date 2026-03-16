@@ -78,6 +78,11 @@ def main():
         help="Path to the YAML dataset definition file.",
     )
     parser.add_argument(
+        "-r",
+        "--results_file",
+        help="Optional path to save full paths of corrupted/incomplete files.",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", help="Enable verbose output (DEBUG level)."
     )
 
@@ -131,8 +136,8 @@ def main():
             if not check_file(file_path, required_params):
                 corrupted_files.append(file_path)
 
-            # Simple progress indicator
-            if (i + 1) % max(1, (num_files // 20)) == 0 or (i + 1) == num_files:
+            # Simple progress indicator - updates every 1%
+            if (i + 1) % max(1, (num_files // 100)) == 0 or (i + 1) == num_files:
                 percent = ((i + 1) / num_files) * 100
                 print(
                     f"\rProgress: {percent:.1f}% ({i+1}/{num_files} files checked)",
@@ -146,6 +151,18 @@ def main():
             print("\nFound corrupted or incomplete files:")
             for f in corrupted_files:
                 print(f)
+
+            if args.results_file:
+                try:
+                    results_path = Path(args.results_file)
+                    results_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(results_path, "w", encoding="utf-8") as f:
+                        for corrupted_file in corrupted_files:
+                            f.write(f"{corrupted_file}\n")
+                    log.info("Corrupted files saved to: %s", args.results_file)
+                except OSError as e:
+                    log.error("Failed to write results file %s: %s", args.results_file, e)
+
             sys.exit(1)
         else:
             log.info("All files are valid and complete.")
