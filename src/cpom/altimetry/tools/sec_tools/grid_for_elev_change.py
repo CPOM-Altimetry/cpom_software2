@@ -41,6 +41,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -56,6 +57,8 @@ from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
+
+# pylint: disable=too-many-lines,too-many-locals,too-many-statements
 
 # --------------------------------------#
 # Set up Functions                     #
@@ -234,9 +237,13 @@ def get_processing_objects(params, dataset):
     else:
         thismask = None
 
+    logger.info("finding files and dates...")
+
     file_and_dates = dataset.get_files_and_dates(
         hemisphere=thisarea.hemisphere, min_dt_time=params.min_date, max_dt_time=params.max_date
     )
+
+    logger.info("found %s files", len(file_and_dates))
 
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(params.standard_epoch, dataset.dataset_epoch)
@@ -951,14 +958,17 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
     ds_dict = vars(dataset)
     params_dict = vars(params)
 
+    output: dict[str, Any] = {}
     if ".yml" in params.dataset or ".yaml" in params.dataset:
-        output = {
-            **{k: v for k, v in params_dict.items() if k not in ds_dict.keys()},
-            **ds_dict,
-            **status,
-        }
+        output.update(
+            {
+                **{k: v for k, v in params_dict.items() if k not in ds_dict.keys()},
+                **ds_dict,
+                **status,
+            }
+        )
     else:
-        output = {**params_dict, **status}
+        output.update({**params_dict, **status})
 
     output["grid_xmin"] = thisgrid.minxm
     output["grid_ymin"] = thisgrid.minym

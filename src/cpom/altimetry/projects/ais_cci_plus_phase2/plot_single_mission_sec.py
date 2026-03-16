@@ -32,7 +32,10 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--prod_filename", "-f", help="path of input multi-mission dhdt.npz file", required=True
+        "--prod_filename",
+        "-f",
+        help="""path of input CCI product file such as 
+        ESACCI-AIS-L3C-SEC-CS2-5KM-20100927-20241203-fv2.nc", required=True""",
     )
 
     parser.add_argument(
@@ -69,7 +72,7 @@ def main():
 
     prod_name = os.path.basename(args.prod_filename)
 
-    out_file = f"{output_dir}/{prod_name.replace('.nc',f'-{args.parameter}')}"
+    out_file = f"{output_dir}/{prod_name.replace('.nc', f'-{args.parameter}')}"
 
     if args.parameter == "sec":
         param_long_name = "Surface Elevation Change"
@@ -413,7 +416,6 @@ def main():
                 0.05,
             )  # [left,bottom, width] of axis. Note height is auto set
         else:
-
             # --------------------------------------------------------
             # Histograms
             # --------------------------------------------------------

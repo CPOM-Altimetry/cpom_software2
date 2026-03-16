@@ -30,6 +30,7 @@ Usage: python run_chain.py --config path/to/config.yml
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -113,6 +114,61 @@ def get_auto_path(algo):
     return algo not in ["grid_for_elev_change_update_year"]
 
 
+def get_algorithms_to_run(algorithm_list, start_alg=None, end_alg=None):
+    """Return the algorithm sub-list bounded by start_alg/end_alg, if provided."""
+
+    start_index = 0
+    end_index = len(algorithm_list)
+
+    if start_alg is not None:
+        if start_alg not in algorithm_list:
+            raise ValueError(
+                f"Start algorithm '{start_alg}' not found in algorithm list: "
+                f"{', '.join(algorithm_list)}"
+            )
+        start_index = algorithm_list.index(start_alg)
+
+    if end_alg is not None:
+        if end_alg not in algorithm_list:
+            raise ValueError(
+                f"End algorithm '{end_alg}' not found in algorithm list: "
+                f"{', '.join(algorithm_list)}"
+            )
+        end_index = algorithm_list.index(end_alg) + 1
+
+    if start_index >= end_index:
+        raise ValueError(
+            f"Start algorithm '{start_alg}' must come before or equal to end algorithm "
+            f"'{end_alg}' in the algorithm list."
+        )
+
+    return list(algorithm_list[start_index:end_index])
+
+
+def get_merged_algo_config(config, algo, mission=None):
+    """Return root config merged with any mission-specific override for one algorithm."""
+
+    root_algo_config = config.get(algo) or {}
+    if not isinstance(root_algo_config, dict):
+        raise TypeError(f"Config section '{algo}' must be a mapping, got {type(root_algo_config)}")
+    algo_config = root_algo_config.copy()
+
+    mission_config = config.get(mission) if mission else None
+    if mission_config is None:
+        mission_config = {}
+    if not isinstance(mission_config, dict):
+        raise TypeError(f"Mission config '{mission}' must be a mapping, got {type(mission_config)}")
+
+    mission_algo_config = mission_config.get(algo) or {}
+    if not isinstance(mission_algo_config, dict):
+        raise TypeError(
+            f"Mission override section '{mission}.{algo}' must be a mapping, "
+            f"got {type(mission_algo_config)}"
+        )
+    algo_config.update(mission_algo_config)
+    return algo_config, mission_config
+
+
 def build_args(algo, config, mission=None):
     """
     Build complete command-line arguments for an algorithm from merged configuration.
@@ -142,21 +198,17 @@ def build_args(algo, config, mission=None):
     Returns:
         list: Complete list of command-line argument strings.
     """
-    # Get algorithm configuration
-    algo_config = config[algo].copy()
-    # Get the mission overrides for the algorithm if they exist
-    if algo in config[mission]:
-        # Add / Replace with mission-specific parameters
-        algo_config.update(config[mission][algo])
+    algo_config, mission_config = get_merged_algo_config(config, algo, mission)
 
     # Convert to CLI args
     args = dict_to_cli_args(algo_config)
 
-    base_folder = config[mission]["base_folder"] if mission else None
+    base_folder = mission_config.get("base_folder") if mission else None
     if get_auto_path(algo):
         # Input directory
         if "in_dir" not in algo_config and "in_step" in algo_config:
-            in_dir = build_path(config["base_out"], base_folder, config[algo_config["in_step"]])
+            in_step_config, _ = get_merged_algo_config(config, algo_config["in_step"], mission)
+            in_dir = build_path(config["base_out"], base_folder, in_step_config)
             args.extend(["--in_dir", str(in_dir)])
 
         # Output directory
@@ -168,19 +220,21 @@ def build_args(algo, config, mission=None):
     if requires_grid_metadata(algo):
         metadata = None
 
-        if "grid_info_json" in config[mission]:
-            metadata = Path(config[mission]["grid_info_json"])
+        if "grid_info_json" in mission_config:
+            metadata = Path(mission_config["grid_info_json"])
         elif "in_dir" in algo_config:
             metadata = Path(algo_config["in_dir"]) / "metadata.json"
         elif mission and "grid_for_elev_change" in config:
             grid_path = build_path(
-                config["base_out"], config[mission]["base_folder"], config["grid_for_elev_change"]
+                config["base_out"], mission_config["base_folder"], config["grid_for_elev_change"]
             )
             metadata = grid_path / "metadata.json"
 
         # Only add if metadata file exists
         if metadata and metadata.exists():
             args.extend(["--grid_info_json", str(metadata)])
+        else:
+            print(f"Metadata file not found: {metadata}")
 
     return args
 
@@ -220,6 +274,22 @@ def main(args):
             " specific missions). Comma-separated list of missions to run, e.g. --mission cs2,env"
         ),
     )
+    parser.add_argument(
+        "--start_alg",
+        "-sa",
+        help=(
+            "Optional algorithm name to start processing from. Any earlier algorithms in the "
+            "configured algorithm list are skipped."
+        ),
+    )
+    parser.add_argument(
+        "--end_alg",
+        "-ea",
+        help=(
+            "Optional algorithm name to stop processing at. Any later algorithms in the "
+            "configured algorithm list are skipped."
+        ),
+    )
     parsed_args = parser.parse_args(args)
 
     yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
@@ -235,13 +305,26 @@ def main(args):
             config["missions_to_run"] = [m.strip() for m in parsed_args.missions.split(",")]
             print(f"Overriding missions_to_run with: {config['missions_to_run']}")
         for mission in config["missions_to_run"]:
-            for algo in config[mission]["algorithm_list"]:
+            try:
+                algorithms_to_run = get_algorithms_to_run(
+                    config[mission]["algorithm_list"], parsed_args.start_alg, parsed_args.end_alg
+                )
+            except ValueError as exc:
+                parser.error(f"{exc} (mission: {mission})")
+            for algo in algorithms_to_run:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
                 args = build_args(algo, config, mission)
-                print(f"Running {algo}.py with args: {args}")
+                full_cmd = ["python", f"{algo}.py"] + args + debug_args
+                print(f"Running command: {shlex.join(full_cmd)}")
                 subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
     else:
-        for algo in config["algorithm_list"]:
+        try:
+            algorithms_to_run = get_algorithms_to_run(
+                config["algorithm_list"], parsed_args.start_alg, parsed_args.end_alg
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        for algo in algorithms_to_run:
             args = build_args(algo, config)
             print(f"Running {algo}.py with args: {args}")
             subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)

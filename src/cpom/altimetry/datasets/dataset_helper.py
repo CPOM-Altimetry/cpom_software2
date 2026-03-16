@@ -10,6 +10,7 @@ Supports two configuration methods:
 2. Direct keyword arguments to the constructor
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -19,6 +20,8 @@ from typing import Any, List, Optional
 import numpy as np
 import yaml  # type: ignore[import-untyped]
 from netCDF4 import Dataset  # pylint: disable=E0611,W0611
+
+thislog = logging.getLogger(__name__)
 
 
 # pylint: disable=R0902 # Too many instance attributes
@@ -170,6 +173,7 @@ class DatasetHelper(DatasetConfig):
         min_dt_time: str | datetime | None = None,
         max_dt_time: str | datetime | None = None,
         hemisphere: str | None = None,
+        log: logging.Logger | None = None,
     ) -> np.ndarray:
         """
         Get a structured numpy array of valid file and their dates from the filename.
@@ -190,6 +194,9 @@ class DatasetHelper(DatasetConfig):
             np.ndarray: Structured array with:
                 'path', 'date', 'year', 'month' fields (and 'cycle' if filtered).
         """
+
+        if log is None:
+            log = thislog
 
         def _get_min_max_as_datetime(min_dt: str, max_dt: str) -> tuple[datetime, datetime]:
             if "/" in min_dt:
@@ -250,11 +257,14 @@ class DatasetHelper(DatasetConfig):
             max_dt_time,
         )
 
+        log.info("search_dir %s", search_dir)
+
         if self.search_pattern is None:
             raise ValueError("search_pattern must be set")
 
         valid_files = []
         for file in Path(search_dir).rglob(self.search_pattern):
+            log.debug("file %s", file)
             date_obj = self.get_product_startdate_from_filename(file)
             if not isinstance(date_obj, datetime):
                 continue

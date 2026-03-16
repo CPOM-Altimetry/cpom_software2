@@ -1021,6 +1021,26 @@ files = [
 ]
 
 [[package]]
+name = "cmocean"
+version = "4.0.3"
+description = "Colormaps for Oceanography"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "cmocean-4.0.3-py3-none-any.whl", hash = "sha256:f2fc1d5e349db122ee0c9eac80bba969aa92dd2806548fce58dc8bef962f309e"},
+    {file = "cmocean-4.0.3.tar.gz", hash = "sha256:37868399fb5f41b4eac596e69803f9bfaea49946514dfb2e7f48886854250d7c"},
+]
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+packaging = "*"
+
+[package.extras]
+plots = ["colorspacious", "viscm"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -1867,6 +1887,18 @@ shapely = ">=2.0.0"
 [package.extras]
 all = ["GeoAlchemy2", "SQLAlchemy (>=2.0)", "folium", "geopy", "mapclassify (>=2.5)", "matplotlib (>=3.7)", "psycopg[binary] (>=3.1.0)", "pyarrow (>=10.0.0)", "scipy", "xyzservices"]
 dev = ["codecov", "pre-commit", "pytest (>=3.1.0)", "pytest-cov", "pytest-xdist", "ruff"]
+
+[[package]]
+name = "global-land-mask"
+version = "1.0.0"
+description = "Check whether a lat/lon point in on land or on sea"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "global-land-mask-1.0.0.tar.gz", hash = "sha256:956bf02e8b05bfc9f3a29cbc6e97d5ba4151c0732504acc73c2db9ea325ecff3"},
+    {file = "global_land_mask-1.0.0-py3-none-any.whl", hash = "sha256:07751fbb4e3834ee508a84ea64d9bd5340fbd0a8c951e24b43c323fcc670bb62"},
+]
 
 [[package]]
 name = "h5py"
