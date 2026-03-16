@@ -1,0 +1,12 @@
+mission: "is1"
+long_name: "ICESat GLAH 12.34"
+
+dataset_epoch: "2000-01-01T00:00:00"
+search_pattern: "**/GLAH12*_*.H5"
+# Variables are relative to each beam's group in the file
+latitude_param: "Data_40HZ/Geolocation/d_lat"
+longitude_param: "Data_40HZ/Geolocation/d_lon"
+elevation_param: "Data_40HZ/Elevation_Surfaces/d_elev"
+time_param: "Data_40HZ/DS_UTCTime_40"
+default_elev_correction: cpom.altimetry.datasets.elevation_correction_helper.get_is1_elev
+default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_is1_qual_mask

@@ -49,7 +49,8 @@ class DatasetConfig:
     )
     longitude_nadir_param: Optional[str] = None  # nadir longitude variable
     beams: Optional[List[str]] = field(default_factory=list)
-    #
+    default_elev_correction: Optional[str] = None  # default elevation correction function
+    default_qual_correction: Optional[str] = None  # default quality mask function
 
 
 class DatasetHelper(DatasetConfig):
@@ -134,7 +135,7 @@ class DatasetHelper(DatasetConfig):
         raise FileNotFoundError(f"Cycle directory for cycle {cyclenum} \
             not found in {directory} for formats {cycle_format}")
 
-    def get_product_startdate_from_filename(self, filename: Path) -> datetime:
+    def get_product_startdate_from_filename(self, filename: Path) -> datetime | None:
         """Extract product start date from filename using configured indices.
 
         Args:
@@ -148,11 +149,20 @@ class DatasetHelper(DatasetConfig):
         else:
             fname = filename.name
 
-        assert self.yyyymm_str_fname_indices is not None
-        date_obj = datetime.strptime(
-            fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
-        )
-        return date_obj
+        if self.yyyymm_str_fname_indices is not None:
+            date_obj = datetime.strptime(
+                fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
+            )
+            return date_obj
+
+        date_formats = ["%Y.%m.%d", "%Y/%m/%d", "%Y%m%d"]
+        for part in reversed(filename.parts):
+            for fmt in date_formats:
+                try:
+                    return datetime.strptime(part, fmt)
+                except ValueError:
+                    continue
+        return None
 
     def get_files_and_dates(
         self,
@@ -407,7 +417,7 @@ class DatasetHelper(DatasetConfig):
                 return var[:]
             except (KeyError, RuntimeError) as e:
                 if raise_if_missing:
-                    raise KeyError(f"missing variable not found in NetCDF: {path}, {e}") from e 
+                    raise KeyError(f"missing variable not found in NetCDF: {path}, {e}") from e
                 return np.array([])  # Variable not found
 
         def _get_var_obj(dataset, path):

@@ -49,6 +49,9 @@ import pyarrow.parquet as pq
 from netCDF4 import Dataset  # pylint: disable=E0611
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
+from cpom.altimetry.tools.sec_tools.grid_for_elev_change_corrections import (
+    apply_corrections,
+)
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -66,10 +69,8 @@ def parse_arguments(args):
     Return:
         parser.parse_args(args)
     """
-    parser = argparse.ArgumentParser(
-        description="""Convert altimetry data into partitioned parquet
-        with ragged layout, storing each partition in a single file"""
-    )
+    parser = argparse.ArgumentParser(description="""Convert altimetry data into partitioned parquet
+        with ragged layout, storing each partition in a single file""")
     parser.add_argument(
         "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
     )
@@ -95,7 +96,12 @@ def parse_arguments(args):
         nargs="+",
         help="Optional list of values to filter the mask by, e.g. --mask_values 1 2 3. ",
     )
-
+    parser.add_argument(
+        "--correction_function",
+        type=str,
+        default="default_corrections",
+        help=("Correction function name from grid_for_elev_change_corrections.py."),
+    )
     parser.add_argument("--gridarea", type=str, required=True, help="CPOM grid area object")
     parser.add_argument("--binsize", type=int, default=5000, help="Grid bin size in meters")
     parser.add_argument(
@@ -104,6 +110,8 @@ def parse_arguments(args):
         default="1991-01-01T00:00:00",
         help="Standard epoch for time conversion (e.g., '1991-01-01T00:00:00')",
     )
+    parser.add_argument("--min_date", type=str, help="Minimum date to include (e.g., '2000.01.01')")
+    parser.add_argument("--max_date", type=str, help="Maximum date to include (e.g., '2020.12.31')")
     parser.add_argument(
         "--partition_columns",
         type=str,
@@ -136,6 +144,12 @@ def parse_arguments(args):
         help="Maximum worker processes for multiprocessing.",
     )
     parser.add_argument(
+        "--flush_every",
+        type=int,
+        default=60,
+        help="Number of files to process before writing to disk",
+    )
+    parser.add_argument(
         "--add_vars",
         type=json.loads,
         default="{}",
@@ -155,12 +169,6 @@ def parse_arguments(args):
             "Force regridding even if output directory exists. "
             "WARNING: This will delete the existing output directory and all its contents."
         ),
-    )
-    parser.add_argument(
-        "--hive_mode",
-        action="store_true",
-        help="Writes partitions slower, "
-        "but lower memory footprint. May be needed for antarctica is2",
     )
     return parser.parse_args(args)
 
@@ -226,7 +234,9 @@ def get_processing_objects(params, dataset):
     else:
         thismask = None
 
-    file_and_dates = dataset.get_files_and_dates(hemisphere=thisarea.hemisphere)
+    file_and_dates = dataset.get_files_and_dates(
+        hemisphere=thisarea.hemisphere, min_dt_time=params.min_date, max_dt_time=params.max_date
+    )
 
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(params.standard_epoch, dataset.dataset_epoch)
@@ -238,9 +248,7 @@ def get_processing_objects(params, dataset):
         this_grid=thisgrid,
         this_area=thisarea,
         this_mask=thismask,
-        add_vars=params.add_vars,
-        fill_missing_poca=params.fill_missing_poca,
-        collect_stats=params.debug,
+        params=params,
     )
 
     return file_and_dates, worker, thisgrid, logger
@@ -301,6 +309,29 @@ def _fill_missing_poca_with_nadir_fdr4alt(
         # Variable doesn't exist or can't be accessed - skip POCA filling
         print(f"POCA filling skipped: {e}")
         return lats, lons
+
+
+def _log_file_stats(logger, file_stats):
+    """Extracted helper to keep the hot loop clean."""
+    logger.debug(
+        "file=%s | accepted=%d/%d | rejected(area/mask=%d, quality/time/nan=%d, elev_range=%d)%s%s",
+        file_stats.get("path"),
+        int(file_stats.get("accepted", 0)),
+        int(file_stats.get("total", 0)),
+        int(file_stats.get("outside_area_or_mask", 0)),
+        int(file_stats.get("outside_quality_time_elev_or_nan", 0)),
+        int(file_stats.get("outside_elevation_range", 0)),
+        (
+            f" | reason={file_stats.get('file_reject_reason')}"
+            if file_stats.get("file_reject_reason")
+            else ""
+        ),
+        (
+            f" | detail={file_stats.get('file_reject_detail')}"
+            if file_stats.get("file_reject_detail")
+            else ""
+        ),
+    )
 
 
 def get_coordinates_from_file(
@@ -396,19 +427,14 @@ def get_variables_and_mask(
     dataset: DatasetHelper,
     nc,
     variable_dict: dict,
+    params: argparse.Namespace,
     offset: float,
     area_mask: np.ndarray,
-    strict_missing: bool = False,
-    add_vars: dict | None = None,
 ):
     """
     Get elevation, time, optional power/quality and additional variables from
     an open netCDF or HDF5 file.
-    Constructs a combined boolean mask.
-        - Area mask from get_spatial_filter
-        - NaN mask for elevation, time, and power (if available)
-        - Optional quality mask based on dataset.quality_param == 0
-    Returns a masked variable dictionary.
+    Returns a masked variable dictionary and combined area and finite (elevation/time/power) mask.
     Args:
         dataset (DatasetHelper): CPOM DatasetHelper object.
         nc: Opened NetCDF/HDF5 handle for the current file.
@@ -421,9 +447,6 @@ def get_variables_and_mask(
             (updated variable_dict, combined_mask) when at least two valid points remain;
             (None, None) when fewer than two points survive masking.
     """
-    add_vars = add_vars or {}
-    masks = []
-
     elevation_param = dataset.elevation_param
     if elevation_param is None:
         raise ValueError("dataset.elevation_param is required but None was provided")
@@ -432,51 +455,37 @@ def get_variables_and_mask(
     if time_param is None:
         raise ValueError("dataset.time_param is required but None was provided")
 
-    mask_vars = {
-        "elevation": dataset.get_variable(nc, elevation_param, raise_if_missing=strict_missing),
-        "time": dataset.get_variable(nc, time_param, raise_if_missing=strict_missing),
-        "power": (
-            dataset.get_variable(nc, dataset.power_param, raise_if_missing=strict_missing)
-            if dataset.power_param is not None
-            else None
-        ),
-    }
+    for key, param in [("elevation", elevation_param), ("time", time_param)]:
+        variable_dict[key] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
+            area_mask
+        ]
 
-    for key, arr in mask_vars.items():
-        if arr is not None:
-            variable_dict[key] = arr[area_mask]
+    if dataset.power_param is not None:
+        variable_dict["power"] = dataset.get_variable(
+            nc, dataset.power_param, raise_if_missing=params.debug
+        )[area_mask]
 
-    variable_dict["time"] = variable_dict["time"] + offset
+    variable_dict["time"] += offset
 
     # Build boolean mask
-    masks.append(np.isfinite(variable_dict["elevation"]))
-    masks.append(np.isfinite(variable_dict["time"]))
+    bool_mask = np.isfinite(variable_dict["elevation"]) & np.isfinite(variable_dict["time"])
     if "power" in variable_dict:
-        masks.append(np.isfinite(variable_dict["power"]))
-    if dataset.quality_param is not None:  # Fdr4alt quality mask
-        quality = dataset.get_variable(
-            nc,
-            dataset.quality_param,
-            replace_fill=False,
-            raise_if_missing=strict_missing,
-        )
-        masks.append(quality[area_mask] == 0)
+        bool_mask &= np.isfinite(variable_dict["power"])
 
-    bool_mask = np.logical_and.reduce(masks)
     if bool_mask.sum() < 2:
-        return None
+        return None, None
 
-    for var in list(variable_dict.keys()):
-        if variable_dict[var] is not None:
-            variable_dict[var] = variable_dict[var][bool_mask]
+    variable_dict = {k: v[bool_mask] for k, v in variable_dict.items() if v is not None}
 
     variable_dict["ascending"] = dataset.get_file_orbital_direction(
         latitude=(
             dataset.get_variable(
                 nc,
                 dataset.latitude_nadir_param,
-                raise_if_missing=strict_missing,
-            )[area_mask][bool_mask]
+                raise_if_missing=params.debug,
+            )[
+                area_mask
+            ][bool_mask]
             if dataset.latitude_nadir_param is not None
             else variable_dict["latitude"]
         ),
@@ -485,14 +494,14 @@ def get_variables_and_mask(
     for var, param in {
         "uncertainty": dataset.uncertainty_param,
         "mode": dataset.mode_param,
-        **add_vars,
+        **(params.add_vars if params.add_vars is not None else {}),
     }.items():
         if param is not None:
-            variable_dict[var] = dataset.get_variable(nc, param, raise_if_missing=strict_missing)[
+            variable_dict[var] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
                 area_mask
             ][bool_mask]
 
-    return variable_dict
+    return variable_dict, area_mask[bool_mask]
 
 
 def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
@@ -519,7 +528,7 @@ def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
     return variable_dict
 
 
-# pylint: disable= R0911, R0912, R0913, R0914, R0915, R0917
+# pylint: disable= R0911, R0912, R0913, R0914, R0915,R0917
 def process_file(
     file_and_date: dict,
     dataset: DatasetHelper,
@@ -527,9 +536,7 @@ def process_file(
     this_grid: GridArea,
     this_area: Area,
     this_mask: Mask,
-    add_vars: dict | None = None,
-    fill_missing_poca: bool = False,
-    collect_stats: bool = False,
+    params: argparse.Namespace,
 ) -> pl.LazyFrame | tuple[pl.LazyFrame | None, dict | None] | None:
     """
     Extract and process data from a single altimetry file.
@@ -551,8 +558,7 @@ def process_file(
         this_grid (GridArea): CPOM grid area object
         this_area (Area): CPOM area object
         this_mask (Mask): Optional CPOM mask object (None uses area mask)
-        add_vars (dict): Optional dict of additional variables to load {var_name: dataset_param}
-        fill_missing_poca (bool): Fill missing POCA lat/lons with nadir (for FDR4ALT)
+        params (argparse.Namespace): Command Line Parameters
 
     Returns:
         pl.LazyFrame | tuple[pl.LazyFrame | None, dict | None] | None:
@@ -563,9 +569,8 @@ def process_file(
     if dataset.search_pattern is not None and dataset.search_pattern.endswith(".h5"):
         context_manager = h5py.File
 
-    add_vars = add_vars or {}
     stats: dict | None = None
-    if collect_stats:
+    if params.debug:
         stats = {
             "path": file_and_date["path"],
             "accepted": 0,
@@ -583,10 +588,10 @@ def process_file(
             variable_dict = get_coordinates_from_file(
                 dataset,
                 nc,
-                fill_missing_poca=fill_missing_poca,
-                strict_missing=collect_stats,
+                fill_missing_poca=params.fill_missing_poca,
+                strict_missing=params.debug,
             )
-            if collect_stats:
+            if params.debug and stats is not None:
                 total = int(len(variable_dict["latitude"]))
                 stats["total"] = total
 
@@ -594,35 +599,56 @@ def process_file(
             variable_dict, n_inside, area_mask = get_spatial_filter(
                 variable_dict, this_area, this_mask
             )
-            if collect_stats:
+            if params.debug and stats is not None:
                 stats["outside_area_or_mask"] = max(0, total - int(n_inside))
 
             if n_inside < 2:  # Number of points needed to get the heading
-                if collect_stats:
+                if params.debug:
                     if stats is not None:
                         stats["file_reject_reason"] = "too_few_points_after_spatial_filter"
                     return None, stats
                 return None
 
-            # 3. Get variables and combined mask
+            # 3. Get variables and combined finite mask
             # 4. Apply mask to variables
-            variable_dict = get_variables_and_mask(
-                dataset,
-                nc,
-                variable_dict,
-                offset,
-                area_mask,
-                strict_missing=collect_stats,
-                add_vars=add_vars,
+            variable_dict, mask = get_variables_and_mask(
+                dataset, nc, variable_dict, params, offset, area_mask
             )
             if variable_dict is None:
-                if collect_stats:
+                if params.debug:
                     if stats is not None:
-                        stats["file_reject_reason"] = "too_few_points_after_variable_mask"
+                        stats["file_reject_reason"] = "too_few_points_after_finite_mask"
                     return None, stats
                 return None
 
-            if collect_stats:
+            if (
+                dataset.default_elev_correction is not None
+                or dataset.default_qual_correction is not None
+                or params.correction_function != "default_corrections"
+            ):
+                try:
+                    variable_dict = apply_corrections(
+                        dataset=dataset,
+                        nc=nc,
+                        input_mask=mask,
+                        variable_dict=variable_dict,
+                        params=params,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "Failed to apply correction "
+                        f"'{params.correction_function}' for mission '{dataset.mission}': "
+                        f"{type(exc).__name__}: {exc}"
+                    ) from exc
+
+                if variable_dict is None:
+                    if params.debug:
+                        if stats is not None:
+                            stats["file_reject_reason"] = "too_few_points_after_quality_mask"
+                        return None, stats
+                    return None
+
+            if params.debug:
                 n_quality = int(len(variable_dict["time"]))
                 if stats is not None:
                     stats["outside_quality_time_elev_or_nan"] = max(0, n_inside - n_quality)
@@ -655,12 +681,12 @@ def process_file(
                 pl.lit(file_and_date["month"]).alias("month"),
             )
 
-            if collect_stats:
+            if params.debug:
                 n_before_elev = frame.select(pl.len()).collect().item()
 
             frame = frame.filter((pl.col("elevation") < 6000) & (pl.col("elevation") > -500))
 
-            if collect_stats:
+            if params.debug:
                 n_after_elev = frame.select(pl.len()).collect().item()
                 if stats is not None:
                     stats["outside_elevation_range"] = max(0, n_before_elev - n_after_elev)
@@ -669,19 +695,19 @@ def process_file(
                     if stats is not None:
                         stats["file_reject_reason"] = "all_points_outside_elevation_range"
                     return None, stats
-            if collect_stats:
+            if params.debug:
                 return frame, stats
             return frame
 
     except KeyError as e:
-        if collect_stats:
+        if params.debug:
             if stats is not None:
                 stats["file_reject_reason"] = "missing_variable"
                 stats["file_reject_detail"] = str(e)
             return None, stats
         return None
     except (ValueError, OSError, RuntimeError, TypeError, AttributeError) as e:
-        if collect_stats:
+        if params.debug:
             if stats is not None:
                 stats["file_reject_reason"] = "processing_error"
                 stats["file_reject_detail"] = f"{type(e).__name__}: {e}"
@@ -690,7 +716,7 @@ def process_file(
 
 
 # --------------------------------------#
-# Multiprocessing Data Extraction  #
+# File Writing Helpers   #
 # --------------------------------------#
 
 
@@ -721,6 +747,64 @@ def _group_periods(file_and_dates, use_month):
         for year in years:
             mask = file_and_dates["year"] == year
             yield str(int(year)), file_and_dates[mask]
+
+
+def write_partitions_to_disk(
+    final_df,
+    partition_columns,
+    partition_xy_chunking,
+    out_dir,
+    writer_cache=None,
+):
+    """
+    Write altimetry data to disk.
+    Partitioned by ('year', 'month', 'x_part', 'y_part') or ('year', 'x_part', 'y_part')
+    Args:
+        final_df (DataFrame | LazyFrame): The data to write.
+        partition_columns (list): List of columns to partition by.
+        partition_xy_chunking (int): Chunking factor for spatial partitioning.
+        out_dir (str): Full path to the output directory.
+        writer_cache (dict | None): Cache of open ParquetWriters keyed by output path.
+
+    Returns:
+        int: Total number of rows written to disk.
+    """
+    if "x_part" in partition_columns and "y_part" in partition_columns:
+        final_df = final_df.filter(
+            pl.col("x_bin").is_not_nan() & pl.col("y_bin").is_not_nan()
+        ).with_columns(
+            (pl.col("x_bin") / partition_xy_chunking).cast(pl.Int64).alias("x_part"),
+            (pl.col("y_bin") / partition_xy_chunking).cast(pl.Int64).alias("y_part"),
+        )
+
+    if writer_cache is None:
+        writer_cache = {}
+
+    total_rows = 0
+    for key, group in final_df.partition_by(
+        partition_columns, as_dict=True, maintain_order=False
+    ).items():
+        subdir = os.path.join(
+            out_dir,
+            *[f"{col}={val}" for col, val in zip(partition_columns, key)],
+        )
+        outfile = os.path.join(subdir, "data.parquet")
+
+        if outfile not in writer_cache:
+            os.makedirs(subdir, exist_ok=True)
+            writer_cache[outfile] = pq.ParquetWriter(
+                outfile, group.to_arrow().schema, compression="zstd"
+            )
+
+        writer_cache[outfile].write_table(group.to_arrow())
+        total_rows += len(group)
+
+    return total_rows
+
+
+# -----------------------------#
+# Multi-Processing Function    #
+# ------------------------------#
 
 
 def get_data_and_status_multiprocessed(
@@ -757,80 +841,71 @@ def get_data_and_status_multiprocessed(
         "total_rows_ingested": 0,
     }
     use_month = "month" in params.partition_columns
-    debug_stats = bool(params.debug)
 
     try:
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
             for period_label, files_in_period in _group_periods(file_and_dates, use_month):
-                logger.info("Processing period: %s", period_label)
-
-                n_files = len(files_in_period)
-                logger.info(f"Number of files to process for period {period_label}: {n_files}")
-
-                if n_files == 0:
+                logger.info("Processing period %s (%d files)", period_label, len(files_in_period))
+                if len(files_in_period) == 0:
                     continue
 
-                # Process files for this period
-                chunksize = max(1, n_files // (params.max_workers * 4))
-                results = executor.map(worker, files_in_period, chunksize=chunksize)
-
-                n_valid = 0
-                total_rows = 0
+                n_valid = n_rejected = total_rows = 0
+                writer_cache: dict[str, pq.ParquetWriter] = {}
+                buffer: list[pl.LazyFrame] = []
+                chunksize = max(1, len(files_in_period) // max(1, params.max_workers * 4))
 
                 try:
-                    big_rows_list = []
-                    for result in results:
-                        frame = None
-                        file_stats = None
-                        if isinstance(result, tuple) and len(result) == 2:
-                            frame, file_stats = result
-                        else:
-                            frame = result
+                    for result in executor.map(worker, files_in_period, chunksize=chunksize):
+                        frame, file_stats = (
+                            result
+                            if isinstance(result, tuple) and len(result) == 2
+                            else (result, None)
+                        )
 
-                        if debug_stats and file_stats is not None:
-                            logger.debug(
-                                "file=%s | accepted=%d/%d | "
-                                "rejected(area/mask=%d, quality/time/nan=%d, elev_range=%d)%s%s",
-                                file_stats.get("path"),
-                                int(file_stats.get("accepted", 0)),
-                                int(file_stats.get("total", 0)),
-                                int(file_stats.get("outside_area_or_mask", 0)),
-                                int(file_stats.get("outside_quality_time_or_nan", 0)),
-                                int(file_stats.get("outside_elevation_range", 0)),
-                                (
-                                    f" | reason={file_stats.get('file_reject_reason')}"
-                                    if file_stats.get("file_reject_reason")
-                                    else ""
-                                ),
-                                (
-                                    f" | detail={file_stats.get('file_reject_detail')}"
-                                    if file_stats.get("file_reject_detail")
-                                    else ""
-                                ),
-                            )
+                        if params.debug and file_stats and isinstance(file_stats, dict):
+                            _log_file_stats(logger, file_stats)
+
                         if frame is not None:
-                            big_rows_list.append(frame)
-                    n_valid = len(big_rows_list)
+                            buffer.append(frame)
+                            n_valid += 1
+
+                            if len(buffer) >= params.flush_every:
+                                total_rows += write_partitions_to_disk(
+                                    pl.concat(buffer, rechunk=False).collect(),
+                                    params.partition_columns,
+                                    params.partition_xy_chunking,
+                                    params.out_dir,
+                                    writer_cache,
+                                )
+                                buffer.clear()
+                        else:
+                            n_rejected += 1
+
+                    if buffer:  # Handle last batch if < flush_every
+                        total_rows += write_partitions_to_disk(
+                            pl.concat(buffer, rechunk=False).collect(),
+                            params.partition_columns,
+                            params.partition_xy_chunking,
+                            params.out_dir,
+                            writer_cache,
+                        )
+                        buffer.clear()
+
                 except (ValueError, OSError, RuntimeError) as e:
                     logger.error(
-                        f"Error collecting results for period {period_label}: {e}",
-                        exc_info=True,
+                        "Error collecting results for %s: %s", period_label, e, exc_info=True
                     )
-                    big_rows_list = []
+                finally:
+                    for w in writer_cache.values():
+                        w.close()
 
-                if n_valid > 0:
-                    final_df = pl.concat(big_rows_list, rechunk=False)
-                    final_df = final_df.collect() if not params.hive_mode else final_df
-                    logger.info("Starting to write partitions to disk for period %s", period_label)
-                    total_rows = write_partitions_to_disk(
-                        final_df=final_df,
-                        partition_columns=params.partition_columns,
-                        partition_xy_chunking=params.partition_xy_chunking,
-                        out_dir=params.out_dir,
-                        hive_mode=params.hive_mode,
-                    )
-
-                logger.info(f"Collected {n_valid} valid results for period {period_label}")
+                logger.info(
+                    "Period %s: %d valid, %d rejected, %d rows",
+                    period_label,
+                    n_valid,
+                    n_rejected,
+                    total_rows,
+                )
 
                 if n_valid == 0:
                     status["empty_periods"].append(period_label)
@@ -838,11 +913,12 @@ def get_data_and_status_multiprocessed(
 
                 status["years_ingested"].append(period_label)
                 status["years_files_ingested"].append(n_valid)
-                status["years_files_rejected"].append(n_files - n_valid)
+                status["years_files_rejected"].append(n_rejected)
                 status["years_rows_ingested"].append(total_rows)
                 status["total_l2_files_ingested"] += n_valid
-                status["total_l2_files_rejected"] += n_files - n_valid
+                status["total_l2_files_rejected"] += n_rejected
                 status["total_rows_ingested"] += total_rows
+
     except (OSError, ValueError) as e:
         logger.error("Multiprocessing failed: %s", e)
         sys.exit(1)
@@ -851,80 +927,8 @@ def get_data_and_status_multiprocessed(
 
 
 # --------------------------------------#
-# Data output functions                 #
+# Metadata Output Function
 # --------------------------------------#
-
-
-def write_partitions_to_disk(
-    final_df,
-    partition_columns,
-    partition_xy_chunking,
-    out_dir,
-    hive_mode=True,
-):
-    """
-    Write altimetry data to disk.
-    Partitioned by ('year', 'month', 'x_part', 'y_part') or
-    ('year', 'x_part', 'y_part')
-
-    Uses eager partitioning (in-memory) for fast writes.
-
-    Args:
-        final_df (DataFrame | LazyFrame): The data to write.
-        partition_columns (list): List of columns to partition by.
-        partition_xy_chunking (int): Chunking factor for spatial partitioning.
-        out_dir (str): Full path to the output directory.
-        append (bool): If True, append via shared ParquetWriter per partition.
-        writer_cache (dict | None): Cache of open ParquetWriters keyed by output path.
-
-    Returns:
-        int: Total number of rows written to disk.
-    """
-    if "x_part" in partition_columns and "y_part" in partition_columns:
-        final_df = final_df.filter(
-            pl.col("x_bin").is_not_nan() & pl.col("y_bin").is_not_nan()
-        ).with_columns(
-            (pl.col("x_bin") / partition_xy_chunking).cast(pl.Int64).alias("x_part"),
-            (pl.col("y_bin") / partition_xy_chunking).cast(pl.Int64).alias("y_part"),
-        )
-
-    if hive_mode:
-
-        def file_path_provider(args: pl.FileProviderArgs) -> str:
-            row = args.partition_keys.row(0, named=True)
-            sub_path = "/".join(f"{k}={v}" for k, v in row.items())
-            return f"{out_dir}/{sub_path}/data.parquet"
-
-        total_rows = int(final_df.select(pl.len()).collect().item())
-
-        final_df.sink_parquet(
-            pl.PartitionBy(
-                out_dir,
-                key=partition_columns,
-                include_key=True,
-                file_path_provider=file_path_provider,
-            ),
-            compression="zstd",
-        )
-    else:
-        partitions = final_df.partition_by(partition_columns, as_dict=True)
-
-        total_rows = 0
-        for key, group in partitions.items():
-            subdir = os.path.join(
-                out_dir,
-                *[f"{group}={str(i)}" for group, i in zip(partition_columns, key)],
-            )
-            if not os.path.isdir(subdir):
-                os.makedirs(subdir, exist_ok=True)
-
-            outfile = os.path.join(subdir, "data.parquet")
-            pq.write_table(group.to_arrow(), outfile, compression="zstd")
-            total_rows += len(group)
-
-    return total_rows
-
-
 def get_metadata_json(params, dataset, status, thisgrid, start_time):
     """
     Create and save metadata.json to the output directory.

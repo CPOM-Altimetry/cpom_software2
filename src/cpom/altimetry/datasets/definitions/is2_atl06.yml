@@ -11,5 +11,5 @@ latitude_param: "land_ice_segments/latitude"
 longitude_param: "land_ice_segments/longitude"
 elevation_param: "land_ice_segments/h_li"
 time_param: "land_ice_segments/delta_time"
-quality_param: "land_ice_segments/atl06_quality_summary"
 uncertainty_param : "land_ice_segments/h_li_sigma"
+default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_is2_qual_mask
