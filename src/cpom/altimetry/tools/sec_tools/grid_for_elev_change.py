@@ -525,6 +525,35 @@ def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
     return variable_dict
 
 
+def apply_elevation_range_filter(
+    variable_dict: dict,
+    stats: dict | None = None,
+    min_elevation: float = -500.0,
+    max_elevation: float = 6000.0,
+) -> tuple[dict | None, dict | None]:
+    """Filter arrays by elevation range and update optional per-file stats."""
+
+    elevation = variable_dict["elevation"]
+    valid_mask = (elevation > min_elevation) & (elevation < max_elevation)
+    n_before = int(len(elevation))
+    n_after = int(np.count_nonzero(valid_mask))
+
+    if stats is not None:
+        stats["outside_elevation_range"] = max(0, n_before - n_after)
+        stats["accepted"] = n_after
+
+    if n_after == 0:
+        return None, stats
+
+    if n_after == n_before:
+        return variable_dict, stats
+
+    filtered_dict = {}
+    for variable, arr in variable_dict.items():
+        filtered_dict[variable] = arr[valid_mask] if arr is not None else None
+    return filtered_dict, stats
+
+
 # pylint: disable= R0911, R0912, R0913, R0914, R0915, R0917
 def process_file(
     file_and_date: dict,
@@ -656,25 +685,21 @@ def process_file(
                     else arr
                 )
 
-            frame = pl.LazyFrame(variable_dict).with_columns(
-                pl.lit(file_and_date["year"]).alias("year"),
-                pl.lit(file_and_date["month"]).alias("month"),
+            filtered_variable_dict, stats = apply_elevation_range_filter(
+                variable_dict, stats if collect_stats else None
             )
-
-            if collect_stats:
-                n_before_elev = frame.select(pl.len()).collect().item()
-
-            frame = frame.filter((pl.col("elevation") < 6000) & (pl.col("elevation") > -500))
-
-            if collect_stats:
-                n_after_elev = frame.select(pl.len()).collect().item()
-                if stats is not None:
-                    stats["outside_elevation_range"] = max(0, n_before_elev - n_after_elev)
-                    stats["accepted"] = n_after_elev
-                if n_after_elev == 0:
-                    if stats is not None:
-                        stats["file_reject_reason"] = "all_points_outside_elevation_range"
+            if filtered_variable_dict is None:
+                if collect_stats and stats is not None:
+                    stats["file_reject_reason"] = "all_points_outside_elevation_range"
                     return None, stats
+                return None
+            variable_dict = filtered_variable_dict
+
+            n_rows = len(variable_dict["time"])
+            variable_dict["year"] = np.full(n_rows, file_and_date["year"], dtype=np.int32)
+            variable_dict["month"] = np.full(n_rows, file_and_date["month"], dtype=np.int32)
+
+            frame = pl.LazyFrame(variable_dict)
             if collect_stats:
                 return frame, stats
             return frame
