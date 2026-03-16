@@ -64,12 +64,14 @@ def _transform_is1_to_wgs84(variable_dict: dict) -> dict:
     topex_to_ecef = Transformer.from_crs(topex_crs, ecef_crs, always_xy=True)
     ecef_to_wgs = Transformer.from_crs(ecef_crs, CRS.from_epsg(4979), always_xy=True)
 
-    x_ecef, y_ecef, h_ecef = topex_to_ecef.transform(
+    x_ecef, y_ecef, h_ecef = topex_to_ecef.transform(  # type: ignore[misc]
         variable_dict["longitude"],
         variable_dict["latitude"],
         variable_dict["elevation"],
     )
-    longitude, latitude, elevation = ecef_to_wgs.transform(x_ecef, y_ecef, h_ecef)
+    longitude, latitude, elevation = ecef_to_wgs.transform(
+        x_ecef, y_ecef, h_ecef
+    )  # type: ignore[misc]
     variable_dict["longitude"] = longitude
     variable_dict["latitude"] = latitude
     variable_dict["elevation"] = elevation
