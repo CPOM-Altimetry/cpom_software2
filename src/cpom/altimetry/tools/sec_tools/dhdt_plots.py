@@ -295,11 +295,14 @@ def plot_icesheet(
         Path(params.out_dir).mkdir(parents=True, exist_ok=True)
 
         annotation_list = []
+
+        # mission name n/a yet in meta data
         annotation_list.append(
             Annotation(
                 0.8,
                 0.9,
-                f"Mission: {params.mission_name}",
+                "Mission: ...",
+                # f"Mission: {params.mission_name}",
                 None,
                 12,
                 fontweight="normal",
