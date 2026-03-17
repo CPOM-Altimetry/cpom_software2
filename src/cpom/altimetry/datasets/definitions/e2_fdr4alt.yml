@@ -1,5 +1,6 @@
 mission: "e2"
 long_name: "ERS-2 FDR4ALT Land Ice"
+file_backend: "netcdf4"
 search_pattern: "**/ER2_F4A_ALT_TDP_LI_*.nc"
 yyyymm_str_fname_indices: [-38, -30]
 dataset_epoch: "1950-01-01T00:00:00"

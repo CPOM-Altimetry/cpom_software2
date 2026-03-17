@@ -1,6 +1,7 @@
 mission: "env"
 long_name: "ENVISAT FDR4ALT Land Ice"
 search_pattern: "**/EN1_F4A_ALT_TDP_LI_*.nc"
+file_backend: "netcdf4"
 yyyymm_str_fname_indices: [-38, -30]
 dataset_epoch: "1950-01-01T00:00:00"
 latitude_param: "expert/ice_sheet_lat_poca"
