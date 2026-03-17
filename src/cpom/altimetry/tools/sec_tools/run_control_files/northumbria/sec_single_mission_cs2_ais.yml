@@ -42,7 +42,7 @@ base_out: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/"
 cs2:
   # Algorithm chain: No grid_for_elev_change because grid already exists
   algorithm_list:
-    # - grid_for_elev_change       # Step 1: Create new grid from raw data
+      - grid_for_elev_change       # Step 1: Create new grid from raw data
       - surface_fit                # Step 2: Fit surfaces to grid
       - epoch_average              # Step 3: Compute epoch-averaged values
       - calculate_dhdt             # Step 4: Calculate rate of change
