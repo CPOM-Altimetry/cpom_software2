@@ -117,16 +117,30 @@ class DatasetHelper(DatasetConfig):
         Returns a netCDF4.Dataset or h5py.File object
         depending on the dataset.file_backend configuration.
 
+        If self.file_backend is None, it is inferred from the file extension.
+
         Args:
             file_path (Path): Path to the data file.
         """
-        if self.file_backend == "netcdf4":
+        backend = self.file_backend
+
+        # If backend is not set, infer from file extension
+        if backend is None:
+            suffix = file_path.suffix.lower()
+            if suffix in (".nc", ".nc4"):
+                backend = "netcdf4"
+            elif suffix in (".h5", ".hdf5"):
+                backend = "h5py"
+            else:
+                thislog.warning(
+                    "Could not infer file backend for %s from extension %s", file_path, suffix
+                )
+
+        if backend == "netcdf4":
             return Dataset(file_path, "r")
-        if self.file_backend == "h5py":
+        if backend == "h5py":
             return h5py.File(file_path, "r")
-        raise ValueError(
-            f"Unsupported file backend: {self.file_backend} must" " be 'netcdf4' or 'h5py'."
-        )
+        raise ValueError(f"Unsupported file backend: {backend} must" " be 'netcdf4' or 'h5py'.")
 
     def get_files_dir(
         self,

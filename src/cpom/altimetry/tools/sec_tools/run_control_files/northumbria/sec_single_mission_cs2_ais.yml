@@ -69,7 +69,7 @@ cs2:
     binsize: 5000
     mask_name: 'antarctica_bedmachine_v2_grid_mask'
     data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
-    dataset: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/datasets/definitions/cryotempo_d.yml"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/cryotempo.yml"
 
 
   # Surface fitting parameters
