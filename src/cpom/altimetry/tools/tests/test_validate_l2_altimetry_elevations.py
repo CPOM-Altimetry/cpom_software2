@@ -288,7 +288,7 @@ def test_slope_correction_missing_data(mock_args):
         "dh": np.array([15, 10, -5, -10]),
     }
     dem1 = np.array([520, 615, 699, 402])
-    dem2 = np.array([512, 605, 698, np.NaN])
+    dem2 = np.array([512, 605, 698, np.nan])
 
     with patch(
         "cpom.altimetry.tools.validate_l2_altimetry_elevations.Dem", MockDem
