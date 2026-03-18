@@ -56,7 +56,7 @@ from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
 
-# pylint: disable=too-many-lines,too-many-locals,too-many-statements
+# pylint: disable=too-many-lines,too-many-locals,too-many-statements, too-many-branches
 
 # --------------------------------------#
 # Set up Functions                     #
@@ -462,14 +462,16 @@ def get_variables_and_mask(
         raise ValueError("dataset.time_param is required but None was provided")
 
     for key, param in [("elevation", elevation_param), ("time", time_param)]:
-        variable_dict[key] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
-            area_mask
-        ]
+        var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
+        if var_data.size == 0:
+            return None, None
+        variable_dict[key] = var_data[area_mask]
 
     if dataset.power_param is not None:
-        variable_dict["power"] = dataset.get_variable(
-            nc, dataset.power_param, raise_if_missing=params.debug
-        )[area_mask]
+        var_data = dataset.get_variable(nc, dataset.power_param, raise_if_missing=params.debug)
+        if var_data.size == 0:
+            return None, None
+        variable_dict["power"] = var_data[area_mask]
 
     variable_dict["time"] += offset
 
@@ -483,18 +485,19 @@ def get_variables_and_mask(
 
     variable_dict = {k: v[bool_mask] for k, v in variable_dict.items() if v is not None}
 
+    lat_nadir_data = None
+    if dataset.latitude_nadir_param is not None:
+        lat_nadir_data = dataset.get_variable(
+            nc, dataset.latitude_nadir_param, raise_if_missing=params.debug
+        )
+        if lat_nadir_data.size == 0:
+            return None, None
+        lat_nadir_data = lat_nadir_data[area_mask][bool_mask]
+    else:
+        lat_nadir_data = variable_dict["latitude"]
+
     variable_dict["ascending"] = dataset.get_file_orbital_direction(
-        latitude=(
-            dataset.get_variable(
-                nc,
-                dataset.latitude_nadir_param,
-                raise_if_missing=params.debug,
-            )[
-                area_mask
-            ][bool_mask]
-            if dataset.latitude_nadir_param is not None
-            else variable_dict["latitude"]
-        ),
+        latitude=lat_nadir_data,
         nc=nc,
     )
     for var, param in {
@@ -503,9 +506,9 @@ def get_variables_and_mask(
         **(params.add_vars if params.add_vars is not None else {}),
     }.items():
         if param is not None:
-            variable_dict[var] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
-                area_mask
-            ][bool_mask]
+            var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
+            if var_data.size > 0:
+                variable_dict[var] = var_data[area_mask][bool_mask]
 
     return variable_dict, area_mask[bool_mask]
 
@@ -717,7 +720,7 @@ def process_file(
                 stats["file_reject_detail"] = str(e)
             return None, stats
         return None
-    except (ValueError, OSError, RuntimeError, TypeError, AttributeError) as e:
+    except (ValueError, OSError, RuntimeError, TypeError, AttributeError, IndexError) as e:
         if params.debug:
             if stats is not None:
                 stats["file_reject_reason"] = "processing_error"
