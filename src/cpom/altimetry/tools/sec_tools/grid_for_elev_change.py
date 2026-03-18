@@ -597,6 +597,9 @@ def process_file(
                 logging.debug(
                     "File: %s, Latitudes: %s", file_and_date["path"], variable_dict["latitude"]
                 )
+                logging.debug(
+                    "File: %s, Longitudes: %s", file_and_date["path"], variable_dict["longitude"]
+                )
 
             if params.debug and stats is not None:
                 total = int(len(variable_dict["latitude"]))
