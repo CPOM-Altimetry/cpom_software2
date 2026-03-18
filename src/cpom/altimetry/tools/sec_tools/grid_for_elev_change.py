@@ -175,6 +175,30 @@ def parse_arguments(args):
     return parser.parse_args(args)
 
 
+def _robust_rmtree(path: str) -> None:
+    """Remove a directory tree robustly.
+
+    Python 3.12's shutil.rmtree uses an fd-based deletion path that calls
+    os.rmdir() on subdirectories.  On some NFS / CIFS mounts (e.g. /cpnet/)
+    this raises ``OSError: [Errno 39] Directory not empty`` even though the
+    directory is logically empty, because the kernel dentry cache hasn't flushed
+    yet.  We therefore try shutil.rmtree first and fall back to ``rm -rf`` via
+    subprocess which bypasses Python I/O entirely.
+    """
+    import subprocess  # pylint: disable=import-outside-toplevel
+
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        # Fallback for network filesystems (NFS/CIFS) where the fd-based
+        # rmtree implementation can fail with ENOTEMPTY.
+        result = subprocess.run(["rm", "-rf", path], check=False)
+        if result.returncode != 0 or os.path.exists(path):
+            raise OSError(
+                f"Failed to remove directory '{path}' using both shutil.rmtree and 'rm -rf'."
+            ) from None
+
+
 def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_regrid=False):
     """
     Validate and clear the output directory if it exists. Prompt user for confirmation
@@ -194,12 +218,12 @@ def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_
                     input("Confirm removal of previous grid archive? (y/n): ").strip().lower()
                 )
                 if response == "y":
-                    shutil.rmtree(params.out_dir)
+                    _robust_rmtree(params.out_dir)
                 else:
                     print("Exiting as user requested not to overwrite grid archive")
                     sys.exit(0)
             else:
-                shutil.rmtree(params.out_dir)
+                _robust_rmtree(params.out_dir)
 
         else:
             sys.exit(1)
