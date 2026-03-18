@@ -593,6 +593,11 @@ def process_file(
                 fill_missing_poca=params.fill_missing_poca,
                 strict_missing=params.debug,
             )
+            if params.debug:
+                logging.debug(
+                    "File: %s, Latitudes: %s", file_and_date["path"], variable_dict["latitude"]
+                )
+
             if params.debug and stats is not None:
                 total = int(len(variable_dict["latitude"]))
                 stats["total"] = total
