@@ -117,7 +117,7 @@ e1:
     binsize: 5000
     plotting_column: "dhdt"
     period_column: "period"
-    plot_range: [-2, 2]
+    plot_range: [-1, 1]
     basin_structure: False
 
 #-------------------------------------------------------------------------#
