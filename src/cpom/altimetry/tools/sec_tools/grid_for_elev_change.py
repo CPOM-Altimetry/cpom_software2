@@ -96,6 +96,7 @@ def parse_arguments(args):
         required=False,
         nargs="+",
         help="Optional list of values to filter the mask by, e.g. --mask_values 1 2 3. ",
+        type=int,
     )
     parser.add_argument(
         "--correction_function",

@@ -890,7 +890,7 @@ class Mask:
                                  substituted)
         Returns:
             mask_values (np.ndarray): grid mask value at each input lats, lons interpolated
-                                 grid location or np.NaN if outside area
+                                 grid location or np.nan if outside area
 
         """
 
@@ -913,7 +913,7 @@ class Mask:
         if inputs_are_xy:
             x, y = lats, lons
         else:
-            (x, y) = self.latlon_to_xy(lats, lons)  # pylint: disable=E0633
+            x, y = self.latlon_to_xy(lats, lons)  # pylint: disable=E0633
 
         mask_values = np.full(lats.size, unknown_value, dtype=np.uint8)
 
