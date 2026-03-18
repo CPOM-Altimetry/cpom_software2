@@ -68,6 +68,7 @@ s3a:
     gridarea: 'antarctica'
     binsize: 5000
     mask_name: 'antarctica_bedmachine_v2_grid_mask'
+    mask_values: [2,4] # 2=ice sheet, 4=lake vostok
     data_input_dir: "${CPDATA_DIR}/SATS/RA/S3A/L2/THEMATIC/BC005/LI"
     dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3a_thematic_bc005.yml"
 
