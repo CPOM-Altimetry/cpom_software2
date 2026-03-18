@@ -176,27 +176,62 @@ def parse_arguments(args):
 
 
 def _robust_rmtree(path: str) -> None:
-    """Remove a directory tree robustly.
+    """Remove a directory tree robustly, handling NFS silly-renamed files.
 
-    Python 3.12's shutil.rmtree uses an fd-based deletion path that calls
-    os.rmdir() on subdirectories.  On some NFS / CIFS mounts (e.g. /cpnet/)
-    this raises ``OSError: [Errno 39] Directory not empty`` even though the
-    directory is logically empty, because the kernel dentry cache hasn't flushed
-    yet.  We therefore try shutil.rmtree first and fall back to ``rm -rf`` via
-    subprocess which bypasses Python I/O entirely.
+    On NFS mounts (e.g. /cpnet/) two failure modes can occur:
+
+    1. Python 3.12's shutil.rmtree uses an fd-based deletion path that calls
+       os.rmdir() on subdirectories, which can raise ``OSError: [Errno 39]
+       Directory not empty`` due to stale dentry-cache entries.
+
+    2. When a previous run was interrupted while files were still open, the NFS
+       client renames them to hidden ``.nfsXXXXXX`` "silly files" that cannot be
+       deleted until every process holding a file-descriptor to them has closed
+       it.  Neither shutil.rmtree nor ``rm -rf`` can remove these files while
+       they are still in use.
+
+    Strategy: try a plain delete first; if that fails, **rename** the directory
+    out of the way (to a timestamped sibling) and let the caller create a fresh
+    output directory.  The OS will garbage-collect the renamed directory once all
+    file-handles are released.
     """
     import subprocess  # pylint: disable=import-outside-toplevel
 
+    # --- attempt 1: shutil.rmtree ---
     try:
         shutil.rmtree(path)
+        return  # success
     except OSError:
-        # Fallback for network filesystems (NFS/CIFS) where the fd-based
-        # rmtree implementation can fail with ENOTEMPTY.
-        result = subprocess.run(["rm", "-rf", path], check=False)
-        if result.returncode != 0 or os.path.exists(path):
-            raise OSError(
-                f"Failed to remove directory '{path}' using both shutil.rmtree and 'rm -rf'."
-            ) from None
+        pass
+
+    # --- attempt 2: subprocess rm -rf (bypasses Python's fd-safe path) ---
+    subprocess.run(["rm", "-rf", path], check=False)
+    if not os.path.exists(path):
+        return  # success
+
+    # --- attempt 3: NFS silly-file fallback — rename the directory aside ---
+    # .nfsXXXXXX files cannot be removed while held open by another process.
+    # Moving the whole directory out of the way lets us create a clean output
+    # directory immediately; the OS removes the renamed tree once all handles close.
+    timestamp = int(time.time())
+    parent = os.path.dirname(path.rstrip("/"))
+    basename = os.path.basename(path.rstrip("/"))
+    aside_path = os.path.join(parent, f".old_{basename}_{timestamp}")
+    try:
+        os.rename(path, aside_path)
+        print(
+            f"WARNING: Could not fully delete '{path}' (NFS silly files are still held open "
+            f"by another process). Directory has been renamed to '{aside_path}' and will be "
+            f"cleaned up automatically once all file handles are closed. "
+            f"You can also remove it manually later with: rm -rf '{aside_path}'"
+        )
+        return  # caller will now mkdir the original path fresh
+    except OSError as exc:
+        raise OSError(
+            f"Failed to remove or move aside '{path}'.  "
+            f"NFS silly files (.nfsXXXXXX) may still be held open by another process — "
+            f"check with: lsof +D '{path}'"
+        ) from exc
 
 
 def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_regrid=False):
