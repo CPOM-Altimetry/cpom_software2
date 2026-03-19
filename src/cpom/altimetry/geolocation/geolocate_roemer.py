@@ -3,16 +3,16 @@ cpom.altimetry.geolocation.geolocate_roemer.py
 
 # Purpose
 
-Slope correction/geolocation function using an adapted Roemer method 
+Slope correction/geolocation function using an adapted Roemer method
 from :
 Roemer, S., Legrésy, B., Horwath, M., and Dietrich, R.: Refined
 analysis of radar altimetry data applied to the region of the
 subglacial Lake Vostok/Antarctica, Remote Sens. Environ., 106,
 269–284, https://doi.org/10.1016/j.rse.2006.02.026, 2007.
 
-Adaption by A.Muir, M.McMillan, Q.Huang (CPOM), includes a two stage POCA location, 
+Adaption by A.Muir, M.McMillan, Q.Huang (CPOM), includes a two stage POCA location,
 performed by minimizing the range to the satellite from DEM points located within firstly
-a circular area around the nadir location of radius equal to half the beam width, 
+a circular area around the nadir location of radius equal to half the beam width,
 and then within the pulse limited footprint around the initial POCA
 at a finer resampled DEM resolution.
 
@@ -55,7 +55,7 @@ def calculate_distances3d(
     y2_array: np.ndarray | list,
     z2_array: np.ndarray | list,
     squared_only=False,
-) -> list[float]:
+) -> np.ndarray:
     """calculates the distances between a  refernce cartesian point (x1,y1,z1) in 3d space
     and a list of other points : x2[],y2[],z2[]
 
@@ -70,7 +70,7 @@ def calculate_distances3d(
                               this will be faster, but doesn't give actual distances
 
     Returns:
-        list[float]: list of distances between points x1,y1,z1 and x2[],y2[],z2[]
+        np.ndarray: array of distances between points x1,y1,z1 and x2[],y2[],z2[]
     """
 
     x2_array = np.array(x2_array)
@@ -533,7 +533,7 @@ def geolocate_roemer(
                     window = all_distances[ii : ii + window_size, jj : jj + window_size]
 
                     # Calculate the mean distance within the window
-                    mean_distance = np.mean(window)
+                    mean_distance = float(np.mean(window))
 
                     # Update the minimum mean and position if a new minimum is found
                     if mean_distance < min_distance:

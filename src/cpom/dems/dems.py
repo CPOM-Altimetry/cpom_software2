@@ -2,7 +2,6 @@
 
 DEM class to read and interpolate DEMs
 """
-
 from __future__ import annotations
 
 import logging
@@ -25,8 +24,8 @@ from tifffile import imread  # to support large TIFF files
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-locals
-# pylint: disable=R0801
 # pylint: disable=too-many-lines
+# pylint: disable=R0801 , C0302
 
 log = logging.getLogger(__name__)
 

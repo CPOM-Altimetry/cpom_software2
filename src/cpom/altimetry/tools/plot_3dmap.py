@@ -111,13 +111,13 @@ def get_variable(nc: Dataset, nc_var_path: str) -> Variable:
         SystemExit: If the variable or group is not found in the NetCDF file.
     """
     parts = nc_var_path.split("/")
-    var = nc
+    var: Dataset | Variable = nc
     for part in parts:
         try:
             var = var[part]
         except (KeyError, IndexError):
             sys.exit(f"{RED}NetCDF parameter '{nc_var_path}' not found{NC}")
-    return var
+    return var  # type: ignore[return-value]
 
 
 def get_default_param(

@@ -26,7 +26,6 @@ from matplotlib import colormaps
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from matplotlib.figure import Figure
-from numpy import ma  # masked arrays
 from PIL import Image
 
 from cpom.areas.areas import Area
@@ -560,10 +559,14 @@ class Polarplot:
                 lons = np.array(lons, dtype=float)
 
                 # Test for masked arrays
-                if ma.is_masked(lats):
-                    lats[lats.mask.nonzero()] = np.nan
-                if ma.is_masked(lons):
-                    lons[lons.mask.nonzero()] = np.nan
+
+                if np.ma.is_masked(lats):
+                    # getmaskarray returns a boolean array even if lats isn't masked
+                    lats[np.ma.getmaskarray(lats)] = np.nan
+
+                if np.ma.is_masked(lons):
+                    # getmaskarray returns a boolean array even if lons isn't masked
+                    lons[np.ma.getmaskarray(lons)] = np.nan
 
                 # Step 1: Filter for valid values
                 # Assuming latitude values must be between -90 and 90, and longitude
