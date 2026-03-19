@@ -1000,7 +1000,13 @@ def get_data_and_status_multiprocessed(
 # --------------------------------------#
 # Metadata Output Function
 # --------------------------------------#
-def get_metadata_json(params, dataset, status, thisgrid, start_time):
+def get_metadata_json(
+    params: argparse.Namespace,
+    dataset: DatasetHelper,
+    status: dict,
+    thisgrid: GridArea,
+    start_time: float,
+) -> None:
     """
     Create and save metadata.json to the output directory.
     Metadata includes:

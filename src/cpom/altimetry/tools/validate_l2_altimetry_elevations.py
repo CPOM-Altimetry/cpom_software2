@@ -73,7 +73,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from astropy.stats import median_absolute_deviation, sigma_clipped_stats
-from netCDF4 import Dataset  # pylint: disable=E0611
+from netCDF4 import Dataset, Variable  # pylint: disable=E0611
 from pyproj import CRS, Transformer
 from scipy.spatial import KDTree
 
@@ -193,11 +193,11 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def get_variable(nc: Dataset, nc_var_path: str) -> np.ndarray:
+def get_variable(nc: Dataset | h5py.File, nc_var_path: str) -> np.ndarray:
     """Retrieve variable from NetCDF file, handling groups if necessary.
 
     Args:
-        nc (Dataset): The dataset object
+        nc (Dataset | h5py.File): The dataset object
         nc_var_path (str): The path to the variable within the file,
                         with groups separated by '/'.
 
@@ -209,12 +209,12 @@ def get_variable(nc: Dataset, nc_var_path: str) -> np.ndarray:
     """
     try:
         parts = nc_var_path.split("/")
-        var = nc
+        var: Dataset | Variable = nc
         for part in parts:
             var = var[part]
             if var is None:
                 raise IndexError(f"NetCDF parameter '{nc_var_path}' not found.")
-        return var[:]
+        return var[:]  # type: ignore[index]
     except IndexError as err:
         raise IndexError(f"NetCDF parameter or group {err} not found") from err
 
@@ -392,12 +392,12 @@ class ProcessData:
         return valid_mask if valid_mask.any() else None
 
     def fill_empty_latlon_with_nadir(
-        self, nc: str, lat: np.ndarray, lon: np.ndarray, config: dict
+        self, nc: Dataset, lat: np.ndarray, lon: np.ndarray, config: dict
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Populate empty poca lat/lon with nadir lat/lon
         Args:
-            nc (str): NetCDF filename
+            nc (Dataset): Open NetCDF dataset
             lat (np.array): Array of latitudes
             lon (np.array): Array of longitudes
             config (dict): Dictionary of variable names
