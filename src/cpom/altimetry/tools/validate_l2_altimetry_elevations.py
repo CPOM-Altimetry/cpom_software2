@@ -695,7 +695,7 @@ def get_elev_differences(
     """
 
     is2_tree = KDTree(np.c_[laser_points["x"], laser_points["y"]])
-    add_vars = [var for var in altimeter_points.dtype.names if var not in {"x", "y", "h"}]
+    add_vars = [var for var in (altimeter_points.dtype.names or ()) if var not in {"x", "y", "h"}]
     results: dict = {
         key: []
         for key in [
