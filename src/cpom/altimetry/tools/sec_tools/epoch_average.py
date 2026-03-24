@@ -787,8 +787,13 @@ def process_partition(
     return epoch_stats_lf
 
 
+# ----------------
+# Main Function #
+# ----------------
+
+
 # pylint: disable=R0914
-def main(args: list[str] | None = None) -> None:
+def epoch_average(args: list[str] | None = None) -> None:
     """Main entry point for epoch averaging.
 
     Steps:
@@ -906,4 +911,4 @@ def main(args: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    epoch_average(sys.argv[1:])

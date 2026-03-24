@@ -1,0 +1,291 @@
+#-------------------------------------------------------------------------------------#
+# Run Control file to produce single mission Antarctic Ice Sheet wide 
+# dhdt estimates and plots for ALL missions:
+#   cs2  (CryoTEMPO Baseline-D)
+#   s3a  (Sentinel-3A thematic land ice BC005)
+#   s3b  (Sentinel-3B thematic land ice BC005)
+#   env  (ENVISAT FDR4ALT)
+#   e2   (ERS-2 FDR4ALT)
+#   e1   (ERS-1 FDR4ALT)
+#
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process all configured missions (sequential):
+#     ./run_chain.py --config sec_all_missions_ais.yml
+#
+#  Process a specific subset (override missions_to_run on the command line):
+#     ./run_chain.py --config sec_all_missions_ais.yml --missions cs2 s3a
+#-------------------------------------------------------------------------------------#
+
+# Define which mission(s) to process
+# Comment out missions you do not want to run
+missions_to_run:
+  - cs2
+  - s3a
+  - s3b
+  - env
+  - e2
+  - e1
+
+# Base output directory where all results will be stored
+# Individual missions create subdirectories within this path
+# Note: path chosen at CPOM/Northumbria University
+base_out: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/"
+
+#-------------------------------------------------------------------------------------#
+# MISSION-SPECIFIC PARAMETERS
+# These override the common parameters below for each mission.
+#
+# INPUT DIRECTORY OVERRIDE:
+# You can override input directories in the config by adding 'in_dir' 
+# to any step. This allows reusing intermediate outputs from previous runs.
+#
+# GRID METADATA MANAGEMENT:
+# When grids are pre-computed and stored externally, specify 'grid_info_json' at 
+# the mission level. This path is then automatically passed to all steps that need it.
+#-------------------------------------------------------------------------------------#
+
+# ============================================================= #
+#   CryoSat-2  (CryoTEMPO Baseline-D)
+# ============================================================= #
+cs2:
+  algorithm_list:
+      - grid_for_elev_change       # Step 1: Create new grid from raw data
+      - surface_fit                # Step 2: Fit surfaces to grid
+      - epoch_average              # Step 3: Compute epoch-averaged values
+      - calculate_dhdt             # Step 4: Calculate rate of change
+      - dhdt_plots                 # Step 5: Generate visualizations
+
+  # Data will be written to {base_out}/{base_folder}/
+  base_folder: "ais_cs2"
+
+  # Path to grid metadata
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_cs2/gridded_altimetry/metadata.json"
+
+  # --------------------#
+  # Algorithm Overrides #
+  # --------------------#
+
+  # Mission-specific data source (all other grid params come from COMMON section)
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/CRY/L2/CRYO-TEMPO/BASELINE-D/LAND_ICE/ANTARC/"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/cryotempo.yml"
+
+  # Mission-specific time range for surface fitting
+  surface_fit:
+    mintime: "20/10/2010"
+    # maxtime: "28/11/2025"   # End time for plane fit (DD/MM/YYYY or DD.MM.YYYY) | max time in grid if not provided
+    pcmintime: "01/01/2011"   # Start date of power correction | mintime if not provided
+    pcmaxtime: "01/01/2016"   # End date of power correction | maxtime if not provided
+
+# ============================================================= #
+#   Sentinel-3A  (Thematic Land Ice BC005)
+# ============================================================= #
+s3a:
+  algorithm_list:
+      - grid_for_elev_change
+      - surface_fit
+      - epoch_average
+      - calculate_dhdt
+      - dhdt_plots
+
+  base_folder: "ais_s3a"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3a/gridded_altimetry/metadata.json"
+
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/S3A/L2/THEMATIC/BC005/LI"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3a_thematic_bc005.yml"
+
+  surface_fit:
+    mintime: "01/11/2016"
+    # maxtime not set - uses max time in the grid
+    pcmintime: "01/11/2016"
+    pcmaxtime: "01/01/2026"
+
+# ============================================================= #
+#   Sentinel-3B  (Thematic Land Ice BC005)
+# ============================================================= #
+s3b:
+  algorithm_list:
+      - grid_for_elev_change
+      - surface_fit
+      - epoch_average
+      - calculate_dhdt
+      - dhdt_plots
+
+  base_folder: "ais_s3b"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_s3b/gridded_altimetry/metadata.json"
+
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/S3B/L2/THEMATIC/BC005/LI"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/s3b_thematic_bc005.yml"
+
+  surface_fit:
+    mintime: "15/10/2018"
+    pcmintime: "01/01/2019"
+    pcmaxtime: "01/01/2024"
+
+# ============================================================= #
+#   ENVISAT  (FDR4ALT)
+# ============================================================= #
+env:
+  algorithm_list:
+      - grid_for_elev_change
+      - surface_fit
+      - epoch_average
+      - calculate_dhdt
+      - dhdt_plots
+
+  base_folder: "ais_env"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_env/gridded_altimetry/metadata.json"
+
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ENV/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/env_fdr4alt.yml"
+
+  surface_fit:
+    mintime: "01/07/2002"
+    maxtime: "01/03/2012"
+    pcmintime: "01/07/2002"
+    pcmaxtime: "01/07/2007"
+
+# ============================================================= #
+#   ERS-2  (FDR4ALT)
+# ============================================================= #
+e2:
+  algorithm_list:
+      - grid_for_elev_change
+      - surface_fit
+      - epoch_average
+      - calculate_dhdt
+      - dhdt_plots
+
+  base_folder: "ais_e2"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_e2/gridded_altimetry/metadata.json"
+
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ERS2/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/e2_fdr4alt.yml"
+
+  surface_fit:
+    mintime: "15/05/1995"
+    maxtime: "16/05/2003"
+    pcmintime: "01/01/1996"
+    pcmaxtime: "01/01/2001"
+
+  # ERS-2 specific: stricter quality thresholds
+  calculate_dhdt:
+    max_allowed_dhdt: 10          # Tighter threshold for older mission (default: 30)
+
+# ============================================================= #
+#   ERS-1  (FDR4ALT)
+# ============================================================= #
+e1:
+  algorithm_list:
+      - grid_for_elev_change
+      - surface_fit
+      - epoch_average
+      - calculate_dhdt
+      - dhdt_plots
+
+  base_folder: "ais_e1"
+  grid_info_json: "/cpnet/altimetry/landice/cpom2/sec_processing/single_mission/ais_e1/gridded_altimetry/metadata.json"
+
+  grid_for_elev_change:
+    data_input_dir: "${CPDATA_DIR}/SATS/RA/ERS1/L2/FDR4ALT/TDP/antarctica/land_ice"
+    dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/e1_fdr4alt.yml"
+
+  surface_fit:
+    mintime: "03/08/1991"
+    maxtime: "02/06/1996"
+    # No pcmintime/pcmaxtime set for ERS-1 (commented out in original)
+
+  # ERS-1 specific: fewer points required, stricter dhdt threshold
+  calculate_dhdt:
+    min_pts_in_period: 5          # Fewer required (default: 10) - shorter mission lifetime
+    max_allowed_dhdt: 10          # Tighter threshold for older mission (default: 30)
+
+#-------------------------------------------------------------------------#
+# COMMON PROCESSING PARAMETERS
+# Applied to all missions; mission-specific params above override these.
+#
+# Parameters that are IDENTICAL across all missions are fully defined here.
+# Parameters that vary by mission are set in the mission-specific sections above.
+#-------------------------------------------------------------------------#
+
+########################
+# Grid Creation
+########################
+grid_for_elev_change:
+  out_folder_name: gridded_altimetry
+  standard_epoch: "1991-01-01T00:00:00"
+  partition_xy_chunking: 200
+  force_regrid: true             # Set to true to force regridding even if output exists
+                                 # (WARNING: will delete existing output directory)
+  # Shared Antarctic Ice Sheet geometry (overridden per-mission only for data_input_dir, dataset)
+  area: 'antarctica'
+  gridarea: 'antarctica'
+  binsize: 5000
+  mask_name: 'antarctica_bedmachine_v2_grid_mask'
+  mask_values: [2, 4]           # 2=ice sheet, 4=lake vostok (S3 missions only)
+
+########################
+# Surface Fitting
+########################
+surface_fit:
+  in_step: "grid_for_elev_change"
+  out_folder_name: surface_fit
+  min_vals_in_cell: 20
+  min_percent_timespan_in_cell: 70.0
+  n_sigma: 2.0
+  max_surfacefit_iterations: 30
+  max_linearfit_iterations: 3
+  weighted_surface_fit: false
+  powercorrect: true
+  # mintime, maxtime, pcmintime, pcmaxtime are mission-specific (set above)
+  # mode_values: [1, 3]          # List of mode values to include in surface fit
+
+########################
+# Epoch Averaging
+########################
+epoch_average:
+  in_step: surface_fit           # Uses output from surface fitting
+  out_folder_name: epoch_average
+  epoch_length: 140
+  gia_model: "ice5g"
+
+########################
+# Calculate dhdt
+########################
+calculate_dhdt:
+  in_step: epoch_average         # Uses output from epoch averaging
+  out_folder_name: single_mission_dhdt
+  min_pts_in_period: 10          # Minimum number of epochs required in a period
+                                 # (overridden to 5 for e1)
+  min_period_coverage: 50        # Minimum % time coverage required
+  max_allowed_dhdt: 30           # Maximum plausible dhdt value (m/yr)
+                                 # (overridden to 10 for e1 and e2)
+  dh_avg_varname: "dh_ave"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  parquet_glob: "epoch_average.parquet"
+  basin_structure: False
+
+########################
+# Visualization
+########################
+dhdt_plots:
+  in_step: calculate_dhdt        # Uses output from dhdt calculation
+  out_folder_name: dhdt_plots
+  parquet_glob: "dhdt.parquet"
+  area_name: "antarctica_cci_grounded"
+  grid_area: "antarctica"
+  binsize: 5000
+  plotting_column: "dhdt"
+  period_column: "period"
+  plot_range: [-1, 1]
+  basin_structure: False

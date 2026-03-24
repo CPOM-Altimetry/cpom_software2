@@ -19,7 +19,7 @@ Processing Workflow:
     clean_directory() - Initialize output directory and logging
     get_surface_fit_objects() - Setup time bounds, chunks, status dictionary
             ↓
-    surface_fit() - Main surface fitting loop
+    fit_surface_fit_models_per_group() - Main surface fitting loop
         - For each chunk (x_part, y_part):
             - Load data with get_grid_data()
             - For each grid cell:
@@ -386,13 +386,11 @@ def get_unique_chunks(params: argparse.Namespace) -> pl.DataFrame:
     conn = duckdb.connect()
 
     # Try to read with hive partitioning (directory structure)
-    part_df = conn.execute(
-        f"""
+    part_df = conn.execute(f"""
         SELECT DISTINCT x_part, y_part
         FROM read_parquet('{params.in_dir}/**/x_part=*/y_part=*/*.parquet',
         hive_partitioning=1);
-        """
-    ).pl()
+        """).pl()
     conn.close()
 
     # Sort
@@ -1178,7 +1176,7 @@ def get_metadata_json(
 
 
 # pylint: disable=R0914
-def surface_fit(
+def fit_surface_fit_models_per_group(
     params: argparse.Namespace, sf_objects: dict, logger: logging.Logger
 ) -> dict[str, int]:
     """
@@ -1343,7 +1341,12 @@ def surface_fit(
     return status
 
 
-def main(args: list[str] | None = None) -> None:
+# ---------------------------
+# Main Function #
+# ---------------------------
+
+
+def surface_fit(args: list[str] | None = None) -> None:
     """
     Main entry point orchestrating the three-phase surface fit pipeline.
 
@@ -1373,7 +1376,7 @@ def main(args: list[str] | None = None) -> None:
         logger, grid_meta = clean_directory(run_params, confirm_regrid=False)
         sf_objects = get_surface_fit_objects(run_params, parquet_glob, grid_meta, logger)
 
-        status = surface_fit(run_params, sf_objects=sf_objects, logger=logger)
+        status = fit_surface_fit_models_per_group(run_params, sf_objects=sf_objects, logger=logger)
 
         # Write final metadata
         get_metadata_json(run_params, status, start_time, logger)
@@ -1400,4 +1403,4 @@ def main(args: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    surface_fit(sys.argv[1:])

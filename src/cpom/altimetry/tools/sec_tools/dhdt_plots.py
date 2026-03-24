@@ -295,11 +295,14 @@ def plot_icesheet(
         Path(params.out_dir).mkdir(parents=True, exist_ok=True)
 
         annotation_list = []
+
+        # mission name n/a yet in meta data
         annotation_list.append(
             Annotation(
                 0.8,
                 0.9,
-                f"Mission: {params.mission_name}",
+                "Mission: ...",
+                # f"Mission: {params.mission_name}",
                 None,
                 12,
                 fontweight="normal",
@@ -329,7 +332,10 @@ def plot_icesheet(
         )
 
 
-def main(params):
+# ----------------
+# Main Function
+# ---------------
+def dhdt_plots(args):
     """
     Epoch Average plotting script.
 
@@ -343,7 +349,7 @@ def main(params):
         params (list): Command line arguments
     """
 
-    params = parse_arguments(params)
+    params = parse_arguments(args)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
         log_dir=params.out_dir,
@@ -363,4 +369,4 @@ def main(params):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    dhdt_plots(sys.argv[1:])

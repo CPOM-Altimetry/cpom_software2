@@ -17,7 +17,9 @@ import argparse
 import json
 import logging
 import os
+import sys
 from functools import partial
+from pathlib import Path
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
@@ -30,6 +32,58 @@ from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
 
 log = logging.getLogger(__name__)
+
+
+def parse_arguments(args):
+    """
+    Parse command line arguments for updating an altimetry grid.
+
+    Return:
+        parser.parse_args(args)
+    """
+    parser = argparse.ArgumentParser(
+        description=("Update a single year of gridded elevation change data ")
+    )
+    parser.add_argument(
+        "--grid_info_json", type=str, required=True, help="Path to the grid metadata JSON file."
+    )
+    parser.add_argument(
+        "--update_year",
+        type=int,
+        required=True,
+        help="Year to update in the dataset (e.g., 2020)",
+    )
+    parser.add_argument(
+        "--correction_function",
+        type=str,
+        default="default_corrections",
+        help="Correction function name from grid_for_elev_change_corrections.py.",
+    )
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=max(1, os.cpu_count() or 1),
+        help="Maximum worker processes for multiprocessing.",
+    )
+    parser.add_argument(
+        "--flush_every",
+        type=int,
+        default=60,
+        help="Number of files to process before writing to disk",
+    )
+    parser.add_argument(
+        "--add_vars",
+        type=json.loads,
+        default="{}",
+        help="Optional extra variables as JSON dict, "
+        'e.g. {"tide_ocean":"land_ice_segments/geophysical/tide_ocean"}',
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG level logging and collect per-file processing stats",
+    )
+    return parser.parse_args(args)
 
 
 def get_set_up_objects(args):
@@ -135,7 +189,10 @@ def update_metadata_json(grid_meta, args, status, logger):
         logger.error("Failed to write metadata.json: %s", exc)
 
 
-def main():
+# ---------------#
+# Main Function #
+# ---------------#
+def grid_for_elev_change_update_year(args):
     """
     Main function to parse arguments and initiate the year update process.
         1. Parse command line arguments.
@@ -146,56 +203,30 @@ def main():
         6. Process year of data and write to Parquet files
         7. Update the metadata JSON file with the new year data
     """
-    parser = argparse.ArgumentParser(
-        description=("Update a single year of gridded elevation change data ")
-    )
-    parser.add_argument(
-        "--grid_info_json", type=str, required=True, help="Path to the grid metadata JSON file."
-    )
-    parser.add_argument(
-        "--update_year",
-        type=int,
-        required=True,
-        help="Year to update in the dataset (e.g., 2020)",
-    )
-    parser.add_argument(
-        "--max_workers",
-        type=int,
-        default=max(1, os.cpu_count() or 1),
-        help="Maximum worker processes for multiprocessing.",
-    )
-    parser.add_argument(
-        "--hive_mode",
-        action="store_true",
-        help="Writes partitions slower, "
-        "but lower memory footprint. May be needed for antarctica is2",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable DEBUG level logging",
-    )
-    args = parser.parse_args()
+    params = parse_arguments(args)
 
     # --------------------------------------------------------#
     # 1. Get dataset, area and grid objects #
     # --------------------------------------------------------#
-    dataset, thisgrid, thisarea, thismask, grid_meta = get_set_up_objects(args)
+    dataset, thisgrid, thisarea, thismask, grid_meta = get_set_up_objects(params)
     # -----------------------------------------------------------#
     # 2. Get files/ dates from the filename in the year to update#
     #  3. Get offset from the dataset                            #
     # -----------------------------------------------------------#
-    min_date = f"{args.update_year}0101"
-    max_date = f"{args.update_year}1231"
+    min_date = f"{params.update_year}0101"
+    max_date = f"{params.update_year}1231"
     files_and_dates = dataset.get_files_and_dates(min_dt_time=min_date, max_dt_time=max_date)
 
+    log_path = Path(grid_meta["out_dir"]) / f"update_{params.update_year}_logs"
+    log_path.mkdir(parents=True, exist_ok=True)
     logger = set_loggers(
-        log_dir=grid_meta["out_dir"],
-        default_log_level=logging.DEBUG if args.debug else logging.INFO,
+        log_dir=str(log_path),
+        default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
+    logger.info("output_dir=%s", params.out_dir)
 
     if len(files_and_dates) == 0:
-        logger.error("No files found for year %s", args.update_year)
+        logger.error("No files found for year %s", params.update_year)
         return
 
     offset = dataset.get_unified_time_epoch_offset(
@@ -208,13 +239,13 @@ def main():
         this_grid=thisgrid,
         this_area=thisarea,
         this_mask=thismask,
-        fill_missing_poca=args.fill_missing_poca,
+        params=params,
     )
     # --------------------------------------------------------#
     # 4. Process  year of data and write to Parquet files #
     # --------------------------------------------------------#
     status = get_data_and_status_multiprocessed(
-        params=args,
+        params=params,
         file_and_dates=files_and_dates,
         worker=worker,
         logger=logger,
@@ -222,10 +253,8 @@ def main():
     # -----------------------------------------------------------------------
     # 5. Update the metadata JSON file with the new year data
     # -----------------------------------------------------------------------
-    update_metadata_json(grid_meta, args, status, logger)
+    update_metadata_json(grid_meta, params, status, logger)
 
-
-log = logging.getLogger(__name__)
 
 if __name__ == "__main__":
-    main()
+    grid_for_elev_change_update_year(sys.argv[1:])

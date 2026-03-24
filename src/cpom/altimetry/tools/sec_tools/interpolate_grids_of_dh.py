@@ -546,7 +546,12 @@ def write_output(
     return output_path
 
 
-def main(args):
+# --------------------
+# Main Function
+# --------------------
+
+
+def interpolate_grids_of_dh(args):
     """
     Main entry point for grid interpolation.
 
@@ -559,7 +564,7 @@ def main(args):
     Args:
         args (list): Command line arguments (typically sys.argv[1:])
     """
-
+    params = parse_arguments(args)
     start_time = time.time()
     params = parse_arguments(args)
 
@@ -604,4 +609,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    interpolate_grids_of_dh(sys.argv[1:])

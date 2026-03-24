@@ -56,7 +56,7 @@ from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 from cpom.masks.masks import Mask
 
-# pylint: disable=too-many-lines,too-many-locals,too-many-statements
+# pylint: disable=too-many-lines,too-many-locals,too-many-statements, too-many-branches
 
 # --------------------------------------#
 # Set up Functions                     #
@@ -96,6 +96,7 @@ def parse_arguments(args):
         required=False,
         nargs="+",
         help="Optional list of values to filter the mask by, e.g. --mask_values 1 2 3. ",
+        type=int,
     )
     parser.add_argument(
         "--correction_function",
@@ -174,6 +175,65 @@ def parse_arguments(args):
     return parser.parse_args(args)
 
 
+def _robust_rmtree(path: str) -> None:
+    """Remove a directory tree robustly, handling NFS silly-renamed files.
+
+    On NFS mounts (e.g. /cpnet/) two failure modes can occur:
+
+    1. Python 3.12's shutil.rmtree uses an fd-based deletion path that calls
+       os.rmdir() on subdirectories, which can raise ``OSError: [Errno 39]
+       Directory not empty`` due to stale dentry-cache entries.
+
+    2. When a previous run was interrupted while files were still open, the NFS
+       client renames them to hidden ``.nfsXXXXXX`` "silly files" that cannot be
+       deleted until every process holding a file-descriptor to them has closed
+       it.  Neither shutil.rmtree nor ``rm -rf`` can remove these files while
+       they are still in use.
+
+    Strategy: try a plain delete first; if that fails, **rename** the directory
+    out of the way (to a timestamped sibling) and let the caller create a fresh
+    output directory.  The OS will garbage-collect the renamed directory once all
+    file-handles are released.
+    """
+    import subprocess  # pylint: disable=import-outside-toplevel
+
+    # --- attempt 1: shutil.rmtree ---
+    try:
+        shutil.rmtree(path)
+        return  # success
+    except OSError:
+        pass
+
+    # --- attempt 2: subprocess rm -rf (bypasses Python's fd-safe path) ---
+    subprocess.run(["rm", "-rf", path], check=False)
+    if not os.path.exists(path):
+        return  # success
+
+    # --- attempt 3: NFS silly-file fallback — rename the directory aside ---
+    # .nfsXXXXXX files cannot be removed while held open by another process.
+    # Moving the whole directory out of the way lets us create a clean output
+    # directory immediately; the OS removes the renamed tree once all handles close.
+    timestamp = int(time.time())
+    parent = os.path.dirname(path.rstrip("/"))
+    basename = os.path.basename(path.rstrip("/"))
+    aside_path = os.path.join(parent, f".old_{basename}_{timestamp}")
+    try:
+        os.rename(path, aside_path)
+        print(
+            f"WARNING: Could not fully delete '{path}' (NFS silly files are still held open "
+            f"by another process). Directory has been renamed to '{aside_path}' and will be "
+            f"cleaned up automatically once all file handles are closed. "
+            f"You can also remove it manually later with: rm -rf '{aside_path}'"
+        )
+        return  # caller will now mkdir the original path fresh
+    except OSError as exc:
+        raise OSError(
+            f"Failed to remove or move aside '{path}'.  "
+            f"NFS silly files (.nfsXXXXXX) may still be held open by another process — "
+            f"check with: lsof +D '{path}'"
+        ) from exc
+
+
 def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_regrid=False):
     """
     Validate and clear the output directory if it exists. Prompt user for confirmation
@@ -193,12 +253,12 @@ def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_
                     input("Confirm removal of previous grid archive? (y/n): ").strip().lower()
                 )
                 if response == "y":
-                    shutil.rmtree(params.out_dir)
+                    _robust_rmtree(params.out_dir)
                 else:
                     print("Exiting as user requested not to overwrite grid archive")
                     sys.exit(0)
             else:
-                shutil.rmtree(params.out_dir)
+                _robust_rmtree(params.out_dir)
 
         else:
             sys.exit(1)
@@ -461,14 +521,16 @@ def get_variables_and_mask(
         raise ValueError("dataset.time_param is required but None was provided")
 
     for key, param in [("elevation", elevation_param), ("time", time_param)]:
-        variable_dict[key] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
-            area_mask
-        ]
+        var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
+        if var_data.size == 0:
+            return None, None
+        variable_dict[key] = var_data[area_mask]
 
     if dataset.power_param is not None:
-        variable_dict["power"] = dataset.get_variable(
-            nc, dataset.power_param, raise_if_missing=params.debug
-        )[area_mask]
+        var_data = dataset.get_variable(nc, dataset.power_param, raise_if_missing=params.debug)
+        if var_data.size == 0:
+            return None, None
+        variable_dict["power"] = var_data[area_mask]
 
     variable_dict["time"] += offset
 
@@ -482,18 +544,19 @@ def get_variables_and_mask(
 
     variable_dict = {k: v[bool_mask] for k, v in variable_dict.items() if v is not None}
 
+    lat_nadir_data = None
+    if dataset.latitude_nadir_param is not None:
+        lat_nadir_data = dataset.get_variable(
+            nc, dataset.latitude_nadir_param, raise_if_missing=params.debug
+        )
+        if lat_nadir_data.size == 0:
+            return None, None
+        lat_nadir_data = lat_nadir_data[area_mask][bool_mask]
+    else:
+        lat_nadir_data = variable_dict["latitude"]
+
     variable_dict["ascending"] = dataset.get_file_orbital_direction(
-        latitude=(
-            dataset.get_variable(
-                nc,
-                dataset.latitude_nadir_param,
-                raise_if_missing=params.debug,
-            )[
-                area_mask
-            ][bool_mask]
-            if dataset.latitude_nadir_param is not None
-            else variable_dict["latitude"]
-        ),
+        latitude=lat_nadir_data,
         nc=nc,
     )
     for var, param in {
@@ -502,9 +565,9 @@ def get_variables_and_mask(
         **(params.add_vars if params.add_vars is not None else {}),
     }.items():
         if param is not None:
-            variable_dict[var] = dataset.get_variable(nc, param, raise_if_missing=params.debug)[
-                area_mask
-            ][bool_mask]
+            var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
+            if var_data.size > 0:
+                variable_dict[var] = var_data[area_mask][bool_mask]
 
     return variable_dict, area_mask[bool_mask]
 
@@ -593,6 +656,14 @@ def process_file(
                 fill_missing_poca=params.fill_missing_poca,
                 strict_missing=params.debug,
             )
+            if params.debug:
+                logging.debug(
+                    "File: %s, Latitudes: %s", file_and_date["path"], variable_dict["latitude"]
+                )
+                logging.debug(
+                    "File: %s, Longitudes: %s", file_and_date["path"], variable_dict["longitude"]
+                )
+
             if params.debug and stats is not None:
                 total = int(len(variable_dict["latitude"]))
                 stats["total"] = total
@@ -708,7 +779,7 @@ def process_file(
                 stats["file_reject_detail"] = str(e)
             return None, stats
         return None
-    except (ValueError, OSError, RuntimeError, TypeError, AttributeError) as e:
+    except (ValueError, OSError, RuntimeError, TypeError, AttributeError, IndexError) as e:
         if params.debug:
             if stats is not None:
                 stats["file_reject_reason"] = "processing_error"
@@ -929,7 +1000,13 @@ def get_data_and_status_multiprocessed(
 # --------------------------------------#
 # Metadata Output Function
 # --------------------------------------#
-def get_metadata_json(params, dataset, status, thisgrid, start_time):
+def get_metadata_json(
+    params: argparse.Namespace,
+    dataset: DatasetHelper,
+    status: dict,
+    thisgrid: GridArea,
+    start_time: float,
+) -> None:
     """
     Create and save metadata.json to the output directory.
     Metadata includes:
@@ -982,7 +1059,12 @@ def get_metadata_json(params, dataset, status, thisgrid, start_time):
         pass
 
 
-def main(args):
+# --------------------------------------#
+# Main Function #
+# --------------------------------------#
+
+
+def grid_for_elev_change(args):
     """
     Main function to grid altimetry data for elevation change processing.
 
@@ -1039,4 +1121,4 @@ def main(args):
 
 if __name__ == "__main__":
     # Parse command line arguments
-    main(sys.argv[1:])
+    grid_for_elev_change(sys.argv[1:])

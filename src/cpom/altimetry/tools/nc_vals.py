@@ -320,7 +320,7 @@ def main() -> None:
 
             # Mask fill values before scaling
             if fill_value is not None:
-                data = np.ma.masked_equal(raw_data, fill_value)
+                data: np.ndarray | np.ma.MaskedArray = np.ma.masked_equal(raw_data, fill_value)
             else:
                 data = raw_data
 
