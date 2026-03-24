@@ -26,6 +26,63 @@ from matplotlib.tri import LinearTriInterpolator, Triangulation
 from cpom.gridding.gridareas import GridArea
 
 
+def parse_arguments(args):
+    """
+    Parse command line arguments for interpolating grids
+
+    Return:
+        parser.parse_args(args)
+    """
+
+    parser = argparse.ArgumentParser()
+    # Required arguments
+    parser.add_argument(
+        "--in_dir",
+        help="Input directory, with path to the directory containing variables of interest. "
+        "E.g. epoch averaged grids",
+        required=True,
+    )
+    parser.add_argument("--out_dir", help="Output directory", required=True)
+    parser.add_argument(
+        "--grid_info_json",
+        help="Path to the grid metadata json file",
+        required=False,
+    )
+    parser.add_argument(
+        "--timestamp_column", help="Timestamp/ grouping column to loop through", required=True
+    )
+    parser.add_argument(
+        "--variables_in",
+        help="Comma-separated list of variable(s) names to process",
+        required=True,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--variables_out",
+        help="Comma-separated list of output variable(s) names, "
+        "if not passed will use variables_in",
+        required=False,
+        nargs="+",
+    )
+    parser.add_argument("--tri_lim", default=20.0)
+    parser.add_argument(
+        "--lo_filter",
+        nargs="+",
+        help="Lowest allowable data value, used to clip before and after interpolation. "
+        "Lower values are removed, not set to the lo_filter value."
+        "Space separated list of values for the number of variables",
+    )
+    parser.add_argument(
+        "--hi_filter",
+        nargs="+",
+        help="Highest allowable data value, used to clip before and after interpolation. "
+        "Higher values are removed, not set to the hi_filter value."
+        "Space separated list of values for the number of variables",
+    )
+
+    return parser.parse_args(args)
+
+
 def _initialize_grid_and_flags(group, nrows, ncols):
     # Populate grid with values
     grid = np.full((nrows, ncols), np.nan)
@@ -110,10 +167,8 @@ def get_trilinear_interpolation(group, nrows, ncols, args):
             pred_data = pred.data
         # pylint: disable=W0703
         except Exception as e:
-            print(
-                f"trilinear_single: matplotlib.LinearTriInterpolator error,\
-                                        returning with error: {e}"
-            )
+            print(f"trilinear_single: matplotlib.LinearTriInterpolator error,\
+                                        returning with error: {e}")
             return None
 
         # ---------------------------------------------------------------------------------#
@@ -265,7 +320,12 @@ def write_output(interpolated_df, args, start_time):
     return output_path
 
 
-def main(args):
+# --------------------
+# Main Function
+# --------------------
+
+
+def interpolate_grids_of_dh(args):
     """
     Main entry point for grid interpolation.
 
@@ -278,64 +338,17 @@ def main(args):
     Args:
         args (list): Command line arguments (typically sys.argv[1:])
     """
-
+    params = parse_arguments(args)
     start_time = time.time()
-    parser = argparse.ArgumentParser()
-    # Required arguments
-    parser.add_argument(
-        "--in_dir",
-        help="Input directory, with path to the directory containing variables of interest. "
-        "E.g. epoch averaged grids",
-        required=True,
-    )
-    parser.add_argument("--out_dir", help="Output directory", required=True)
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata json file",
-        required=False,
-    )
-    parser.add_argument(
-        "--timestamp_column", help="Timestamp/ grouping column to loop through", required=True
-    )
-    parser.add_argument(
-        "--variables_in",
-        help="Comma-separated list of variable(s) names to process",
-        required=True,
-        nargs="+",
-    )
-    parser.add_argument(
-        "--variables_out",
-        help="Comma-separated list of output variable(s) names, "
-        "if not passed will use variables_in",
-        required=False,
-        nargs="+",
-    )
-    parser.add_argument("--tri_lim", default=20.0)
-    parser.add_argument(
-        "--lo_filter",
-        nargs="+",
-        help="Lowest allowable data value, used to clip before and after interpolation. "
-        "Lower values are removed, not set to the lo_filter value."
-        "Space separated list of values for the number of variables",
-    )
-    parser.add_argument(
-        "--hi_filter",
-        nargs="+",
-        help="Highest allowable data value, used to clip before and after interpolation. "
-        "Higher values are removed, not set to the hi_filter value."
-        "Space separated list of values for the number of variables",
-    )
-
-    args = parser.parse_args(args)
-    with open(Path(args.grid_info_json), "r", encoding="utf-8") as f:
+    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
         grid_metadata = json.load(f)
     ga = GridArea(grid_metadata["gridarea"], grid_metadata["binsize"])
     ncols, nrows = ga.get_ncols_nrows()
-    input_df = pl.read_parquet(Path(args.in_dir) / "*.parquet")
+    input_df = pl.read_parquet(Path(params.in_dir) / "*.parquet")
 
-    interpolated_df = process_group(input_df, args, nrows, ncols)
-    write_output(interpolated_df, args, start_time)
+    interpolated_df = process_group(input_df, params, nrows, ncols)
+    write_output(interpolated_df, params, start_time)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    interpolate_grids_of_dh(sys.argv[1:])

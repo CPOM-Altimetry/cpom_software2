@@ -29,9 +29,8 @@ Usage: python run_chain.py --config path/to/config.yml
 """
 
 import argparse
+import importlib
 import json
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 
@@ -239,6 +238,21 @@ def build_args(algo, config, mission=None):
     return args
 
 
+def run_algorithm(algo: str, args: list[str], debug_args: list[str]):
+    """
+    Run algorithm either by importing and calling module.algo(args),
+    or fallback to subprocess execution.
+    """
+    cli_args = args + debug_args
+    module = importlib.import_module(algo)
+    main_func = getattr(module, algo, None)
+    if callable(main_func):
+        print(f"Running {algo}.{algo} with args: {cli_args}")
+        main_func(cli_args)
+    else:
+        print(f"No callable main function for {algo}")
+
+
 def main(args):
     """
     Run the processing chain.
@@ -314,9 +328,7 @@ def main(args):
             for algo in algorithms_to_run:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
                 args = build_args(algo, config, mission)
-                full_cmd = ["python", f"{algo}.py"] + args + debug_args
-                print(f"Running command: {shlex.join(full_cmd)}")
-                subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
+                run_algorithm(algo, args, debug_args)
     else:
         try:
             algorithms_to_run = get_algorithms_to_run(
@@ -326,8 +338,7 @@ def main(args):
             parser.error(str(exc))
         for algo in algorithms_to_run:
             args = build_args(algo, config)
-            print(f"Running {algo}.py with args: {args}")
-            subprocess.run(["python", f"{algo}.py"] + args + debug_args, check=True)
+            run_algorithm(algo, args, debug_args)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,53 @@ from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 
 
+def parse_arguments(args):
+    """
+    Parse command line arguments for surface fit plots
+
+    Return:
+        parser.parse_args(args)
+    """
+
+    parser = argparse.ArgumentParser()
+    # Required arguments
+    parser.add_argument(
+        "--in_dir",
+        help="Path to the directory containing surface fit data files.",
+        required=True,
+    )
+    parser.add_argument(
+        "--out_dir",
+        help="Path to the output directory.",
+        required=True,
+    )
+    parser.add_argument(
+        "--grid_info_json",
+        help="Path to the grid info JSON file.",
+        required=True,
+    )
+    parser.add_argument(
+        "--area_name",
+        help="Name of the area to plot. If not provided, will be read from " "grid info JSON.",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--grid_area",
+        help="Grid area name. If not provided, will be read from grid info JSON.",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        help="Grid bin size. If not provided, will be read from grid info JSON.",
+        required=False,
+        default=None,
+    )
+    return parser.parse_args(args)
+
+
 def get_objects(params: argparse.Namespace) -> tuple[Area, pl.DataFrame]:
     """
     Load grid metadata and construct plotting objects.
@@ -99,48 +146,17 @@ def plot(
     )
 
 
-def main(args):
+# ---------------------------
+# Main Function #
+# ---------------------------
+
+
+def surface_fit_plots(args):
     """
     Main function to generate standard surface fit plots.
     """
 
-    parser = argparse.ArgumentParser()
-    # Required arguments
-    parser.add_argument(
-        "--in_dir",
-        help="Path to the directory containing surface fit data files.",
-        required=True,
-    )
-    parser.add_argument(
-        "--out_dir",
-        help="Path to the output directory.",
-        required=True,
-    )
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid info JSON file.",
-        required=True,
-    )
-    parser.add_argument(
-        "--area_name",
-        help="Name of the area to plot. If not provided, will be read from " "grid info JSON.",
-        required=False,
-        default=None,
-    )
-    parser.add_argument(
-        "--grid_area",
-        help="Grid area name. If not provided, will be read from grid info JSON.",
-        required=False,
-        default=None,
-    )
-    parser.add_argument(
-        "--binsize",
-        type=float,
-        help="Grid bin size. If not provided, will be read from grid info JSON.",
-        required=False,
-        default=None,
-    )
-    params = parser.parse_args(args)
+    params = parse_arguments(args)
 
     os.makedirs(Path(params.out_dir) / "plots", exist_ok=True)
 
@@ -152,4 +168,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    surface_fit_plots(sys.argv[1:])

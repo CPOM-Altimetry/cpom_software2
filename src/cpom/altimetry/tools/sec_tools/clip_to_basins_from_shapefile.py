@@ -355,7 +355,10 @@ def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Lo
         logger.error("Failed to write surface_fit_meta.json with %s", e)
 
 
-def main(args):
+# ----------------#
+# Main Function #
+# ----------------#
+def clip_to_basins_from_shapefile(args):
     """
     Entry point for clipping altimetry data to shapefile basins.
     Steps:
@@ -414,4 +417,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    clip_to_basins_from_shapefile(sys.argv[1:])
