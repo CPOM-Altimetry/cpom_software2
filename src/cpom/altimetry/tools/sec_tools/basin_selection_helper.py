@@ -86,8 +86,7 @@ def get_basins_to_process(
         basins_to_process = {
             subdir.name
             for subdir in directory.iterdir()
-            if subdir.is_dir()
-            and (params.structure != "single-tier" or any(subdir.glob("*.parquet")))
+            if subdir.is_dir() and any(subdir.glob("*.parquet"))
         }
     else:
         basins_to_process = set(params.region_selector)
