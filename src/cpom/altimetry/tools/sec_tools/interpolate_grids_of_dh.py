@@ -44,6 +44,13 @@ def _parse_optional_float(value: Any) -> float | None:
     return float(value)
 
 
+def _group_label(group_name: Any) -> Any:
+    """Return a stable scalar key for group name"""
+    if isinstance(group_name, tuple) and len(group_name) == 1:
+        return group_name[0]
+    return group_name
+
+
 def parse_arguments(args) -> argparse.Namespace:
     """
     Parse command line arguments for grid interpolation.
@@ -168,7 +175,7 @@ def triangulate_points(
     # If no or too few points (3 is minimum, in the points
     # array that's 3x2 elements, so size 6)
     # --------------------------------------------------------#
-    group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
+    group_label = _group_label(group_name)
 
     if len(populated_idx[0]) < 6:
         logger.info("Not enough points for triangulation for group %s", group_label)
@@ -220,8 +227,7 @@ def get_trilinear_interpolation(
             - String reason for failure if interpolation was not successful, None otherwise.
 
     """
-
-    group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
+    group_label = _group_label(group_name)
 
     grids = {}
     grid, grid_flags, populated_idx, x_bins, y_bins = get_grid_and_flags(group, nrows, ncols)
@@ -363,6 +369,7 @@ def process_timesteps(
     status_rows: list[dict[str, Any]] = []
     dataframes = []
     for group_name, group_df in groups:
+        group_label = _group_label(group_name)
         populated_input_cells = group_df.select(pl.struct("y_bin", "x_bin").n_unique()).item()
 
         group_df, removed = apply_hi_lo_filters(params, group_df)
@@ -377,7 +384,7 @@ def process_timesteps(
         if grids is None:
             status_rows.append(
                 {
-                    "timestamp": str(group_name),
+                    "timestamp": group_label,
                     "populated_input_cells": int(populated_input_cells),
                     "cells_in_output": 0,
                     "interpolated_cells": 0,
@@ -401,7 +408,7 @@ def process_timesteps(
                 "y_bin": y_idx,
                 "x_bin": x_idx,
                 params.timestamp_column: pl.Series(
-                    params.timestamp_column, [str(group_name)] * len(y_idx)
+                    params.timestamp_column, [group_label] * len(y_idx)
                 ),
                 **{var: grids[var][y_idx, x_idx] for var in params.variables_in if var in grids},
                 **{
@@ -415,7 +422,7 @@ def process_timesteps(
         dataframes.append(df)
         status_rows.append(
             {
-                "timestamp": str(group_name),
+                "timestamp": group_label,
                 "populated_input_cells": int(populated_input_cells),
                 "cells_in_output": len(df),
                 "interpolated_cells": interpolated_cells,
@@ -429,7 +436,7 @@ def process_timesteps(
                 "cells_in_output=%d, "
                 "interpolated_cells=%d, "
                 "filter_removed_by_variable=%s",
-                str(group_name),
+                group_label,
                 populated_input_cells,
                 len(df),
                 interpolated_cells,
