@@ -21,9 +21,9 @@ def add_basin_selection_arguments(parser: argparse.ArgumentParser) -> None:
     Add standard basin/region selection arguments to an ArgumentParser.
 
     Adds two arguments:
-    - --basin_structure (bool): When False, process root-level only; when True,
+    - basin_structure (bool): When False, process root-level only; when True,
       treat immediate subdirectories of`in_dir` as basins to process.
-    - --region_selector (list[str]): Names of basins/regions to include. Use `all`
+    - region_selector (list[str]): Names of basins/regions to include. Use `all`
       to include every available basin when `basin_structure` is True.
 
     Args:
