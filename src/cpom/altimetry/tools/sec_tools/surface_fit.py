@@ -36,7 +36,6 @@ Processing Workflow:
 """
 
 import argparse
-import json
 import logging
 import os
 import shutil
@@ -55,6 +54,10 @@ from scipy import stats
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    extract_metadata_for_algo,
+    write_metadata,
 )
 from cpom.logging_funcs.logging import set_loggers
 
@@ -89,6 +92,11 @@ def parse_arguments(args):
             " gridded altimetry data stored in parquet files."
         )
     )
+    parser.add_argument(
+        "--algo",
+        type=str,
+        default="surface_fit",
+    )
     # I/O arguments
     parser.add_argument(
         "--in_dir",
@@ -97,14 +105,15 @@ def parse_arguments(args):
         required=True,
     )
     parser.add_argument(
+        "--in_meta",
+        help="Path to grid metadata JSON file from grid_for_elev_change",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
         "--out_dir",
         help="Path of output directory for surface fit results",
         type=str,
-        required=True,
-    )
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata JSON file.",
         required=True,
     )
     parser.add_argument(
@@ -262,30 +271,21 @@ def clean_directory(params: argparse.Namespace, confirm_regrid: bool = False):
         confirm_regrid (bool): If True,
             prompts user before removing existing output directory.
 
-    Returns [logging.Logger, dict]:
+    Returns logging.Logger:
         - Logger object
-        - grid metadata from - grid_for_elev_change.
     """
-
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
 
     # Full regrid => remove entire directory, then create fresh
     if confirm_regrid:
         if os.path.exists(params.out_dir):
-            if params.out_dir != "/" and grid_meta["mission"] in params.out_dir:  # safety check
-                response = (
-                    input("Confirm removal of previous surface fit archive? (y/n): ")
-                    .strip()
-                    .lower()
-                )
-                if response == "y":
-                    shutil.rmtree(params.out_dir)
-                else:
-                    print("Exiting as user requested not to overwrite surface fit archive")
-                    sys.exit(0)
+            response = (
+                input("Confirm removal of previous surface fit archive? (y/n): ").strip().lower()
+            )
+            if response == "y":
+                shutil.rmtree(params.out_dir)
             else:
-                sys.exit(1)
+                print("Exiting as user requested not to overwrite surface fit archive")
+                sys.exit(0)
 
     # Create output directory before setting up file logging
     os.makedirs(params.out_dir, exist_ok=True)
@@ -296,7 +296,7 @@ def clean_directory(params: argparse.Namespace, confirm_regrid: bool = False):
     )
     logger.info("output_dir=%s", params.out_dir)
 
-    return logger, grid_meta
+    return logger
 
 
 def get_min_max_time(
@@ -403,7 +403,7 @@ def get_unique_chunks(params: argparse.Namespace) -> pl.DataFrame:
 
 
 def get_surface_fit_objects(
-    params: argparse.Namespace, parquet_glob: str, grid_meta: dict, logger: logging.Logger
+    params: argparse.Namespace, parquet_glob: str, standard_epoch: str, logger: logging.Logger
 ) -> dict[str, Any]:
     """
     Get objects required for surface fit :
@@ -423,8 +423,7 @@ def get_surface_fit_objects(
             - powercorrect: Whether power correction is enabled
             - in_dir: Input directory containing partitioned parquet files
         parquet_glob (str): Glob pattern to match input parquet files
-        grid_meta (dict): Grid metadata dictionary containing:
-            - standard_epoch: Reference epoch for time calculations (ISO format string)
+        standard_epoch (str): Reference epoch for time calculations (ISO format string)
         logger (logging.Logger): Logger object
 
     Returns:
@@ -460,7 +459,7 @@ def get_surface_fit_objects(
 
     # 1. Get the min/max time period for surface fit and power correction
     mintime, maxtime, min_secs, max_secs = get_min_max_time(
-        datetime.fromisoformat(grid_meta["standard_epoch"]),
+        datetime.fromisoformat(standard_epoch),
         parquet_glob,
         params.mintime,
         params.maxtime,
@@ -470,7 +469,7 @@ def get_surface_fit_objects(
 
     if params.powercorrect:
         _, _, pc_min_secs, pc_max_secs = get_min_max_time(
-            datetime.fromisoformat(grid_meta["standard_epoch"]),
+            datetime.fromisoformat(standard_epoch),
             parquet_glob,
             params.pcmintime,
             params.pcmaxtime,
@@ -487,7 +486,10 @@ def get_surface_fit_objects(
     part_df = get_unique_chunks(params)
     logger.info(f"Found {len(part_df)} chunks to process")
 
+    # 4. Get
+
     return {
+        "standard_epoch": standard_epoch,
         "mintime": mintime,
         "maxtime": maxtime,
         "min_secs": min_secs,
@@ -1135,7 +1137,10 @@ def consolidate_grid_chunks(params: argparse.Namespace, logger: logging.Logger) 
 # Metadata JSON
 # ------------------------
 def get_metadata_json(
-    params: argparse.Namespace, status: Dict[str, int], start_time: float, logger: logging.Logger
+    params: argparse.Namespace,
+    status: Dict[str, int],
+    start_time: float,
+    logger: logging.Logger,
 ) -> None:
     """
     Create and save surface fit metadata.json in the output directory.
@@ -1149,21 +1154,20 @@ def get_metadata_json(
         start_time (float): Start time of the processing
         logger (logging.Logger): Logger object
     """
-    meta_json_path = Path(params.out_dir) / "metadata.json"
+    meta_json_path = Path(params.out_dir) / f"{params.algo}_meta.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
     try:
-        with open(meta_json_path, "w", encoding="utf-8") as f_meta:
-            json.dump(
-                {
-                    **vars(params),
-                    **status,
-                    "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-                },
-                f_meta,
-                indent=2,
-            )
+        write_metadata(
+            params,
+            meta_json_path,
+            {
+                **vars(params),
+                **status,
+                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+            },
+        )
         logger.info("Wrote data_set metadata to %s", meta_json_path)
 
     except OSError as e:
@@ -1363,6 +1367,16 @@ def surface_fit(args: list[str] | None = None) -> None:
     """
     params = parse_arguments(args)
 
+    grid_meta = extract_metadata_for_algo(params.in_meta, "grid_for_elev_change")
+    if "standard_epoch" in grid_meta:
+        standard_epoch = grid_meta["standard_epoch"]
+    elif params.standard_epoch is not None:
+        standard_epoch = params.standard_epoch
+    else:
+        sys.exit(
+            "Standard epoch must be provided either in grid metadata or as a command line argument"
+        )
+
     def run_once(run_params: argparse.Namespace) -> None:
         """Run the surface fit pipeline for a single root or basin directory."""
         start_time = time.time()
@@ -1373,8 +1387,8 @@ def surface_fit(args: list[str] | None = None) -> None:
 
         # Initialize logging and load grid metadata
         parquet_glob = os.path.join(run_params.in_dir, run_params.parquet_glob)
-        logger, grid_meta = clean_directory(run_params, confirm_regrid=False)
-        sf_objects = get_surface_fit_objects(run_params, parquet_glob, grid_meta, logger)
+        logger = clean_directory(run_params, confirm_regrid=False)
+        sf_objects = get_surface_fit_objects(run_params, parquet_glob, standard_epoch, logger)
 
         status = fit_surface_fit_models_per_group(run_params, sf_objects=sf_objects, logger=logger)
 

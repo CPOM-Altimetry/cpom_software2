@@ -16,11 +16,11 @@ Supported Masks:
 Output:
     - Clipped Parquet data written per basin:
             <out_dir>/<basin_name>/data.parquet
-    - metadata.json summarising processing parameters and execution time
+    - Per-basin metadata written alongside each parquet:
+        <out_dir>/<basin_name>/clip_to_basins_meta.json
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -31,6 +31,10 @@ import polars as pl
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    _resolve_grid_params,
+    write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -52,6 +56,17 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         description="Clip altimetry data to regions defined by CPOM grid mask"
     )
     parser.add_argument(
+        "--algo",
+        type=str,
+        default="clip_to_basins",
+    )
+    parser.add_argument(
+        "--in_meta",
+        type=str,
+        required=False,
+        help="Path to upstream metadata JSON for resolving grid parameters.",
+    )
+    parser.add_argument(
         "--in_dir",
         type=str,
         required=True,
@@ -70,11 +85,6 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         help="File glob pattern for selecting input files.",
     )
     parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata JSON file, if not passed is inferred",
-        required=True,
-    )
-    parser.add_argument(
         "--mask",
         type=str,
         required=True,
@@ -84,6 +94,19 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
+    )
+    # Fall back if grid parameters are not provided in metadata
+    parser.add_argument(
+        "--gridarea",
+        type=str,
+        required=False,
+        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        required=False,
+        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
     )
 
     # Standardize basin selection arguments across tools
@@ -192,7 +215,7 @@ def process_single_basin(
     grid_area: GridArea,
     basin_name: str,
     logger: logging.Logger,
-):
+) -> dict[str, int | str]:
     """
     Clip altimetry data to a single basin and write results to disk.
 
@@ -219,37 +242,67 @@ def process_single_basin(
     in_file = Path(params.in_dir) / params.parquet_glob
     data = get_data(grid_area, in_file, logger)
     clipped_data = clip_data_to_shape(mask, basin_name, data)
-    clipped_data.drop(["lat", "lon"]).sink_parquet(output_dir / "data.parquet")
-    logger.info(f"Wrote: {output_dir / 'data.parquet'}")
+    stats_df = clipped_data.select(
+        [
+            pl.len().alias("n_rows"),
+            pl.struct(["x_bin", "y_bin"]).n_unique().alias("n_unique_cells"),
+        ]
+    ).collect()
+
+    output_file = output_dir / "data.parquet"
+    clipped_data.drop(["lat", "lon"]).sink_parquet(output_file)
+    logger.info(f"Wrote: {output_file}")
+
+    return {
+        "output_file": str(output_file),
+        "n_rows": int(stats_df["n_rows"][0]),
+        "n_unique_cells": int(stats_df["n_unique_cells"][0]),
+    }
 
 
-def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Logger):
+def get_metadata_json(
+    params: argparse.Namespace,
+    start_time: float,
+    logger: logging.Logger,
+    basin_name: str,
+    basin_output_dir: Path,
+    basin_stats: dict[str, int | str],
+):
     """
-    Generate metadata JSON for clipped data.
+    Generate per-basin metadata JSON for clipped data.
 
     Args:
         params (argparse.Namespace): Command line parameters.
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
     """
-    meta_json_path = Path(params.out_dir) / "metadata.json"
+    meta_json_path = basin_output_dir / f"{params.algo}_meta.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
+    args_dict = dict(vars(params))
+    # Keep metadata scoped to the basin output being written.
+    args_dict["region_selector"] = [basin_name]
+    if args_dict.get("gridarea") is None:
+        args_dict.pop("gridarea", None)
+    if args_dict.get("binsize") is None:
+        args_dict.pop("binsize", None)
+
     try:
-        with open(meta_json_path, "w", encoding="utf-8") as f_meta:
-            json.dump(
-                {
-                    **vars(params),
-                    "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-                },
-                f_meta,
-                indent=2,
-            )
-        logger.info("Wrote data_set metadata to %s", meta_json_path)
+        write_metadata(
+            params,
+            meta_json_path,
+            {
+                **args_dict,
+                "basin_name": basin_name,
+                **basin_stats,
+                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+            },
+        )
+        logger.info("Wrote basin metadata to %s", meta_json_path)
 
     except OSError as e:
-        logger.error("Failed to write surface_fit_meta.json with %s", e)
+        logger.error("Failed to write basin metadata with %s", e)
 
 
 # ----------------#
@@ -280,12 +333,16 @@ def clip_to_basins(args):
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
+    try:
+        grid_area, binsize = _resolve_grid_params(
+            params,
+            ["gridarea", "binsize"],
+        )
+    except ValueError as exc:
+        logger.error("Couldn't resolve required grid parameters: %s", exc)
+        sys.exit(str(exc))
 
-    grid_area = GridArea(grid_meta["gridarea"], grid_meta["binsize"])
     mask = Mask(params.mask)
-
     # Clip to basin shape by bin centres
     for region in (
         mask.grid_value_names if params.region_selector == ["all"] else params.region_selector
@@ -294,15 +351,14 @@ def clip_to_basins(args):
         output_dir = Path(params.out_dir) / region
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        process_single_basin(
+        basin_stats = process_single_basin(
             params,
             mask,
-            grid_area,
+            GridArea(grid_area, binsize),
             region,
             logger,
         )
-
-    get_metadata_json(params, start_time, logger)
+        get_metadata_json(params, start_time, logger, region, output_dir, basin_stats)
 
 
 if __name__ == "__main__":

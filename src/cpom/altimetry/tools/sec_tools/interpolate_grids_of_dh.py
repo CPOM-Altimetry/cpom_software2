@@ -9,19 +9,21 @@ Purpose:
     values are preserved; only missing cells are interpolated.
 
 Output:
-    - Interpolated data: <out_dir>/interpolated_<variable>.parquet
+    - Interpolated data: <out_dir>/interpolated_<variable
+    Set up enmpty grid and flag arraymatricies es to be populated in at interpoolation.
+    >- grud    Builds 2D arrats ys of shape (nrows, ncols) for the grid.  and flgladlagdgflags.
+    Populate the firlag frgrid with 1'ss where dinput data is present.
+    .parquet
     - Includes 'interpolation_flag' column to distinguish original vs interpolated values
-    - Metadata JSON: <out_dir>/interp_meta.json with processing parameters and summary statistics
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -31,6 +33,7 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
+from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_grid_params, write_metadata
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
@@ -44,13 +47,6 @@ def _parse_optional_float(value: Any) -> float | None:
     return float(value)
 
 
-def _group_label(group_name: Any) -> Any:
-    """Return a stable scalar key for group name"""
-    if isinstance(group_name, tuple) and len(group_name) == 1:
-        return group_name[0]
-    return group_name
-
-
 def parse_arguments(args) -> argparse.Namespace:
     """
     Parse command line arguments for grid interpolation.
@@ -61,6 +57,11 @@ def parse_arguments(args) -> argparse.Namespace:
         argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--algo",
+        type=str,
+        default="interpolate_grids_of_dh",
+    )
     # Required arguments
     parser.add_argument(
         "--in_dir",
@@ -76,10 +77,12 @@ def parse_arguments(args) -> argparse.Namespace:
     )
     parser.add_argument("--out_dir", help="Output directory", required=True)
     parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata json file",
+        "--in_meta",
+        type=str,
         required=False,
+        help="Path to upstream metadata JSON for resolving grid parameters.",
     )
+
     parser.add_argument(
         "--timestamp_column", help="Timestamp/ grouping column to loop through", required=True
     )
@@ -112,7 +115,7 @@ def parse_arguments(args) -> argparse.Namespace:
 
 def get_grid_and_flags(
     group: pl.DataFrame, nrows: int, ncols: int
-) -> tuple[np.ndarray, np.ndarray, tuple, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray], np.ndarray, np.ndarray]:
     """
     Builds empty 2D (nrows, ncols) arrays for a single group (e.g. epoch).
     Marks cells that contain input data with flag 1, and
@@ -127,7 +130,7 @@ def get_grid_and_flags(
         grid (np.ndarray): 2D (nrows, ncols) variable array. Initialised with NaNs.
         grid_flags (np.ndarray): 2D (nrows, ncols) array. Initialised with 0.
         Cells with observations are set to 1.
-        populated_idx (tuple): Row and col indicies of populated cells.
+        populated_idx (tuple[np.ndarray, np.ndarray]): Row and col indicies of populated cells.
         x_bins (np.ndarray): Populated x_bins
         y_bins (np.ndarray): Populated y_bins
     """
@@ -144,7 +147,6 @@ def get_grid_and_flags(
         grid, dtype=np.byte
     )  # Flag array, 0 = no data, 1 = input, 2 = interpolated (added later)
 
-    # Populate grid flags with 1 where there is input data.
     grid_flags[y_bins, x_bins] = 1
 
     # Find points containing values
@@ -156,7 +158,7 @@ def get_grid_and_flags(
 def triangulate_points(
     params: argparse.Namespace,
     group_name: Any,
-    populated_idx: tuple,
+    populated_idx: tuple[np.ndarray, np.ndarray],
     logger: logging.Logger,
 ) -> Triangulation | None:
     """
@@ -166,7 +168,7 @@ def triangulate_points(
     Args:
         params (argparse.Namespace): Parsed command line arguments.
         group_name (str): Name of the epoch group or period being processed.
-        populated_idx: Row and column indices of populated cells.
+        populated_idx (tuple[np.ndarray, np.ndarray]): Row and column indices of populated cells.
 
     Returns:
         Triangulation or None: Triangulation object if successful, None otherwise.
@@ -175,7 +177,7 @@ def triangulate_points(
     # If no or too few points (3 is minimum, in the points
     # array that's 3x2 elements, so size 6)
     # --------------------------------------------------------#
-    group_label = _group_label(group_name)
+    group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
 
     if len(populated_idx[0]) < 6:
         logger.info("Not enough points for triangulation for group %s", group_label)
@@ -227,17 +229,17 @@ def get_trilinear_interpolation(
             - String reason for failure if interpolation was not successful, None otherwise.
 
     """
-    group_label = _group_label(group_name)
+
+    group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
 
     grids = {}
-    grid, grid_flags, populated_idx, x_bins, y_bins = get_grid_and_flags(group, nrows, ncols)
+    grid, grid_flags, populated_idx_raw, x_bins, y_bins = get_grid_and_flags(group, nrows, ncols)
+    populated_idx = cast(tuple[np.ndarray, np.ndarray], populated_idx_raw)
     if len(populated_idx[0]) < 6:
-        logger.info("Not enough points for interpolation for group %s", group_label)
         return None, "not_enough_points"
 
     tri_obj = triangulate_points(params, group_label, populated_idx, logger)
     if tri_obj is None:
-        logger.info("Triangulation failed for group %s, skipping interpolation", group_label)
         return None, "triangulation_error"
 
     # Construct full grid coordinates
@@ -258,7 +260,9 @@ def get_trilinear_interpolation(
             pred_data = pred.data
         # pylint: disable=W0703
         except Exception as e:
-            logger.error("LinearTriInterpolator error for group %s var %s: %s", group_label, var, e)
+            logger.warning(
+                "LinearTriInterpolator error for group %s var %s: %s", group_label, var, e
+            )
             return None, "linear_interpolator_error"
 
         # ---------------------------------------------------------------------------------#
@@ -282,36 +286,6 @@ def get_trilinear_interpolation(
     return grids, None
 
 
-def apply_hi_lo_filters(params: argparse.Namespace, group_df: pl.DataFrame):
-    """Filter out rows outside lo/hi bounds and count removals per variable
-    Args:
-        params (argparse.Namespace): Parsed command line arguments.
-        group_df (pl.DataFrame): DataFrame for one grouped timestamp.
-    Returns:
-    tuple[pl.DataFrame, dict[str, int]]: Filtered DataFrame and
-    dict of counts of removed rows per variable.
-    """
-    removed = {var: 0 for var in params.variables_in}
-    filter_mask = pl.lit(True)
-
-    for idx, var in enumerate(params.variables_in):
-        # Remove rows where and variable to be interpolated is outside the lo/hi range
-        lo = _parse_optional_float(params.lo_filter[idx]) if params.lo_filter else None
-        hi = _parse_optional_float(params.hi_filter[idx]) if params.hi_filter else None
-        if lo is not None:
-            removed[var] += int(
-                group_df.filter(pl.col(var).is_not_null() & (pl.col(var) < lo)).height
-            )
-            filter_mask = filter_mask & (pl.col(var) >= lo)
-        if hi is not None:
-            removed[var] += int(
-                group_df.filter(pl.col(var).is_not_null() & (pl.col(var) > hi)).height
-            )
-            filter_mask = filter_mask & (pl.col(var) <= hi)
-
-    return group_df.filter(filter_mask), removed
-
-
 # pylint: disable=R0914
 def process_timesteps(
     params: argparse.Namespace,
@@ -319,14 +293,14 @@ def process_timesteps(
     nrows: int,
     ncols: int,
     logger: logging.Logger,
-) -> tuple[pl.DataFrame, pl.DataFrame]:
+) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Process each params.timestamp_column group (e.g. Epoch or Period) in the input DataFrame:
 
     For each group :
         1. Extract static (single-value) metadata columns to re-attach after interpolation.
         2. Null out per-variable measurements outside lo/hi range filters.
-        3. Interpolate missing grid cells via Delaunay triangulation.
+        3. Interpolate missing grid cells via Delaunay triangulation calls : get_trilinear_interpolation
         4. Build a boolean mask of cells where every variable has a valid value (flag > 0).
         5. Assemble an output DataFrame for all valid cells, including interpolated
             values, flags, and static metadata columns.
@@ -353,26 +327,48 @@ def process_timesteps(
     groups = input_df.sort(params.timestamp_column).group_by(
         params.timestamp_column, maintain_order=True
     )
+    status: dict[str, Any] = {"status": []}
 
-    # Detect columns with exactly one unique value per group (static metadata)
-    non_variable_cols = [
-        col
-        for col in input_df.columns
-        if col not in params.variables_in and col != params.timestamp_column
-    ]
-    unique_counts = (
-        groups.agg(pl.col(c).n_unique() for c in non_variable_cols).select(non_variable_cols).max()
-    )
-    static_col_names = [c for c in non_variable_cols if unique_counts[c][0] == 1]
-
-    logger.info("Processing groups based on: %s", params.timestamp_column)
-    status_rows: list[dict[str, Any]] = []
     dataframes = []
     for group_name, group_df in groups:
-        group_label = _group_label(group_name)
-        populated_input_cells = group_df.select(pl.struct("y_bin", "x_bin").n_unique()).item()
+        group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
+        rows_before = group_df.height
+        logger.info(
+            "Processing group %s:  %s with %d rows",
+            params.timestamp_column,
+            group_label,
+            rows_before,
+        )
+        populated_input_cells = len(
+            np.unique(
+                np.column_stack((group_df["y_bin"].to_numpy(), group_df["x_bin"].to_numpy())),
+                axis=0,
+            )
+        )
+        # Get columns that are unique per group
+        static_cols = {
+            col: group_df[col][0]
+            for col in group_df.columns
+            if col not in params.variables_in
+            and col not in ("x_bin", "y_bin", params.timestamp_column)
+            and group_df[col].n_unique() == 1
+        }
 
-        group_df, removed = apply_hi_lo_filters(params, group_df)
+        # Set measurements outside lo/hi filters to None
+        if params.lo_filter or params.hi_filter:
+            for idx, var in enumerate(params.variables_in):
+                lo = _parse_optional_float(params.lo_filter[idx]) if params.lo_filter else None
+                hi = _parse_optional_float(params.hi_filter[idx]) if params.hi_filter else None
+
+                if lo is not None:
+                    group_df = group_df.with_columns(
+                        pl.when(pl.col(var) < lo).then(None).otherwise(pl.col(var)).alias(var)
+                    )
+                if hi is not None:
+                    group_df = group_df.with_columns(
+                        pl.when(pl.col(var) > hi).then(None).otherwise(pl.col(var)).alias(var)
+                    )
+
         grids, failure_reason = get_trilinear_interpolation(
             params,
             group_name,
@@ -382,13 +378,14 @@ def process_timesteps(
             logger,
         )
         if grids is None:
-            status_rows.append(
+            status["status"].append(
                 {
                     "timestamp": group_label,
+                    "rows_before": rows_before,
+                    "rows_after": 0,
                     "populated_input_cells": int(populated_input_cells),
                     "cells_in_output": 0,
                     "interpolated_cells": 0,
-                    "filter_removed_by_variable": removed,
                     "failure_reason": failure_reason,
                 }
             )
@@ -397,20 +394,14 @@ def process_timesteps(
         # Stack flag grids into a 3D stack
         # Find all grid cells indicies that are populated (Flag = 1 or 2)
         flag_grids = np.stack([grids[f"{var}_flags"] for var in params.variables_in], axis=-1)
-        valid_mask = np.all(flag_grids > 0, axis=-1)
-        interpolated_cells = int(np.sum(np.all(flag_grids == 2, axis=-1)))
-        y_idx, x_idx = np.where(valid_mask)
+        y_idx, x_idx = np.where(np.all(flag_grids > 0, axis=-1))
 
         # Build output DataFrame for valid grid cells
-        static_cols = {col: group_df[col][0] for col in static_col_names}
         df = pl.DataFrame(
             {
                 "y_bin": y_idx,
                 "x_bin": x_idx,
-                params.timestamp_column: pl.Series(
-                    params.timestamp_column, [group_label] * len(y_idx)
-                ),
-                **{var: grids[var][y_idx, x_idx] for var in params.variables_in if var in grids},
+                **{var: grids[var][y_idx, x_idx] for var in params.variables_in},
                 **{
                     f"{var}_flag": grids[f"{var}_flags"][y_idx, x_idx]
                     for var in params.variables_in
@@ -420,79 +411,40 @@ def process_timesteps(
         )
 
         dataframes.append(df)
-        status_rows.append(
+        status["status"].append(
             {
                 "timestamp": group_label,
+                "rows_before": rows_before,
+                "rows_after": len(df),
                 "populated_input_cells": int(populated_input_cells),
                 "cells_in_output": len(df),
-                "interpolated_cells": interpolated_cells,
-                "filter_removed_by_variable": removed,
+                "interpolated_cells": int(np.sum(np.all(flag_grids == 2, axis=-1))),
                 "failure_reason": None,
             }
         )
-        if params.debug:
-            logger.debug(
-                "Group %s: populated_input_cells=%d, "
-                "cells_in_output=%d, "
-                "interpolated_cells=%d, "
-                "filter_removed_by_variable=%s",
-                group_label,
-                populated_input_cells,
-                len(df),
-                interpolated_cells,
-                removed,
-            )
 
     if not dataframes:
-        return pl.DataFrame(
-            {
-                "y_bin": pl.Series("y_bin", [], dtype=pl.Int64),
-                "x_bin": pl.Series("x_bin", [], dtype=pl.Int64),
-                params.timestamp_column: pl.Series(params.timestamp_column, []),
-                **{var: pl.Series(var, [], dtype=pl.Float64) for var in params.variables_in},
-                **{
-                    f"{var}_flag": pl.Series(f"{var}_flag", [], dtype=pl.Int8)
-                    for var in params.variables_in
-                },
-            }
-        ), pl.DataFrame(status_rows)
+        empty = {
+            "y_bin": pl.Series("y_bin", [], dtype=pl.Int64),
+            "x_bin": pl.Series("x_bin", [], dtype=pl.Int64),
+            params.timestamp_column: pl.Series(params.timestamp_column, [], dtype=pl.Int64),
+            **{var: pl.Series(var, [], dtype=pl.Float64) for var in params.variables_in},
+            **{
+                f"{var}_flag": pl.Series(f"{var}_flag", [], dtype=pl.Int8)
+                for var in params.variables_in
+            },
+        }
+        return pl.DataFrame(empty), status
 
-    return pl.concat(dataframes), pl.DataFrame(status_rows)
-
-
-def get_count_summary(status_df: pl.DataFrame) -> dict[str, Any]:
-    """Build aggregate counts across all processed groups."""
-    failed_groups = status_df.filter(pl.col("failure_reason").is_not_null()).height
-
-    # Aggregate lo/hi filter removals per variable across all groups.
-    filter_removed_totals: dict[str, int] = {}
-    for item in status_df["filter_removed_by_variable"].to_list():
-        if not isinstance(item, dict):
-            continue
-        for var, count in item.items():
-            filter_removed_totals[var] = filter_removed_totals.get(var, 0) + int(count)
-
-    summary: dict[str, Any] = {
-        "groups_total": status_df.height,
-        "groups_succeeded": status_df.height - failed_groups,
-        "groups_failed": failed_groups,
-        "rows_removed_by_variable_lo_hi": filter_removed_totals,
-        "lo_hi_filter_removed_total": int(sum(filter_removed_totals.values())),
-        "populated_input_cells_total": int(status_df["populated_input_cells"].sum()),
-        "interpolated_cells_total": int(status_df["interpolated_cells"].sum()),
-        "cells_in_output_total": int(status_df["cells_in_output"].sum()),
-    }
-
-    return summary
+    return pl.concat(dataframes), status
 
 
 def write_output(
     params: argparse.Namespace,
     interpolated_df: pl.DataFrame,
     start_time: float,
-    status_df: pl.DataFrame,
-    sub_basin: str | None = None,
-    logger: logging.Logger | None = None,
+    status: dict[str, Any],
+    output_dir: str,
 ) -> Path:
     """
     Write interpolated results and metadata to output files.
@@ -501,57 +453,45 @@ def write_output(
         params (argparse.Namespace): Parsed command line arguments.
         interpolated_df (pl.DataFrame): Interpolated results for all epochs.
         start_time (float): Script start time (seconds since epoch).
-        status_df (pl.DataFrame): DataFrame containing counts and status for each processed group.
-        sub_basin (str | None): Optional sub-basin name for output directory.
-        logger (logging.Logger): Logger object for logging messages.
+
     Returns:
         Path: Path to the output parquet file.
     """
-    if sub_basin is not None:
-        if logger is not None:
-            logger.info("Writing output for sub-basin %s to disk", sub_basin)
-        out_dir = Path(params.out_dir) / sub_basin
-        output_path = out_dir / "interpolated.parquet"
-    else:
-        if logger is not None:
-            logger.info("Writing root-level output to disk")
-        out_dir = Path(params.out_dir)
-        output_path = out_dir / "interpolated.parquet"
-
+    output_path = Path(output_dir) / f"{params.algo}_meta.parquet"
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     interpolated_df.write_parquet(output_path, compression="zstd")
 
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
-    try:
-        metadata_payload: dict[str, Any] = {
-            **vars(params),
-            "counts": get_count_summary(status_df),
-            "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-        }
-        if params.debug:
-            metadata_payload["counts_per_group"] = status_df.to_dicts()
+    args_dict = dict(vars(params))
+    if args_dict.get("gridarea") is None:
+        args_dict.pop("gridarea", None)
+    if args_dict.get("binsize") is None:
+        args_dict.pop("binsize", None)
 
-        metadata_path = out_dir / "interp_meta.json"
-        with open(metadata_path, "w", encoding="utf-8") as f_meta:
-            json.dump(
-                metadata_payload,
-                f_meta,
-                indent=2,
-            )
+    meta_path = Path(output_dir) / f"{params.algo}_meta.json"
+    try:
+        write_metadata(
+            params,
+            meta_path,
+            {
+                **args_dict,
+                "status": status,
+                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+            },
+        )
     except OSError as e:
         sys.exit(str(e))
     return output_path
 
 
-# --------------------
-# Main Function
-# --------------------
-
-
-def interpolate_grids_of_dh(args):
+# -------------------
+# Main function
+# -------------------
+def interpolate_grid_of_dh(args):
     """
     Main entry point for grid interpolation.
 
@@ -564,7 +504,7 @@ def interpolate_grids_of_dh(args):
     Args:
         args (list): Command line arguments (typically sys.argv[1:])
     """
-    params = parse_arguments(args)
+
     start_time = time.time()
     params = parse_arguments(args)
 
@@ -574,39 +514,69 @@ def interpolate_grids_of_dh(args):
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_metadata = json.load(f)
-    ga = GridArea(grid_metadata["gridarea"], grid_metadata["binsize"])
-    ncols, nrows = ga.get_ncols_nrows()
-
     if params.basin_structure is False:
         logger.info("Processing root-level data")
+        try:
+            resolved = _resolve_grid_params(
+                params,
+                ["gridarea", "binsize"],
+            )
+        except ValueError as exc:
+            logger.error("Couldn't resolve required grid parameters: %s", exc)
+            sys.exit(str(exc))
+
+        grid_area = str(resolved[0])
+        binsize = float(resolved[1])
+
+        ga = GridArea(grid_area, binsize)
+        ncols, nrows = ga.get_ncols_nrows()
         input_df = pl.read_parquet(Path(params.in_dir) / params.parquet_glob)
-        interpolated_df, status_df = process_timesteps(params, input_df, nrows, ncols, logger)
-        write_output(
-            params,
-            interpolated_df,
-            start_time,
-            status_df,
-            sub_basin=None,
-            logger=logger,
-        )
+        interpolated_df, status = process_timesteps(params, input_df, nrows, ncols, logger)
+        write_output(params, interpolated_df, start_time, status, params.out_dir)
     else:
         logger.info("Processing basin/sub-basin level data")
         # Determine which sub-basins to process
         for sub_basin in get_basins_to_process(params, params.in_dir, logger=logger):
             logger.info("Processing sub-basin: %s", sub_basin)
-            input_df = pl.read_parquet(Path(params.in_dir) / sub_basin / params.parquet_glob)
-            interpolated_df, status_df = process_timesteps(params, input_df, nrows, ncols, logger)
-            write_output(
-                params,
-                interpolated_df,
-                start_time,
-                status_df,
-                sub_basin=sub_basin,
-                logger=logger,
+            basin_in_dir = Path(params.in_dir) / sub_basin
+            basin_out_dir = Path(params.out_dir) / sub_basin
+            basin_out_dir.mkdir(parents=True, exist_ok=True)
+
+            basin_params = argparse.Namespace(**vars(params))
+            basin_params.in_dir = str(basin_in_dir)
+            basin_params.out_dir = str(basin_out_dir)
+            basin_params.region_selector = [sub_basin]
+            basin_params.in_meta = _resolve_basin_in_meta(
+                getattr(params, "in_meta", None),
+                sub_basin,
+                basin_in_dir,
+                logger,
             )
+
+            try:
+                resolved = _resolve_grid_params(
+                    basin_params,
+                    ["gridarea", "binsize"],
+                )
+            except ValueError as exc:
+                logger.error(
+                    "Couldn't resolve required grid parameters for basin %s: %s",
+                    sub_basin,
+                    exc,
+                )
+                continue
+
+            grid_area = str(resolved[0])
+            binsize = float(resolved[1])
+
+            ga = GridArea(grid_area, binsize)
+            ncols, nrows = ga.get_ncols_nrows()
+            input_df = pl.read_parquet(basin_in_dir / params.parquet_glob)
+            interpolated_df, status = process_timesteps(
+                basin_params, input_df, nrows, ncols, logger
+            )
+            write_output(basin_params, interpolated_df, start_time, status, str(basin_out_dir))
 
 
 if __name__ == "__main__":
-    interpolate_grids_of_dh(sys.argv[1:])
+    interpolate_grid_of_dh(sys.argv[1:])

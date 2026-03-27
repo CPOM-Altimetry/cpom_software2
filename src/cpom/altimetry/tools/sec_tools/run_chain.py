@@ -41,7 +41,8 @@ def dict_to_cli_args(config):
     """
     Convert config dict to CLI argument list.
 
-    Skips internal keys: 'out_folder_name', 'in_step', 'grid_info_json', 'base_folder'
+    Skips internal keys: 'out_folder_name', 'in_step', 'grid_info_json', 'base_folder',
+    'algo', 'algo_name'.
     Serializes to JSON:
         'dataset' : See grid_for_elev_change.py
         'mission_mapper' : See multi_mission_cross_cal.py
@@ -50,7 +51,7 @@ def dict_to_cli_args(config):
     args = []
     for key, value in config.items():
         # Skip internal configuration keys
-        if key in ["out_folder_name", "in_step", "base_folder"]:
+        if key in ["out_folder_name", "in_step", "base_folder", "algo", "algo_name"]:
             continue
 
         # Handle different value types
@@ -108,11 +109,6 @@ def requires_grid_metadata(algo):
     ]
 
 
-def get_auto_path(algo):
-    """Return True if algorithm uses automatic in_dir/out_dir."""
-    return algo not in ["grid_for_elev_change_update_year"]
-
-
 def get_algorithms_to_run(algorithm_list, start_alg=None, end_alg=None):
     """Return the algorithm sub-list bounded by start_alg/end_alg, if provided."""
 
@@ -168,7 +164,7 @@ def get_merged_algo_config(config, algo, mission=None):
     return algo_config, mission_config
 
 
-def build_args(algo, config, mission=None):
+def build_args(algo, config, mission=None, persist_metadata=True):
     """
     Build complete command-line arguments for an algorithm from merged configuration.
 
@@ -193,6 +189,8 @@ def build_args(algo, config, mission=None):
         config (dict): Full configuration dictionary (root level + all sections).
         mission (str, optional): Mission name for single-mission processing.
                                If None, assumes multi-mission mode.
+        persist_metadata (bool, optional): Whether to persist metadata file paths and
+                                           provenance info across stages.
 
     Returns:
         list: Complete list of command-line argument strings.
@@ -203,54 +201,80 @@ def build_args(algo, config, mission=None):
     args = dict_to_cli_args(algo_config)
 
     base_folder = mission_config.get("base_folder") if mission else None
-    if get_auto_path(algo):
-        # Input directory
-        if "in_dir" not in algo_config and "in_step" in algo_config:
-            in_step_config, _ = get_merged_algo_config(config, algo_config["in_step"], mission)
-            in_dir = build_path(config["base_out"], base_folder, in_step_config)
+    # Input directory
+    if "in_dir" not in algo_config and "in_step" in algo_config:
+        in_step_config, _ = get_merged_algo_config(config, algo_config["in_step"], mission)
+        in_dir = build_path(config["base_out"], base_folder, in_step_config)
+        if algo != "grid_for_elev_change_update_year":
             args.extend(["--in_dir", str(in_dir)])
+        print(
+            f"Auto-detected input directory for {algo}: {in_dir} from in_step: {algo_config['in_step']}"
+        )
 
-        # Output directory
-        if "out_dir" not in algo_config and "out_folder_name" in algo_config:
+    # Output directory
+    if "out_dir" not in algo_config:
+        if "out_folder_name" in algo_config:
             out_dir = build_path(config["base_out"], base_folder, algo_config)
+            print(
+                f"Built output directory for {algo}:{out_dir} from base_out: {config['base_out']} and out_folder_name: {algo_config['out_folder_name']}"
+            )
             args.extend(["--out_dir", str(out_dir)])
 
-    # Grid metadata
-    if requires_grid_metadata(algo):
-        metadata = None
+    # Load previous stage metadata
+    if (
+        persist_metadata or algo == "grid_for_elev_change_update_year"
+    ) and algo != "grid_for_elev_change":
+        metadata: Path | None = None
 
-        if "grid_info_json" in mission_config:
-            metadata = Path(mission_config["grid_info_json"])
+        if "in_meta" in algo_config:
+            metadata = Path(algo_config["in_meta"])
+
         elif "in_dir" in algo_config:
-            metadata = Path(algo_config["in_dir"]) / "metadata.json"
-        elif mission and "grid_for_elev_change" in config:
-            grid_path = build_path(
-                config["base_out"], mission_config["base_folder"], config["grid_for_elev_change"]
-            )
-            metadata = grid_path / "metadata.json"
-
-        # Only add if metadata file exists
-        if metadata and metadata.exists():
-            args.extend(["--grid_info_json", str(metadata)])
+            if "in_step" in algo_config:
+                metadata = Path(algo_config["in_dir"]) / f"{algo_config['in_step']}_meta.json"
         else:
-            print(f"Metadata file not found: {metadata}")
+            try:
+                metadata = in_dir / f"{algo_config['in_step']}_meta.json"
+            except KeyError:
+                print("'in_step' missing, cannot construct metadata path")
 
+        if metadata:
+            if metadata.exists():
+                print(f"Auto-detected metadata for {algo} at {metadata}")
+                args.extend(["--in_meta", str(metadata)])
+            else:
+                print(f"Expected metadata file for {algo} not found at {metadata}")
+                sys.exit(1)
+        else:
+            print(
+                f"No metadata path could be determined for {algo}, and 'in_meta' not specified. Exiting."
+            )
+            sys.exit(1)
+    print("TEST THESE ARE THE ARGS", args)
     return args
 
 
-def run_algorithm(algo: str, args: list[str], debug_args: list[str]):
+def run_algorithm(
+    algo: str,
+    args: list[str],
+    debug_args: list[str],
+):
     """
     Run algorithm either by importing and calling module.algo(args),
     or fallback to subprocess execution.
     """
     cli_args = args + debug_args
-    module = importlib.import_module(algo)
-    main_func = getattr(module, algo, None)
-    if callable(main_func):
-        print(f"Running {algo}.{algo} with args: {cli_args}")
-        main_func(cli_args)
-    else:
-        print(f"No callable main function for {algo}")
+    try:
+        module = importlib.import_module(algo)
+        main_func = getattr(module, algo, None)
+
+        if callable(main_func):
+            print(f"Running {algo}.{algo} with args: {cli_args}")
+            main_func(cli_args)
+        else:
+            print(f"No callable main function for {algo}")
+    except ImportError as e:
+        print(f"Failed to import module {algo}: {e}")
 
 
 def main(args):
@@ -304,6 +328,15 @@ def main(args):
             "configured algorithm list are skipped."
         ),
     )
+    parser.add_argument(
+        "--persist_metadata",
+        action="store_false",
+        help=(
+            "Whether to persist metadata file paths and provenance info across stages. If enabled, "
+            "the script will attempt to locate metadata.json from previous stages and pass it to "
+            "subsequent stages that require it."
+        ),
+    )
     parsed_args = parser.parse_args(args)
 
     yml = EnvYAML(str(parsed_args.config))  # read the YML and parse environment variables
@@ -327,7 +360,12 @@ def main(args):
                 parser.error(f"{exc} (mission: {mission})")
             for algo in algorithms_to_run:
                 print(f"Starting {algo}" + (f" for mission {mission}" if mission else ""))
-                args = build_args(algo, config, mission)
+                args = build_args(
+                    algo,
+                    config,
+                    mission=mission,
+                    persist_metadata=parsed_args.persist_metadata,
+                )
                 run_algorithm(algo, args, debug_args)
     else:
         try:
@@ -337,7 +375,7 @@ def main(args):
         except ValueError as exc:
             parser.error(str(exc))
         for algo in algorithms_to_run:
-            args = build_args(algo, config)
+            args = build_args(algo, config, persist_metadata=parsed_args.persist_metadata)
             run_algorithm(algo, args, debug_args)
 
 

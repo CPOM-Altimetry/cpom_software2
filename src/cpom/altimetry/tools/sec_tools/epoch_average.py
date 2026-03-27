@@ -23,7 +23,6 @@ Output:
 """
 
 import argparse
-import json
 import logging
 import math
 import os
@@ -34,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_grid_params, write_metadata
 import polars as pl
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
@@ -60,18 +60,24 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
     )
     # I/O arguments
     parser.add_argument(
+        "--algo",
+        type=str,
+        default="epoch_average",
+    )
+    parser.add_argument(
         "--in_dir",
         help="Path to the directory containing surface fit data files.",
         required=True,
     )
     parser.add_argument(
-        "--out_dir",
-        help="Path to the output directory.",
-        required=True,
+        "--in_meta",
+        type=str,
+        required=False,
+        help="Path to the grid metadata JSON file.",
     )
     parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata JSON file.",
+        "--out_dir",
+        help="Path to the output directory.",
         required=True,
     )
     parser.add_argument(
@@ -97,6 +103,12 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
 
     # Epoch settings
     parser.add_argument(
+        "--standard_epoch",
+        type=str,
+        required=False,
+        help="Reference epoch in ISO format (e.g., 1991-01-01T00:00:00).",
+    )
+    parser.add_argument(
         "--epoch_length",
         default=30,
         type=int,
@@ -120,6 +132,19 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
         "--gia_model",
         help="GIA model name for isostatic correction. "
         "If not provided, no correction is applied.",
+    )
+    # Fall back if grid parameters are not provided in metadata
+    parser.add_argument(
+        "--gridarea",
+        type=str,
+        required=False,
+        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        required=False,
+        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
     )
 
     # Surface-fit filters
@@ -253,26 +278,28 @@ def get_epoch_lf(
     """
     # Get the min and max time from the parquet files.
     logger.info("Creating epoch dataframe")
-    data_mintime, data_maxtime = get_min_max_time(parquet_glob, params.epoch_time, logger, time_var)
+    data_mintime, data_maxtime = get_min_max_time(
+        parquet_glob, params.standard_epoch, logger, time_var
+    )
 
     # If epoch_start and epoch_end are provided, convert them to datetime objects.
     # If not provided, use the reference epoch_time as a starting point and and the
     # datasets date end.
     if params.epoch_start is not None and params.epoch_end is not None:
-        epoch_start_dt, _ = get_date(params.epoch_time, params.epoch_start)
-        epoch_end_dt, _ = get_date(params.epoch_time, params.epoch_end)
+        epoch_start_dt, _ = get_date(params.standard_epoch, params.epoch_start)
+        epoch_end_dt, _ = get_date(params.standard_epoch, params.epoch_end)
     else:
         if params.epoch_start is not None:
-            epoch_start_dt, _ = get_date(params.epoch_time, params.epoch_start)
+            epoch_start_dt, _ = get_date(params.standard_epoch, params.epoch_start)
         else:
-            epoch_start_dt, _ = params.epoch_time, 0
+            epoch_start_dt, _ = params.standard_epoch, 0
 
         if params.epoch_end is not None:
-            epoch_end_dt, _ = get_date(params.epoch_time, params.epoch_end)
+            epoch_end_dt, _ = get_date(params.standard_epoch, params.epoch_end)
         else:
             epoch_end_dt, _ = (
                 data_maxtime,
-                (data_maxtime - params.epoch_time).total_seconds(),
+                (data_maxtime - params.standard_epoch).total_seconds(),
             )  # Use data end time
 
     total_period_days = (epoch_end_dt - epoch_start_dt).days
@@ -310,7 +337,7 @@ def get_epoch_lf(
         .with_columns(
             [
                 # Fractional year calculation
-                (pl.col("epoch_midpoint_dt").dt.year() - params.epoch_time.year).alias(
+                (pl.col("epoch_midpoint_dt").dt.year() - params.standard_epoch.year).alias(
                     "year_offset"
                 ),
                 (pl.col("epoch_midpoint_dt").dt.ordinal_day() - 1).alias("day_in_year"),
@@ -345,7 +372,7 @@ def get_epoch_lf(
 
 
 def get_gia_correction_lf(
-    gia_model: str, json_config: dict[str, Any], logger: logging.Logger
+    gia_model: str, grid_area, binsize, logger: logging.Logger
 ) -> pl.LazyFrame:
     """
     Get a Polars LazyFrame with GIA correction values for each grid cell.
@@ -363,7 +390,7 @@ def get_gia_correction_lf(
     """
     logger.info(f"Loading GIA correction data using model: {gia_model}")
     gia = GIA(gia_model)
-    grid = GridArea(json_config["gridarea"], json_config["binsize"])
+    grid = GridArea(grid_area, binsize)
     grid_x, grid_y = np.meshgrid(grid.cell_x_centres, grid.cell_y_centres)
     uplift_grid = gia.interp_gia(
         grid_x, grid_y, {"crs_bng": grid.crs_bng, "crs_wgs": grid.crs_wgs}, method="linear"
@@ -657,10 +684,10 @@ def write_epoch_stats_lf(
 
 
 def get_metadata_json(
+    params: argparse.Namespace,
     stats: pl.LazyFrame,
-    args: argparse.Namespace,
-    grid_meta: dict[str, Any],
     start_time: float,
+    logger: logging.Logger,
 ) -> None:
     """
     Create and save epoch_avg_meta.json in the output directory.
@@ -670,24 +697,19 @@ def get_metadata_json(
         - Execution time
 
     Args:
+        params (argparse.Namespace): Command line arguments.
         stats (pl.LazyFrame): LazyFrame containing epoch average statistics.
-        args (argparse.Namespace): Command line arguments.
-        grid_meta (dict[str, Any]): Grid metadata from surface fit.
         start_time (float): Start time of the processing.
     """
-    print("Writing metadata file")
 
     epochs_with_data = stats.select("epoch_number").collect().n_unique()
     ncells_with_data = stats.select(["x_bin", "y_bin"]).collect().n_unique()
-
-    print("epochs_with_data", epochs_with_data)
-    print("ncells_with_data", ncells_with_data)
 
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
     args_dict: dict[str, Any] = {}
-    for k, v in vars(args).items():
+    for k, v in vars(params).items():
         if isinstance(v, datetime):
             args_dict[k] = v.isoformat()
         elif isinstance(v, Path):
@@ -695,18 +717,30 @@ def get_metadata_json(
         else:
             args_dict[k] = v
 
-    with open(Path(args.out_dir) / "epoch_avg_meta.json", "w", encoding="utf-8") as f_meta:
-        json.dump(
+    # Remove fallback grid params that were sourced from upstream metadata
+    # (resolver sets them to None on params when resolved from grid_meta)
+    if args_dict.get("gridarea") is None:
+        args_dict.pop("gridarea", None)
+    if args_dict.get("binsize") is None:
+        args_dict.pop("binsize", None)
+
+    meta_json_path = Path(params.out_dir) / f"{params.algo}_meta.json"
+
+    try:
+        write_metadata(
+            params,
+            meta_json_path,
             {
                 **args_dict,
-                "standard_epoch": grid_meta["standard_epoch"],
                 "epochs_with_data": epochs_with_data,
                 "cells_with_data": ncells_with_data,
                 "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
             },
-            f_meta,
-            indent=2,
         )
+        logger.info("Wrote data_set metadata to %s", meta_json_path)
+
+    except OSError as e:
+        logger.error("Failed to write surface_fit_meta.json with %s", e)
 
 
 # ----------------------- #
@@ -732,35 +766,29 @@ def process_partition(
         params: Command line parameters.
         epoch_lf: Pre-computed epoch intervals.
         uplift_lf: Pre-computed GIA uplift values or None.
-        grid_meta: Grid metadata for GIA.
         logger: Logger for progress messages.
 
     Returns:
         Epoch statistics LazyFrame.
     """
     # 1. Load surface fit
-    t0 = time.time()
     logger.info("Loading surface fit data")
     surface_fit_lf = pl.scan_parquet(parquet_glob).with_columns(
-        (pl.lit(params.epoch_time) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
+        (pl.lit(params.standard_epoch) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
     )
 
     # 2. Assign epochs
-    t1 = time.time()
-    logger.info("Assigning epochs (took %.2fs)", t1 - t0)
+    logger.info("Assigning epochs")
     epoch_origin_dt = infer_epoch_origin_dt(epoch_lf, params.epoch_length)
     surface_fit_lf = assign_epochs_lf(
         surface_fit_lf, epoch_lf, epoch_origin_dt, params.epoch_length
     )
 
     # 3. Apply GIA correction
-    t2 = time.time()
-    logger.info("Applying GIA correction (if provided) (took %.2fs)", t2 - t1)
     surface_fit_lf = apply_gia_lf(surface_fit_lf, uplift_lf, logger)
 
     # 4. Filter bad surface fits
-    t3 = time.time()
-    logger.info("Applying surface-fit quality filters (took %.2fs)", t3 - t2)
+    logger.info("Applying surface-fit quality filters")
     surface_fit_lf = filter_surface_fit_lf(
         params,
         surface_fit_lf,
@@ -768,17 +796,14 @@ def process_partition(
     )
 
     # 5. Compute epoch statistics
-    t4 = time.time()
-    logger.info("Prepared sigma-clipped epoch statistics lazy plan in %.2fs", t4 - t3)
+    logger.info("Preparing sigma-clipped epoch statistics lazy plan")
     epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf, logger)
 
     # 6. Filter epochs by coverage
     if params.epoch_filter_threshold is not None:
-        t5 = time.time()
         logger.info(
-            "Filtering epochs by spatial coverage (threshold=%.2f) (took %.2fs)",
+            "Filtering epochs by spatial coverage (threshold=%.2f)",
             params.epoch_filter_threshold,
-            t5 - t4,
         )
         epoch_stats_lf = filter_epochs_by_coverage_lf(
             epoch_stats_lf, threshold=params.epoch_filter_threshold
@@ -808,18 +833,22 @@ def epoch_average(args: list[str] | None = None) -> None:
     start_time = time.time()
     params = parse_arguments(args)
 
-    # Load grid metadata
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
-
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
         log_dir=params.out_dir,
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
-    params.epoch_time = datetime.fromisoformat(grid_meta["standard_epoch"])
-    logger.info("Standard epoch time: %s", params.epoch_time)
+    try:
+        standard_epoch, grid_area, binsize = _resolve_grid_params(
+            params,
+            ["standard_epoch", "gridarea", "binsize"],
+        )
+    except ValueError as exc:
+        sys.exit(str(exc))
+
+    params.standard_epoch = datetime.fromisoformat(standard_epoch)
+    logger.info("Standard epoch time: %s", params.standard_epoch)
 
     # Get input/output paths
     in_dir_root = Path(params.in_dir)
@@ -835,7 +864,9 @@ def epoch_average(args: list[str] | None = None) -> None:
 
     epoch_stats_lf = None
     uplift_lf = (
-        get_gia_correction_lf(params.gia_model, grid_meta, logger) if params.gia_model else None
+        get_gia_correction_lf(params.gia_model, grid_area, binsize, logger)
+        if params.gia_model
+        else None
     )
 
     for in_dir, out_dir in paths:
@@ -873,23 +904,19 @@ def epoch_average(args: list[str] | None = None) -> None:
                 logger.info("Wrote partition results to %s", output_path)
 
             # Write metadata once after all partitions - scan all written files for accurate stats
-            logger.info("Computing metadata from all partitions")
-            combined_stats_lf = pl.scan_parquet(str(out_dir / "**" / "epoch_average.parquet"))
             get_metadata_json(
-                stats=combined_stats_lf,
-                args=params,
-                grid_meta=grid_meta,
+                params=params,
+                stats=pl.scan_parquet(str(out_dir / "**" / "epoch_average.parquet")),
                 start_time=start_time,
+                logger=logger,
             )
             logger.info("Metadata written successfully")
 
         else:
             logger.info("Processing all data.")
-            parquet_glob = f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}"
-
             epoch_stats_lf = process_partition(
                 params,
-                parquet_glob,
+                f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}",
                 epoch_lf,
                 uplift_lf,
                 logger,
@@ -898,14 +925,11 @@ def epoch_average(args: list[str] | None = None) -> None:
             output_path = out_dir / "epoch_average.parquet"
             write_epoch_stats_lf(epoch_stats_lf, output_path, logger)
             logger.info("Wrote combined results to %s", output_path)
-
-            logger.info("Computing metadata from written parquet")
-            written_stats_lf = pl.scan_parquet(str(output_path))
             get_metadata_json(
-                stats=written_stats_lf,
-                args=params,
-                grid_meta=grid_meta,
+                params=params,
+                stats=pl.scan_parquet(str(output_path)),
                 start_time=start_time,
+                logger=logger,
             )
             logger.info("Metadata written successfully")
 
