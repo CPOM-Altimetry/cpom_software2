@@ -1,0 +1,13 @@
+mission: s3b
+long_name: "Sentinel-3B Altimeter Data Modelling and Processing for Land Ice (AMPLI) Dataset "
+file_backend: "netcdf4"  # or "h5py"
+dataset_epoch: "2000-01-01T00:00:00"
+search_pattern: "**/S3B_SR_2_TDP_LI_*.nc"
+yyyymm_str_fname_indices: [-81, -73]
+latitude_param: "AMPLI_processing/lat_radar_ampli"
+longitude_param: "AMPLI_processing/lon_radar_ampli"
+elevation_param: "AMPLI_processing/elevation_radar_ampli"
+# power_param: "AMPLI_processing/sig0_ice_sheet_20_ku"
+time_param: "satellite_and_altimeter/time"
+mode_param: "satellite_and_altimeter/mode_id"
+default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_s3a_ampli_qual_mask
