@@ -33,7 +33,7 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
-from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_grid_params, write_metadata
+from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_basin_in_meta, _resolve_grid_params, write_metadata
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
@@ -491,7 +491,7 @@ def write_output(
 # -------------------
 # Main function
 # -------------------
-def interpolate_grid_of_dh(args):
+def interpolate_grids_of_dh(args):
     """
     Main entry point for grid interpolation.
 
@@ -579,4 +579,4 @@ def interpolate_grid_of_dh(args):
 
 
 if __name__ == "__main__":
-    interpolate_grid_of_dh(sys.argv[1:])
+    interpolate_grids_of_dh(sys.argv[1:])
