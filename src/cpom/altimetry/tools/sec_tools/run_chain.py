@@ -243,8 +243,16 @@ def build_args(algo, config, mission=None, persist_metadata=True):
                 print(f"Auto-detected metadata for {algo} at {metadata}")
                 args.extend(["--in_meta", str(metadata)])
             else:
-                print(f"Expected metadata file for {algo} not found at {metadata}")
-                sys.exit(1)
+                # Basin-structured workflows may keep metadata one level below in basin folders.
+                basin_candidates = sorted(metadata.parent.glob(f"*/{metadata.name}"))
+                if basin_candidates:
+                    print(
+                        f"Metadata file for {algo} not found at {metadata}; found basin metadata files under {metadata.parent}"
+                    )
+                    args.extend(["--in_meta", str(metadata.parent)])
+                else:
+                    print(f"Expected metadata file for {algo} not found at {metadata}")
+                    sys.exit(1)
         else:
             print(
                 f"No metadata path could be determined for {algo}, and 'in_meta' not specified. Exiting."

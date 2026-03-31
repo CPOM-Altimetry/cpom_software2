@@ -33,7 +33,11 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
-from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_basin_in_meta, _resolve_grid_params, write_metadata
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    _resolve_basin_in_meta,
+    _resolve_grid_params,
+    write_metadata,
+)
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
 
@@ -180,13 +184,13 @@ def triangulate_points(
     group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
 
     if len(populated_idx[0]) < 6:
-        logger.info("Not enough points for triangulation for group %s", group_label)
+        logger.debug("Not enough points for triangulation for group %s", group_label)
         return None
     try:
         tri_obj = Triangulation(populated_idx[0], populated_idx[1])
     # pylint: disable=W0703
     except Exception as e:
-        logger.info("Triangulation error for group %s: %s", group_label, e)
+        logger.debug("Triangulation error for group %s: %s", group_label, e)
         return None
 
     # Mask out triangles whose longest edge exceeds tri_lim
@@ -286,6 +290,102 @@ def get_trilinear_interpolation(
     return grids, None
 
 
+def apply_range_filters(params, group_df: pl.DataFrame) -> pl.DataFrame:
+    # Set measurements outside lo/hi filters to None
+    if params.lo_filter or params.hi_filter:
+        for idx, var in enumerate(params.variables_in):
+            lo = _parse_optional_float(params.lo_filter[idx]) if params.lo_filter else None
+            hi = _parse_optional_float(params.hi_filter[idx]) if params.hi_filter else None
+
+            if lo is not None:
+                group_df = group_df.with_columns(
+                    pl.when(pl.col(var) < lo).then(None).otherwise(pl.col(var)).alias(var)
+                )
+            if hi is not None:
+                group_df = group_df.with_columns(
+                    pl.when(pl.col(var) > hi).then(None).otherwise(pl.col(var)).alias(var)
+                )
+    return group_df
+
+
+def get_epoch_stats(
+    group_label: str,
+    rows_before: int,
+    populated_input_cells: int,
+    df: pl.DataFrame | None,
+    grids: dict[str, np.ndarray] | None,
+    variables_in: list[str],
+    failure_reason: str | None,
+) -> dict[str, Any]:
+    """
+    Calculate statistics for a single group after interpolation, including counts of populated input cells, cells in output,
+    and interpolated cells.
+
+    Args:
+        group_label (str): String label for the group being processed (e.g. epoch or period).
+        rows_before (int): Number of rows in the group before interpolation.
+        populated_input_cells (int): Number of populated input cells before interpolation.
+        df (pl.DataFrame | None): DataFrame for the group after interpolation.
+        grids (dict[str, np.ndarray]): Raw grids dict returned by get_trilinear_interpolation,
+            or None if interpolation failed.
+        failure_reason (str | None): Reason for interpolation failure, or None if interpolation succeeded.
+
+    Returns:
+        dict[str, Any]: Dictionary containing statistics for the group.
+    """
+    if grids is None or df is None:
+        return {
+            "timestamp": group_label,
+            "rows_before": rows_before,
+            "rows_after": 0,
+            "populated_input_cells": populated_input_cells,
+            "cells_in_output": 0,
+            "interpolated_cells": 0,
+            "failure_reason": failure_reason,
+        }
+
+    flag_stack = np.stack([grids[f"{var}_flags"] for var in variables_in], axis=-1)
+    return {
+        "timestamp": group_label,
+        "rows_before": rows_before,
+        "rows_after": len(df),
+        "populated_input_cells": populated_input_cells,
+        "cells_in_output": len(df),
+        "interpolated_cells": int(np.sum(np.all(flag_stack == 2, axis=-1))),
+        "failure_reason": None,
+    }
+
+
+def aggregate_epoch_stats(epoch_stats_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-epoch statistics for metadata output."""
+    failure_counts: dict[str, int] = {}
+    failed = 0
+
+    for epoch_stats in epoch_stats_list:
+        reason = epoch_stats["failure_reason"]
+        if reason is not None:
+            failed += 1
+            failure_counts[str(reason)] = failure_counts.get(str(reason), 0) + 1
+
+    return {
+        "aggregated": {
+            "groups": len(epoch_stats_list),
+            "succeeded": len(epoch_stats_list) - failed,
+            "failed": failed,
+            "input_rows": sum(int(stats["rows_before"]) for stats in epoch_stats_list),
+            "output_rows": sum(int(stats["rows_after"]) for stats in epoch_stats_list),
+            "populated_input_cells": sum(
+                int(stats["populated_input_cells"]) for stats in epoch_stats_list
+            ),
+            "cells_in_output": sum(int(stats["cells_in_output"]) for stats in epoch_stats_list),
+            "interpolated_cells": sum(
+                int(stats["interpolated_cells"]) for stats in epoch_stats_list
+            ),
+        },
+        "failure_counts": failure_counts,
+    }
+
+
 # pylint: disable=R0914
 def process_timesteps(
     params: argparse.Namespace,
@@ -324,16 +424,17 @@ def process_timesteps(
     """
     # Group by the specified column (e.g., epoch if input is epoch averaged grids)
     logger.info("Loaded input rows: %d", input_df.height)
+    dataframes: list[pl.DataFrame] = []
+    epoch_stats_list: list[dict[str, Any]] = []
+
     groups = input_df.sort(params.timestamp_column).group_by(
         params.timestamp_column, maintain_order=True
     )
-    status: dict[str, Any] = {"status": []}
 
-    dataframes = []
     for group_name, group_df in groups:
         group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
         rows_before = group_df.height
-        logger.info(
+        logger.debug(
             "Processing group %s:  %s with %d rows",
             params.timestamp_column,
             group_label,
@@ -354,20 +455,7 @@ def process_timesteps(
             and group_df[col].n_unique() == 1
         }
 
-        # Set measurements outside lo/hi filters to None
-        if params.lo_filter or params.hi_filter:
-            for idx, var in enumerate(params.variables_in):
-                lo = _parse_optional_float(params.lo_filter[idx]) if params.lo_filter else None
-                hi = _parse_optional_float(params.hi_filter[idx]) if params.hi_filter else None
-
-                if lo is not None:
-                    group_df = group_df.with_columns(
-                        pl.when(pl.col(var) < lo).then(None).otherwise(pl.col(var)).alias(var)
-                    )
-                if hi is not None:
-                    group_df = group_df.with_columns(
-                        pl.when(pl.col(var) > hi).then(None).otherwise(pl.col(var)).alias(var)
-                    )
+        group_df = apply_range_filters(params, group_df)
 
         grids, failure_reason = get_trilinear_interpolation(
             params,
@@ -378,17 +466,17 @@ def process_timesteps(
             logger,
         )
         if grids is None:
-            status["status"].append(
-                {
-                    "timestamp": group_label,
-                    "rows_before": rows_before,
-                    "rows_after": 0,
-                    "populated_input_cells": int(populated_input_cells),
-                    "cells_in_output": 0,
-                    "interpolated_cells": 0,
-                    "failure_reason": failure_reason,
-                }
+            group_stats = get_epoch_stats(
+                group_label,
+                rows_before,
+                populated_input_cells,
+                None,
+                None,
+                params.variables_in,
+                failure_reason,
             )
+            epoch_stats_list.append(group_stats)
+            logger.debug("Group stats: %s", group_stats)
             continue
 
         # Stack flag grids into a 3D stack
@@ -411,17 +499,20 @@ def process_timesteps(
         )
 
         dataframes.append(df)
-        status["status"].append(
-            {
-                "timestamp": group_label,
-                "rows_before": rows_before,
-                "rows_after": len(df),
-                "populated_input_cells": int(populated_input_cells),
-                "cells_in_output": len(df),
-                "interpolated_cells": int(np.sum(np.all(flag_grids == 2, axis=-1))),
-                "failure_reason": None,
-            }
+        epoch_stats_list.append(
+            get_epoch_stats(
+                group_label,
+                rows_before,
+                populated_input_cells,
+                df,
+                grids,
+                params.variables_in,
+                failure_reason=None,
+            )
         )
+
+    status = aggregate_epoch_stats(epoch_stats_list)
+    logger.info("Aggregated interpolation stats: %s", status["aggregated"])
 
     if not dataframes:
         empty = {
