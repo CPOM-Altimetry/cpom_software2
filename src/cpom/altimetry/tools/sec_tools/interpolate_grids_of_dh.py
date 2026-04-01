@@ -37,9 +37,7 @@ from cpom.logging_funcs.logging import set_loggers
 
 def _parse_optional_float(value: Any) -> float | None:
     """Parse a numeric filter value, allowing null-like values to mean None."""
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in {"", "none", "null", "None"}:
+    if value is None or (isinstance(value, str) and value.strip().lower() in {"", "none", "null", "None"}):
         return None
     return float(value)
 
