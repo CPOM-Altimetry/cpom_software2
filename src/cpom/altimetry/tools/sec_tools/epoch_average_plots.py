@@ -535,7 +535,12 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     plt.close()
 
 
-def main(params):
+# -----------------------
+# Main Function #
+# -----------------------
+
+
+def epoch_average_plots(params):
     """
     Epoch Average plotting script.
 
@@ -568,4 +573,4 @@ def main(params):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    epoch_average_plots(sys.argv[1:])

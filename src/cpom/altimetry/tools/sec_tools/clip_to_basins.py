@@ -252,7 +252,10 @@ def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Lo
         logger.error("Failed to write surface_fit_meta.json with %s", e)
 
 
-def main(args):
+# ----------------#
+# Main Function #
+# ----------------#
+def clip_to_basins(args):
     """
     Entry point for mask-based clipping of data to basins from CPOM
     Mask class grid.
@@ -303,4 +306,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    clip_to_basins(sys.argv[1:])

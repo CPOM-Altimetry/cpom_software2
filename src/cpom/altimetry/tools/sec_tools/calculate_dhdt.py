@@ -553,9 +553,7 @@ def get_metadata_json(
 # --------------------------
 # Main Processing Workflow
 # --------------------------
-
-
-def main(args: list[str]) -> None:
+def calculate_dhdt(args: list[str]) -> None:
     """
     Main processing workflow for dh/dt calculation.
 
@@ -688,4 +686,4 @@ def main(args: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    calculate_dhdt(sys.argv[1:])

@@ -1059,7 +1059,12 @@ def get_metadata_json(
         pass
 
 
-def main(args):
+# --------------------------------------#
+# Main Function #
+# --------------------------------------#
+
+
+def grid_for_elev_change(args):
     """
     Main function to grid altimetry data for elevation change processing.
 
@@ -1116,4 +1121,4 @@ def main(args):
 
 if __name__ == "__main__":
     # Parse command line arguments
-    main(sys.argv[1:])
+    grid_for_elev_change(sys.argv[1:])
