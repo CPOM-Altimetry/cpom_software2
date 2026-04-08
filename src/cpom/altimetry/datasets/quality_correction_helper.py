@@ -75,3 +75,21 @@ def get_is1_qual_mask(dataset, nc, input_mask, strict_missing) -> np.ndarray:
         & (sigma_att_flg == 0)  # Attitude quality flag
         & (sat_corr_flg < 3)  # Saturation corr flag
     )
+
+
+# ----------------------------
+# S3A AMPLI Corrections
+# ----------------------------
+def get_s3a_ampli_qual_mask(dataset, nc, input_mask, strict_missing) -> np.ndarray:
+    """Return S3A AMPLI quality mask using quality_flag_ampli."""
+    quality_flag_ampli_mask = (
+        dataset.get_variable(
+            nc,
+            "AMPLI_processing/quality_flag_ampli",
+            replace_fill=False,
+            raise_if_missing=strict_missing,
+        )[input_mask]
+        == 0
+    )
+
+    return quality_flag_ampli_mask

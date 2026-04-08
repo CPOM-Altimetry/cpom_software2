@@ -1,6 +1,6 @@
 mission: "is2"
 long_name: "ICESat-2 ATL06 Land Ice"
-yyyymm_str_fname_indices: [-33,-25]
+yyyymm_str_fname_indices: [-33, -25]
 file_backend: "h5py"
 dataset_epoch: "2018-01-01T00:00:00"
 search_pattern: "**/ATL06_*_*.h5"
@@ -11,5 +11,5 @@ latitude_param: "land_ice_segments/latitude"
 longitude_param: "land_ice_segments/longitude"
 elevation_param: "land_ice_segments/h_li"
 time_param: "land_ice_segments/delta_time"
-uncertainty_param : "land_ice_segments/h_li_sigma"
+uncertainty_param: "land_ice_segments/h_li_sigma"
 default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_is2_qual_mask

@@ -1,9 +1,9 @@
 #
-mission : s3b
-long_name : "Sentinel-3B Thematic Land Ice Dataset BC-005"
-file_backend: "netcdf4" # or "h5py"
-dataset_epoch : "2000-01-01T00:00:00"
-search_pattern :  "**/S3B_SR_2_LAN_LI_*/enhanced_measurement.nc"
+mission: s3b
+long_name: "Sentinel-3B Thematic Land Ice Dataset BC-005"
+file_backend: "netcdf4"  # or "h5py"
+dataset_epoch: "2000-01-01T00:00:00"
+search_pattern: "**/S3B_SR_2_LAN_LI_*/enhanced_measurement.nc"
 yyyymm_str_fname_indices: [-83, -75]
 latitude_param: "lat_cor_20_ku"
 longitude_param: "lon_cor_20_ku"
