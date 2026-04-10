@@ -44,9 +44,9 @@ from cpom.logging_funcs.logging import set_loggers
 
 def _parse_optional_float(value: Any) -> float | None:
     """Parse a numeric filter value, allowing null-like values to mean None."""
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in {"", "none", "null", "None"}:
+    if value is None or (
+        isinstance(value, str) and value.strip().lower() in {"", "none", "null", "None"}
+    ):
         return None
     return float(value)
 
@@ -291,6 +291,8 @@ def get_trilinear_interpolation(
 
 
 def apply_range_filters(params, group_df: pl.DataFrame) -> pl.DataFrame:
+    """Apply per-variable lo/hi range filters to the input data,
+    setting out-of-range values to None."""
     # Set measurements outside lo/hi filters to None
     if params.lo_filter or params.hi_filter:
         for idx, var in enumerate(params.variables_in):
@@ -318,8 +320,8 @@ def get_epoch_stats(
     failure_reason: str | None,
 ) -> dict[str, Any]:
     """
-    Calculate statistics for a single group after interpolation, including counts of populated input cells, cells in output,
-    and interpolated cells.
+    Calculate statistics for a single group after interpolation,
+    including counts of populated input cells, cells in output and interpolated cells.
 
     Args:
         group_label (str): String label for the group being processed (e.g. epoch or period).
@@ -328,7 +330,7 @@ def get_epoch_stats(
         df (pl.DataFrame | None): DataFrame for the group after interpolation.
         grids (dict[str, np.ndarray]): Raw grids dict returned by get_trilinear_interpolation,
             or None if interpolation failed.
-        failure_reason (str | None): Reason for interpolation failure, or None if interpolation succeeded.
+        failure_reason (str | None): Reason for interpolation failure, or None.
 
     Returns:
         dict[str, Any]: Dictionary containing statistics for the group.
@@ -400,7 +402,7 @@ def process_timesteps(
     For each group :
         1. Extract static (single-value) metadata columns to re-attach after interpolation.
         2. Null out per-variable measurements outside lo/hi range filters.
-        3. Interpolate missing grid cells via Delaunay triangulation calls : get_trilinear_interpolation
+        3. Interpolate missing grid cells via Delaunay triangulation (get_trilinear_interpolation).
         4. Build a boolean mask of cells where every variable has a valid value (flag > 0).
         5. Assemble an output DataFrame for all valid cells, including interpolated
             values, flags, and static metadata columns.
