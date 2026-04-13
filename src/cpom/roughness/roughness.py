@@ -33,9 +33,9 @@ log = logging.getLogger(__name__)
 #   - add to this list if you add a new roughness in the roughness class
 roughness_list = [
     "rema_100m_900ws_roughness_zarr",  # Roughness calculated from REMA 100m
-    # (900m width) [J.Phillips,Lancs]
+    # (900m width) using std  [J.Phillips,Lancs]
     "rema_100m_roughness_range_svd_9x9_zarr",  # Roughness calculated from REMA 100m
-    # (900m width) V2 [J.Phillips,Lancs],
+    # (900m width) using range(min-max) [J.Phillips,Lancs],
     "arcticdem_100m_900ws_roughness_zarr",  # Roughness calculated from ArcticDEM 100m
     "arcticdem_cropped_100m_roughness_range_svd_9x9_zarr",
     # Roughness calculated from ArcticDEM 100m
@@ -363,7 +363,7 @@ class Roughness:
             self.zarr_type = True  # from a Zarr file type
         elif self.name == "rema_100m_roughness_range_svd_9x9_zarr":
             # roughness calculated from REMA DEM by J.Phillips (CPOM/Lancs),
-            # V2, converted to Zarr (A.Muir)
+            # V2 using range(min-max), converted to Zarr (A.Muir)
             filename = "rema_100m_roughness_range_svd_9x9.zarr"
             filled_filename = "rema_100m_roughness_range_svd_9x9.zarr"
             # default_dir can be modified in class init
