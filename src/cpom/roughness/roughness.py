@@ -37,7 +37,8 @@ roughness_list = [
     "rema_100m_roughness_range_svd_9x9_zarr",  # Roughness calculated from REMA 100m
     # (900m width) V2 [J.Phillips,Lancs],
     "arcticdem_100m_900ws_roughness_zarr",  # Roughness calculated from ArcticDEM 100m
-    "arcticdem_cropped_100m_roughness_range_svd_9x9_zarr",  # Roughness calculated from ArcticDEM 100m
+    "arcticdem_cropped_100m_roughness_range_svd_9x9_zarr",
+    # Roughness calculated from ArcticDEM 100m
 ]
 
 
