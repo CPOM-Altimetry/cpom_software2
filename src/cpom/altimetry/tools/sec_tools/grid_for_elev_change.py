@@ -51,7 +51,7 @@ from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change_corrections import (
     apply_corrections,
 )
-from cpom.altimetry.tools.sec_tools.metadata_helper import write_metadata
+from cpom.altimetry.tools.sec_tools.metadata_helper import get_algo_name, write_metadata
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -77,12 +77,6 @@ def parse_arguments(args):
         "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
     )
     parser.add_argument(
-        "--algo",
-        type=str,
-        default="grid_for_elev_change",
-        help="Algorithm name for metadata entry key naming",
-    )
-    parser.add_argument(
         "--dataset",
         type=str,
         required=True,
@@ -90,12 +84,6 @@ def parse_arguments(args):
         " or inline dataset config as JSON string defined in the rcf configuration yml",
     )
     parser.add_argument("--out_dir", type=str, required=True, help="Output directory")
-    # parser.add_argument(
-    #     "--algo",
-    #     type=str,
-    #     default="grid_for_elev_change",
-    #     help="Algorithm name used for metadata entry key naming",
-    # )
     parser.add_argument("--area", type=str, required=True, help="CPOM area object")
     parser.add_argument(
         "--mask_name",
@@ -1065,7 +1053,12 @@ def get_metadata_json(
     )
 
     # replace these lines by calling function
-    write_metadata(params, os.path.join(params.out_dir, f"{params.algo}_meta.json"), output)
+    write_metadata(
+        params,
+        get_algo_name(__file__),
+        Path(params.out_dir),
+        output,
+    )
 
 
 # --------------------------------------#

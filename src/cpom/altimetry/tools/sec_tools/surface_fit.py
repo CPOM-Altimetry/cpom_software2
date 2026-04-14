@@ -56,7 +56,8 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     get_basins_to_process,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
-    extract_metadata_for_algo,
+    get_algo_name,
+    get_grid_params,
     write_metadata,
 )
 from cpom.logging_funcs.logging import set_loggers
@@ -91,11 +92,6 @@ def parse_arguments(args):
             "Compute fitted elevation per grid cell from"
             " gridded altimetry data stored in parquet files."
         )
-    )
-    parser.add_argument(
-        "--algo",
-        type=str,
-        default="surface_fit",
     )
     # I/O arguments
     parser.add_argument(
@@ -485,8 +481,6 @@ def get_surface_fit_objects(
     # 3. Get unique chunks in the dataset
     part_df = get_unique_chunks(params)
     logger.info(f"Found {len(part_df)} chunks to process")
-
-    # 4. Get
 
     return {
         "standard_epoch": standard_epoch,
@@ -1036,7 +1030,7 @@ def fit_linear_fit_per_group(
             group_np[key] = group_np[key][mask]
 
     if group_np["time"].size <= 3:
-        return "n_too_few_values_in_linear_fit"
+        return "n_cells_too_few_values_in_linear_fit"
 
     return {
         "m": m,
@@ -1154,13 +1148,14 @@ def get_metadata_json(
         start_time (float): Start time of the processing
         logger (logging.Logger): Logger object
     """
-    meta_json_path = Path(params.out_dir) / f"{params.algo}_meta.json"
+    meta_json_path = Path(params.out_dir)
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
     try:
         write_metadata(
             params,
+            get_algo_name(__file__),
             meta_json_path,
             {
                 **vars(params),
@@ -1168,7 +1163,7 @@ def get_metadata_json(
                 "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
             },
         )
-        logger.info("Wrote data_set metadata to %s", meta_json_path)
+        logger.info("Wrote data_set metadata to folder %s", meta_json_path)
 
     except OSError as e:
         logger.error("Failed to write surface_fit_meta.json with %s", e)
@@ -1366,13 +1361,11 @@ def surface_fit(args: list[str] | None = None) -> None:
         args: Command line arguments. If None, uses sys.argv[1:]
     """
     params = parse_arguments(args)
-
-    grid_meta = extract_metadata_for_algo(params.in_meta, "grid_for_elev_change")
-    if "standard_epoch" in grid_meta:
-        standard_epoch = grid_meta["standard_epoch"]
-    elif params.standard_epoch is not None:
-        standard_epoch = params.standard_epoch
-    else:
+    try:
+        standard_epoch = get_grid_params(params, ["standard_epoch"], "grid_for_elev_change")[
+            "standard_epoch"
+        ]
+    except ValueError:
         sys.exit(
             "Standard epoch must be provided either in grid metadata or as a command line argument"
         )

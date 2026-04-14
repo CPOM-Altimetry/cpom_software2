@@ -16,13 +16,18 @@ Output:
 """
 
 import argparse
-import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import polars as pl
 
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    get_algo_name,
+    get_grid_params,
+    write_metadata,
+)
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
@@ -44,13 +49,14 @@ def parse_arguments(args):
         required=True,
     )
     parser.add_argument(
-        "--out_dir",
-        help="Path to the output directory.",
-        required=True,
+        "--in_meta",
+        help="Path to input metadata file",
+        type=str,
+        required=False,
     )
     parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid info JSON file.",
+        "--out_dir",
+        help="Path to the output directory.",
         required=True,
     )
     parser.add_argument(
@@ -60,7 +66,7 @@ def parse_arguments(args):
         default=None,
     )
     parser.add_argument(
-        "--grid_area",
+        "--gridarea",
         help="Grid area name. If not provided, will be read from grid info JSON.",
         required=False,
         default=None,
@@ -89,18 +95,14 @@ def get_objects(params: argparse.Namespace) -> tuple[Area, pl.DataFrame]:
             (Area object, grid data with latitude/longitude columns)
     """
     grid_data = pl.read_parquet(Path(params.in_dir) / "grid_data.parquet")
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
+    grid_params = get_grid_params(
+        params,
+        ["gridarea", "binsize", "area"],
+        "grid_for_elev_change",
+    )
 
-    if params.grid_area is not None and params.binsize is not None:
-        this_grid_area = GridArea(params.grid_area, params.binsize)
-    else:
-        this_grid_area = GridArea(grid_meta["gridarea"], grid_meta["binsize"])
-
-    if params.area_name is not None:
-        this_area = Area(params.area_name)
-    else:
-        this_area = Area(grid_meta["area"])
+    this_grid_area = GridArea(str(grid_params["gridarea"]), float(grid_params["binsize"]))
+    this_area = Area(str(grid_params["area"]))
 
     lats, lons = this_grid_area.get_cellcentre_lat_lon_from_col_row(
         grid_data.select(pl.col("x_bin")).to_numpy(), grid_data.select(pl.col("y_bin")).to_numpy()
@@ -138,9 +140,9 @@ def plot(
     Polarplot(area.name).plot_points(
         {
             "name": title,
-            "lats": grid_data_f.select(pl.col("latitude")),
-            "lons": grid_data_f.select(pl.col("longitude")),
-            "vals": grid_data_f.select(pl.col(value_column)),
+            "lats": grid_data_f["latitude"].to_numpy(),
+            "lons": grid_data_f["longitude"].to_numpy(),
+            "vals": grid_data_f[value_column].to_numpy(),
         },
         output_dir=str(Path(params.out_dir) / "plots"),
     )
@@ -155,16 +157,43 @@ def surface_fit_plots(args):
     """
     Main function to generate standard surface fit plots.
     """
+    start_time = time.time()
 
     params = parse_arguments(args)
 
     os.makedirs(Path(params.out_dir) / "plots", exist_ok=True)
 
     area, grid_data = get_objects(params)
-    plot(params, grid_data, area, ("slope", "Slope", (0.0, 2.0)))
-    plot(params, grid_data, area, ("dhdt", "dh/dt", (-1.0, 1.0)))
-    plot(params, grid_data, area, ("rms", "RMS of linear fit", (0.0, 1.0)))
-    plot(params, grid_data, area, ("sigma", "Sigma: std of linear fit", (0.0, 2.0)))
+    plot_params = {
+        "slope": (0.0, 2.0),
+        "dhdt": (-1.0, 1.0),
+        "rms": (0.0, 1.0),
+        "sigma": (0.0, 2.0),
+    }
+
+    plot_labels = {
+        "slope": "Slope",
+        "dhdt": "dh/dt",
+        "rms": "RMS of linear fit",
+        "sigma": "Sigma: std of linear fit",
+    }
+
+    for key, limits in plot_params.items():
+        plot(params, grid_data, area, (key, plot_labels[key], limits))
+
+    hours, remainder = divmod(int(time.time() - start_time), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    write_metadata(
+        params,
+        get_algo_name(__file__),
+        Path(params.out_dir),
+        {
+            **vars(params),
+            **{"plot_params": plot_params},
+            "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+        },
+    )
 
 
 if __name__ == "__main__":

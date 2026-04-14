@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 from functools import partial
+from pathlib import Path
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
@@ -25,7 +26,8 @@ from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
     process_file,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
-    extract_latest_metadata,
+    get_algo_name,
+    get_metadata_for_algo,
     write_metadata,
 )
 from cpom.areas.areas import Area
@@ -89,14 +91,13 @@ def get_set_up_objects(args):
     Returns:
         tuple: Contains the dataset, grid, area, mask and grid metadata.
     """
-    grid_meta = extract_latest_metadata(args.in_meta)
+    grid_meta = get_metadata_for_algo(args.in_meta, "grid_for_elev_change")
 
     args.out_dir = grid_meta["out_dir"]
     args.partition_columns = grid_meta["partition_columns"]
     args.partition_xy_chunking = grid_meta["partition_xy_chunking"]
     args.fill_missing_poca = grid_meta["fill_missing_poca"]
     args.flush_every = int(grid_meta.get("flush_every", 60))
-    args.algo = "grid_for_elev_change_update_year"
     # Required by process_file/apply_corrections path in grid_for_elev_change.py
     args.correction_function = grid_meta.get("correction_function", "default_corrections")
     args.add_vars = grid_meta.get("add_vars", {})
@@ -177,7 +178,7 @@ def update_metadata_json(grid_meta, args, status, logger):
             new_year_rows_ingested - old_year_rows_ingested
         )
     try:
-        write_metadata(args, args.in_meta, grid_meta)
+        write_metadata(args, get_algo_name(__file__), Path(args.out_dir), grid_meta)
         logger.info("Wrote data_set metadata to %s", args.in_meta)
     except OSError as exc:
         logger.error("Failed to write metadata.json: %s", exc)
