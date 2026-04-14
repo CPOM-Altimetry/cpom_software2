@@ -33,7 +33,8 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
-    _resolve_grid_params,
+    get_algo_name,
+    get_grid_params,
     write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
@@ -54,11 +55,6 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description="Clip altimetry data to regions defined by CPOM grid mask"
-    )
-    parser.add_argument(
-        "--algo",
-        type=str,
-        default="clip_to_basins",
     )
     parser.add_argument(
         "--in_meta",
@@ -276,30 +272,22 @@ def get_metadata_json(
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
     """
-    meta_json_path = basin_output_dir / f"{params.algo}_meta.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
-
-    args_dict = dict(vars(params))
-    # Keep metadata scoped to the basin output being written.
-    args_dict["region_selector"] = [basin_name]
-    if args_dict.get("gridarea") is None:
-        args_dict.pop("gridarea", None)
-    if args_dict.get("binsize") is None:
-        args_dict.pop("binsize", None)
 
     try:
         write_metadata(
             params,
-            meta_json_path,
+            get_algo_name(__file__),
+            basin_output_dir,
             {
-                **args_dict,
+                **dict(vars(params)),
                 "basin_name": basin_name,
                 **basin_stats,
                 "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
             },
         )
-        logger.info("Wrote basin metadata to %s", meta_json_path)
+        logger.info("Wrote basin metadata to folder %s", basin_output_dir)
 
     except OSError as e:
         logger.error("Failed to write basin metadata with %s", e)
@@ -334,10 +322,7 @@ def clip_to_basins(args):
     )
 
     try:
-        grid_area, binsize = _resolve_grid_params(
-            params,
-            ["gridarea", "binsize"],
-        )
+        grid_params = get_grid_params(params, ["gridarea", "binsize"], "grid_for_elev_change")
     except ValueError as exc:
         logger.error("Couldn't resolve required grid parameters: %s", exc)
         sys.exit(str(exc))
@@ -354,7 +339,7 @@ def clip_to_basins(args):
         basin_stats = process_single_basin(
             params,
             mask,
-            GridArea(grid_area, binsize),
+            GridArea(str(grid_params["gridarea"]), float(grid_params["binsize"])),
             region,
             logger,
         )

@@ -31,7 +31,6 @@ Output:
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -43,6 +42,11 @@ import polars as pl
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    get_algo_name,
+    get_grid_params,
+    write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -63,6 +67,12 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         description="Clip altimetry data to basin polygons from shapefile"
     )
     parser.add_argument(
+        "--in_meta",
+        type=str,
+        required=False,
+        help="Path to upstream metadata JSON for resolving grid parameters.",
+    )
+    parser.add_argument(
         "--in_dir",
         type=str,
         required=True,
@@ -79,11 +89,6 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         type=str,
         default="**/*.parquet",
         help="File glob pattern for selecting input files.",
-    )
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata JSON file, if not passed is infered",
-        required=True,
     )
     parser.add_argument(
         "--mask",
@@ -112,6 +117,19 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
+    )
+    # Fall back if grid parameters are not provided in metadata
+    parser.add_argument(
+        "--gridarea",
+        type=str,
+        required=False,
+        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        required=False,
+        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
     )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
@@ -296,6 +314,8 @@ def process_single_basin(
     logger.info(f"Clipping to: {basin_name}")
     output_dir = Path(params.out_dir) / basin_name
     output_dir.mkdir(parents=True, exist_ok=True)
+    total_rows = 0
+    unique_cells: set[tuple[int, int]] = set()
 
     if not params.partitioned:
         in_file = Path(params.in_dir) / params.parquet_glob
@@ -303,20 +323,35 @@ def process_single_basin(
         logger.info(f"Loading data from: {in_file}")
         # Clip to basin shape by bin centres
         clipped_data = clip_data_to_shape(grid_area, basin_shape, input_data)
-        clipped_data.collect().write_parquet(output_dir / "data.parquet")
-        logger.info(f"Wrote: {output_dir / 'data.parquet'}")
+        clipped_df = clipped_data.collect()
+        total_rows = clipped_df.height
+        unique_cells = {
+            (int(x_bin), int(y_bin))
+            for x_bin, y_bin in clipped_df.select(["x_bin", "y_bin"]).unique().iter_rows()
+        }
+
+        output_file = output_dir / "data.parquet"
+        clipped_df.write_parquet(output_file)
+        logger.info(f"Wrote: {output_file}")
     else:
         for partition in load_partitioned_data_for_basin(grid_area, params, basin_shape, logger):
             # Clip this partition to the basin shape by bin centres
             clipped_chunk = clip_data_to_shape(grid_area, basin_shape, partition)
+            clipped_df = clipped_chunk.collect()
 
             # Count points after clipping
-            clipped_height = clipped_chunk.select(pl.len()).collect().item()
+            clipped_height = clipped_df.height
             if clipped_height == 0:
                 logger.info("Partition empty after clipping, skipping")
                 continue
 
             logger.info(f"Clipped partition: {clipped_height} rows")
+            total_rows += clipped_height
+            unique_cells.update(
+                (int(x_bin), int(y_bin))
+                for x_bin, y_bin in clipped_df.select(["x_bin", "y_bin"]).unique().iter_rows()
+            )
+
             # Save clipped partition
             chunked_out = (
                 Path(output_dir)
@@ -324,10 +359,24 @@ def process_single_basin(
                 / f"y_part={partition['y_part'][0]}"
             )
             chunked_out.mkdir(parents=True, exist_ok=True)
-            clipped_chunk.sink_parquet(chunked_out / "data.parquet")
+            clipped_df.write_parquet(chunked_out / "data.parquet")
+        output_file = output_dir
+
+    return {
+        "output_file": str(output_file),
+        "n_rows": int(total_rows),
+        "n_unique_cells": int(len(unique_cells)),
+    }
 
 
-def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Logger):
+def get_metadata_json(
+    params: argparse.Namespace,
+    start_time,
+    logger: logging.Logger,
+    basin_name: str,
+    basin_output_dir: Path,
+    basin_stats: dict[str, int | str],
+):
     """
     Generate metadata JSON for clipped data.
     Args:
@@ -335,28 +384,29 @@ def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Lo
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
     """
-    meta_json_path = Path(params.out_dir) / "metadata.json"
     hours, remainder = divmod(int(time.time() - start_time), 3600)
     minutes, seconds = divmod(remainder, 60)
 
     try:
-        with open(meta_json_path, "w", encoding="utf-8") as f_meta:
-            json.dump(
-                {
-                    **vars(params),
-                    "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-                },
-                f_meta,
-                indent=2,
-            )
-        logger.info("Wrote data_set metadata to %s", meta_json_path)
+        write_metadata(
+            params,
+            get_algo_name(__file__),
+            basin_output_dir,
+            {
+                **dict(vars(params)),
+                "basin_name": basin_name,
+                **basin_stats,
+                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+            },
+        )
+        logger.info("Wrote data_set metadata to folder %s", basin_output_dir)
 
     except OSError as e:
         logger.error("Failed to write surface_fit_meta.json with %s", e)
 
 
 # ----------------#
-# Main Function #
+# Main Function  #
 # ----------------#
 def clip_to_basins_from_shapefile(args):
     """
@@ -382,11 +432,12 @@ def clip_to_basins_from_shapefile(args):
         log_dir=params.out_dir,
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
-
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
-
-    grid_area = GridArea(grid_meta["gridarea"], grid_meta["binsize"])
+    try:
+        grid_params = get_grid_params(params, ["gridarea", "binsize"], "grid_for_elev_change")
+        grid_area = GridArea(grid_params["gridarea"], grid_params["binsize"])
+    except ValueError as exc:
+        logger.error("Couldn't resolve required grid parameters: %s", exc)
+        sys.exit(str(exc))
 
     if params.mask is None:
         shp = gpd.read_file(params.shapefile)
@@ -395,7 +446,6 @@ def clip_to_basins_from_shapefile(args):
     else:
         # Load shapefile from CPOM Mask class
         mask = Mask(params.mask)
-
         if mask.shapefile_path is not None and mask.shapefile_column_name is not None:
             shp = gpd.read_file(mask.shapefile_path)
             selector = mask.shapefile_column_name
@@ -408,12 +458,15 @@ def clip_to_basins_from_shapefile(args):
         set(shp[selector]) if params.region_selector == ["all"] else params.region_selector
     ):
         logger.info("Processing region: %s", region)
+        output_dir = Path(params.out_dir) / region
+        output_dir.mkdir(parents=True, exist_ok=True)
         region_shape = shp[shp[selector] == region]
 
         if not region_shape.empty:
-            process_single_basin(params, grid_area, region_shape, region, logger)
-
-    get_metadata_json(params, start_time, logger)
+            basin_stats = process_single_basin(params, grid_area, region_shape, region, logger)
+            get_metadata_json(params, start_time, logger, region, output_dir, basin_stats)
+        else:
+            logger.warning("Region %s not found in shapefile selector column %s", region, selector)
 
 
 if __name__ == "__main__":
