@@ -33,8 +33,9 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
     get_algo_name,
-    get_grid_params,
+    get_metadata_params,
     write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
@@ -57,10 +58,10 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         description="Clip altimetry data to regions defined by CPOM grid mask"
     )
     parser.add_argument(
-        "--in_meta",
+        "--in_step",
+        help="Input algorithm step to source metadata from",
         type=str,
         required=False,
-        help="Path to upstream metadata JSON for resolving grid parameters.",
     )
     parser.add_argument(
         "--in_dir",
@@ -272,9 +273,6 @@ def get_metadata_json(
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
     """
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
     try:
         write_metadata(
             params,
@@ -284,8 +282,10 @@ def get_metadata_json(
                 **dict(vars(params)),
                 "basin_name": basin_name,
                 **basin_stats,
-                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+                "execution_time": elapsed(start_time),
             },
+            basin_name=basin_name,
+            logger=logger,
         )
         logger.info("Wrote basin metadata to folder %s", basin_output_dir)
 
@@ -322,7 +322,7 @@ def clip_to_basins(args):
     )
 
     try:
-        grid_params = get_grid_params(params, ["gridarea", "binsize"], "grid_for_elev_change")
+        grid_params = get_metadata_params(params=params, fields=["gridarea", "binsize"])
     except ValueError as exc:
         logger.error("Couldn't resolve required grid parameters: %s", exc)
         sys.exit(str(exc))

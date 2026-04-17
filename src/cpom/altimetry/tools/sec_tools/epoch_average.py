@@ -3,20 +3,15 @@ cpom.altimetry.tools.sec_tools.epoch_average
 
 Purpose:
     Compute epoch-averaged elevation values from the output of surface fitting altimetry data.
+    Divides the time series into epochs (time windows) and calculates mean elevation,
+    time, and other statistics for each grid cell within each epoch.
 
-Overview:
-    - Divides the time series into epochs (time windows) and calculates mean elevation,
-        time, and other statistics for each grid cell within each epoch.
-    - Optionally applies GIA (Glacial Isostatic Adjustment) corrections.
-    - Can operate per grid partition (x_part/y_part) or over the whole dataset.
+    Optionally applies GIA (Glacial Isostatic Adjustment) corrections.
 
 Run Modes:
-    - Default (all-at-once): processes all input parquet files and writes a single
-        combined file to <out_dir>/epoch_average.parquet.
-    - Per grid partition (x_part/y_part): when '--partitioned' is provided, processes
-        each x_part/y_part directory separately and writes outputs under
-        <out_dir>/x_part=K/y_part=J/epoch_average.parquet. (Only recommended for is2 data)
-
+    - Default: processes all input parquet files, writes <out_dir>/epoch_average.parquet.
+    - Partitioned (--partitioned): processes each x_part/y_part directory separately,
+      writes <out_dir>/x_part=K/y_part=J/epoch_average.parquet. (Recommended for IS2 data.)
 Output:
     - Epoch data (combined or per grid partition): epoch_average.parquet
     - Metadata: <out_dir>/epoch_avg_meta.json (for all-at-once processing)
@@ -33,12 +28,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from cpom.altimetry.tools.sec_tools.metadata_helper import _resolve_grid_params, write_metadata
 import polars as pl
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
+    get_algo_name,
+    get_metadata_params,
+    write_metadata,
 )
 from cpom.altimetry.tools.sec_tools.surface_fit import get_unique_chunks
 from cpom.gias.gia import GIA
@@ -59,27 +59,14 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
         description="Compute epoch-averaged elevation values from plane fitted altimetry data."
     )
     # I/O arguments
+    parser.add_argument("--in_dir", required=True, help="Directory containing surface fit data")
     parser.add_argument(
-        "--algo",
-        type=str,
-        default="epoch_average",
-    )
-    parser.add_argument(
-        "--in_dir",
-        help="Path to the directory containing surface fit data files.",
-        required=True,
-    )
-    parser.add_argument(
-        "--in_meta",
+        "--in_step",
         type=str,
         required=False,
-        help="Path to the grid metadata JSON file.",
+        help="Input algorithm step to source metadata from",
     )
-    parser.add_argument(
-        "--out_dir",
-        help="Path to the output directory.",
-        required=True,
-    )
+    parser.add_argument("--out_dir", required=True, help="Path to the output directory.")
     parser.add_argument(
         "--parquet_glob",
         type=str,
@@ -102,18 +89,7 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
     )
 
     # Epoch settings
-    parser.add_argument(
-        "--standard_epoch",
-        type=str,
-        required=False,
-        help="Reference epoch in ISO format (e.g., 1991-01-01T00:00:00).",
-    )
-    parser.add_argument(
-        "--epoch_length",
-        default=30,
-        type=int,
-        help="Length of averaging epoch, in days (default: 30).",
-    )
+    parser.add_argument("--epoch_length", default=30, type=int, help="Epoch length in days.")
     parser.add_argument(
         "--epoch_start",
         help="Start time of first epoch in DD/MM/YYYY format. Defaults to reference epoch.",
@@ -124,28 +100,20 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--epoch_filter_threshold",
-        help="Fractional coverage threshold (0.0-1.0) for retaining epochs.",
         type=float,
+        help="Fractional coverage threshold (0.0-1.0) for retaining epochs.",
     )
     # Correction settings
-    parser.add_argument(
-        "--gia_model",
-        help="GIA model name for isostatic correction. "
-        "If not provided, no correction is applied.",
-    )
+    parser.add_argument("--gia_model", type=str, help="GIA model name. Omit to skip correction.")
+
     # Fall back if grid parameters are not provided in metadata
     parser.add_argument(
-        "--gridarea",
+        "--standard_epoch",
         type=str,
-        required=False,
-        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+        help="Reference epoch in ISO format (e.g., 1991-01-01T00:00:00).",
     )
-    parser.add_argument(
-        "--binsize",
-        type=float,
-        required=False,
-        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
-    )
+    parser.add_argument("--gridarea", type=str, help="Grid area name for GIA interpolation.")
+    parser.add_argument("--binsize", type=float, help="Grid bin size for GIA interpolation.")
 
     # Surface-fit filters
     parser.add_argument(
@@ -172,11 +140,7 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
         default=None,
         help="Maximum slope. When None, no filtering is applied.",
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable DEBUG level logging",
-    )
+    parser.add_argument("--debug", action="store_true", help="Enable DEBUG level logging")
 
     # Basin/region selection
     add_basin_selection_arguments(parser)
@@ -187,6 +151,26 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
 # ----------------------- #
 # Date and time functions #
 # ----------------------- #
+
+
+def get_date(epoch_time: datetime, timedt: str) -> tuple[datetime, float]:
+    """Parse DD/MM/YYYY or DD.MM.YYYY date string; return datetime and seconds since epoch.
+
+    Args:
+        epoch_time (datetime): Reference epoch for computing time deltas.
+        timedt (str): Date string in DD/MM/YYYY or DD.MM.YYYY format.
+
+    Returns:
+        tuple[datetime, float]:
+            - datetime object representing the parsed date.
+            - Seconds elapsed from epoch_time to the parsed date.
+    """
+    sep = "/" if "/" in timedt else "." if "." in timedt else None
+    if sep is None:
+        raise ValueError(f"Unrecognized date format: {timedt}. Use DD/MM/YYYY or DD.MM.YYYY.")
+    fmt = "%d/%m/%Y" if sep == "/" else "%d.%m.%Y"
+    dt = datetime.strptime(timedt, fmt)
+    return dt, (dt - epoch_time).total_seconds()
 
 
 def get_min_max_time(
@@ -205,48 +189,18 @@ def get_min_max_time(
         tuple: Minimum and maximum datetime values in the parquet files.
     """
 
-    df = pl.scan_parquet(parquet_glob).select(pl.col(time_var))
-
-    min_max = df.select(
-        [pl.col(time_var).min().alias("min_time"), pl.col(time_var).max().alias("max_time")]
-    ).collect()
+    min_max = (
+        pl.scan_parquet(parquet_glob)
+        .select(
+            [pl.col(time_var).min().alias("min_time"), pl.col(time_var).max().alias("max_time")]
+        )
+        .collect()
+    )
 
     min_dt = epoch_time + timedelta(seconds=min_max["min_time"][0])
     max_dt = epoch_time + timedelta(seconds=min_max["max_time"][0])
     logger.info(f"Data time range: {min_dt} to {max_dt}")
     return min_dt, max_dt
-
-
-def get_date(epoch_time: datetime, timedt: str) -> tuple[datetime, float]:
-    """
-    Parse a date string and calculate seconds elapsed since the epoch.
-
-    Accepts date strings in DD/MM/YYYY or DD.MM.YYYY format and converts them
-    to a datetime object. Calculates the time difference (in seconds) between
-    the parsed date and the reference epoch_time.
-
-    Args:
-        epoch_time (datetime): Reference epoch for computing time deltas.
-        timedt (str): Date string in DD/MM/YYYY or DD.MM.YYYY format.
-
-    Returns:
-        tuple[datetime, float]:
-            - datetime object representing the parsed date.
-            - Seconds elapsed from epoch_time to the parsed date.
-
-    Raises:
-        ValueError: If timedt format is not DD/MM/YYYY or DD.MM.YYYY.
-    """
-
-    if "/" in timedt:
-        time_dt = datetime.strptime(timedt, "%d/%m/%Y")
-    elif "." in timedt:
-        time_dt = datetime.strptime(timedt, "%d.%m.%Y")
-    else:
-        raise ValueError(f"Unrecognized date format: {timedt}, pass as YYYY/MM/DD or YYYY.MM.DD ")
-    seconds = (time_dt - epoch_time).total_seconds()
-
-    return time_dt, seconds
 
 
 # ----------------------- #
@@ -255,11 +209,12 @@ def get_date(epoch_time: datetime, timedt: str) -> tuple[datetime, float]:
 def get_epoch_lf(
     params: argparse.Namespace,
     parquet_glob: str,
+    standard_epoch: datetime,
     logger: logging.Logger,
     time_var: str = "time",
 ) -> pl.LazyFrame:
     """
-    Create a polars LazyFrame defining the epoch intervals to use to calculate dh.
+    Build a LazyFrame of epoch intervals covering the data time range
 
     Calculates the epoch start/end datetimes, spaced by the epoch_length.
     Only epochs overlapping the data are included.
@@ -268,6 +223,7 @@ def get_epoch_lf(
     Args:
         params (argparse.Namespace): Command line arguments.
         parquet_glob (str): Glob pattern for the input parquet files.
+        standard_epoch (datetime): Reference epoch for computing time deltas.
         time_var (str): Name of the time variable. Defaults to "time".
         logger (logging.Logger): Logger object.
 
@@ -278,34 +234,23 @@ def get_epoch_lf(
     """
     # Get the min and max time from the parquet files.
     logger.info("Creating epoch dataframe")
-    data_mintime, data_maxtime = get_min_max_time(
-        parquet_glob, params.standard_epoch, logger, time_var
-    )
+    data_mintime, data_maxtime = get_min_max_time(parquet_glob, standard_epoch, logger, time_var)
 
     # If epoch_start and epoch_end are provided, convert them to datetime objects.
     # If not provided, use the reference epoch_time as a starting point and and the
     # datasets date end.
-    if params.epoch_start is not None and params.epoch_end is not None:
-        epoch_start_dt, _ = get_date(params.standard_epoch, params.epoch_start)
-        epoch_end_dt, _ = get_date(params.standard_epoch, params.epoch_end)
-    else:
-        if params.epoch_start is not None:
-            epoch_start_dt, _ = get_date(params.standard_epoch, params.epoch_start)
-        else:
-            epoch_start_dt, _ = params.standard_epoch, 0
-
-        if params.epoch_end is not None:
-            epoch_end_dt, _ = get_date(params.standard_epoch, params.epoch_end)
-        else:
-            epoch_end_dt, _ = (
-                data_maxtime,
-                (data_maxtime - params.standard_epoch).total_seconds(),
-            )  # Use data end time
-
-    total_period_days = (epoch_end_dt - epoch_start_dt).days
-    total_epochs = math.ceil(total_period_days / params.epoch_length)
+    epoch_start_dt = (
+        get_date(standard_epoch, params.epoch_start)[0] if params.epoch_start else standard_epoch
+    )
+    epoch_end_dt = (
+        get_date(standard_epoch, params.epoch_end)[0] if params.epoch_end else data_maxtime
+    )
+    total_epochs = math.ceil((epoch_end_dt - epoch_start_dt).days / params.epoch_length)
     logger.info(
-        f"Epoch params: {params.epoch_length} intervals ({epoch_start_dt} to {epoch_end_dt})"
+        "Epoch params: %d-day intervals (%s to %s)",
+        params.epoch_length,
+        epoch_start_dt,
+        epoch_end_dt,
     )
 
     epochs = (
@@ -337,9 +282,7 @@ def get_epoch_lf(
         .with_columns(
             [
                 # Fractional year calculation
-                (pl.col("epoch_midpoint_dt").dt.year() - params.standard_epoch.year).alias(
-                    "year_offset"
-                ),
+                (pl.col("epoch_midpoint_dt").dt.year() - standard_epoch.year).alias("year_offset"),
                 (pl.col("epoch_midpoint_dt").dt.ordinal_day() - 1).alias("day_in_year"),
                 pl.when(
                     (pl.col("epoch_midpoint_dt").dt.year() % 4 == 0)
@@ -367,12 +310,12 @@ def get_epoch_lf(
             "epoch_midpoint_fractional_yr",
         )
     )
-    logger.info(f"Created {total_epochs} epochs")
+    logger.info("Created %d epochs", total_epochs)
     return epochs
 
 
 def get_gia_correction_lf(
-    gia_model: str, grid_area, binsize, logger: logging.Logger
+    gia_model: str, grid_area: str, binsize: int, logger: logging.Logger
 ) -> pl.LazyFrame:
     """
     Get a Polars LazyFrame with GIA correction values for each grid cell.
@@ -382,13 +325,14 @@ def get_gia_correction_lf(
 
     Args:
         gia_model (str): Name of the GIA model from CPOM/gias/gia.py
-        json_config (dict[str, Any]): Grid and metadata configuration.
+        grid_area (str): Grid area name.
+        binsize (int): Grid cell size in meters.
         logger (logging.Logger | None): Logger object
 
     Returns:
         pl.LazyFrame: Columns: x_bin, y_bin, uplift_value.
     """
-    logger.info(f"Loading GIA correction data using model: {gia_model}")
+    logger.info("Loading GIA correction data using model: %s", gia_model)
     gia = GIA(gia_model)
     grid = GridArea(grid_area, binsize)
     grid_x, grid_y = np.meshgrid(grid.cell_x_centres, grid.cell_y_centres)
@@ -396,11 +340,9 @@ def get_gia_correction_lf(
         grid_x, grid_y, {"crs_bng": grid.crs_bng, "crs_wgs": grid.crs_wgs}, method="linear"
     )
     y_idx, x_idx = np.indices(uplift_grid.shape)
-
-    uplift_grid = pl.LazyFrame(
+    return pl.LazyFrame(
         {"x_bin": x_idx.ravel(), "y_bin": y_idx.ravel(), "uplift_value": uplift_grid.ravel()}
     )
-    return uplift_grid
 
 
 # ----------------------- #
@@ -409,32 +351,39 @@ def get_gia_correction_lf(
 def assign_epochs_lf(
     surface_fit_lf: pl.LazyFrame,
     epoch_lf: pl.LazyFrame,
-    epoch_origin_dt: datetime,
     epoch_length_days: int,
 ) -> pl.LazyFrame:
-    """Assign each surface-fit observation to an epoch interval using arithmetic and join.
+    """Assign each observation to an epoch and compute its time delta within that epoch.
 
     Args:
         surface_fit_lf: Surface fit data with time_dt.
         epoch_lf: Epoch interval definitions.
-        epoch_origin_dt: Datetime used for epoch number zero.
         epoch_length_days: Length of each epoch in days.
 
     Returns:
         Surface fit data with epoch assignments and time deltas.
     """
+
+    # Get the datetime of the first epoch
+    epoch_bounds = epoch_lf.select(
+        pl.col("epoch_lo_dt").min().alias("first_epoch_lo_dt"),
+        pl.col("epoch_number").min().alias("first_epoch_number"),
+    ).collect()
+
+    epoch_origin_dt = epoch_bounds["first_epoch_lo_dt"][0] - timedelta(
+        days=int(epoch_bounds["first_epoch_number"][0]) * epoch_length_days
+    )
+
     epoch_length_seconds = epoch_length_days * 86400
 
-    # Calculate absolute epoch number from the start date
-    # This replaces the expensive join_where non-equi join
+    # Assign each observation an epoch number
     sf_with_epochs_lf = surface_fit_lf.with_columns(
         ((pl.col("time_dt") - epoch_origin_dt).dt.total_seconds() / epoch_length_seconds)
         .floor()
         .cast(pl.Int64)
         .alias("epoch_number")
     )
-
-    # Join with the filtered epoch_lf to get epoch metadata and ensure within valid range
+    # Join to get the epoch interval for each observation
     sf_with_epochs_lf = sf_with_epochs_lf.join(epoch_lf, on="epoch_number", how="inner")
 
     # Compute time delta from start of epoch within each cell
@@ -445,22 +394,6 @@ def assign_epochs_lf(
     )
 
     return sf_with_epochs_lf
-
-
-def infer_epoch_origin_dt(epoch_lf: pl.LazyFrame, epoch_length_days: int) -> datetime:
-    """Infer the datetime used for epoch number zero from a filtered epoch table."""
-
-    epoch_bounds = epoch_lf.select(
-        pl.col("epoch_lo_dt").min().alias("first_epoch_lo_dt"),
-        pl.col("epoch_number").min().alias("first_epoch_number"),
-    ).collect()
-
-    first_epoch_lo_dt = epoch_bounds["first_epoch_lo_dt"][0]
-    first_epoch_number = epoch_bounds["first_epoch_number"][0]
-    if first_epoch_lo_dt is None or first_epoch_number is None:
-        raise ValueError("Cannot infer epoch origin from an empty epoch table.")
-
-    return first_epoch_lo_dt - timedelta(days=first_epoch_number * epoch_length_days)
 
 
 def apply_gia_lf(
@@ -513,58 +446,39 @@ def filter_surface_fit_lf(
     grid_params_glob: str | None,
 ) -> pl.LazyFrame:
     """
-    Apply threshold filters to surface-fit data by excluding bad grid cells.
-    Based on plane fit model residuals saves to grid parameter parquet files.
+    Remove grid cells exceeding quality thresholds derived from plane-fit residuals.
     Args:
         params: Command line arguments with filter thresholds.
         surface_fit_lf: Input surface fit data.
         grid_params_glob: Glob pattern for grid parameter parquet files.
 
-
     Returns:
         Filtered surface fit data with bad cells removed.
     """
 
-    if all(
-        v is None
-        for v in (params.std_dev_limit, params.abs_dhdt_limit, params.rms_limit, params.slope_limit)
-    ):
+    limits = {
+        "sigma": params.std_dev_limit,
+        "dhdt": params.abs_dhdt_limit,
+        "rms": params.rms_limit,
+        "slope": params.slope_limit,
+    }
+
+    if all(v is None for v in limits.values()):
         return surface_fit_lf
 
     if not grid_params_glob:
         return surface_fit_lf
 
     parameters_grid_lf = pl.scan_parquet(grid_params_glob)
-    filtered_frames: list[pl.LazyFrame] = []
+    bad_cells = pl.concat(
+        [
+            parameters_grid_lf.filter(pl.col(col).abs() > limit).select("x_bin", "y_bin")
+            for col, limit in limits.items()
+            if limit is not None
+        ]
+    ).unique()
 
-    if params.std_dev_limit is not None:
-        filtered_frames.append(
-            parameters_grid_lf.filter(pl.col("sigma") > params.std_dev_limit).select(
-                "x_bin", "y_bin"
-            )
-        )
-    if params.abs_dhdt_limit is not None:
-        filtered_frames.append(
-            parameters_grid_lf.filter(pl.col("dhdt").abs() > params.abs_dhdt_limit).select(
-                "x_bin", "y_bin"
-            )
-        )
-    if params.rms_limit is not None:
-        filtered_frames.append(
-            parameters_grid_lf.filter(pl.col("rms") > params.rms_limit).select("x_bin", "y_bin")
-        )
-    if params.slope_limit is not None:
-        filtered_frames.append(
-            parameters_grid_lf.filter(pl.col("slope").abs() > params.slope_limit).select(
-                "x_bin", "y_bin"
-            )
-        )
-
-    if filtered_frames:
-        bad_cells_lf = pl.concat(filtered_frames).unique()
-        return surface_fit_lf.join(bad_cells_lf, on=("x_bin", "y_bin"), how="anti")
-
-    return surface_fit_lf
+    return surface_fit_lf.join(bad_cells, on=("x_bin", "y_bin"), how="anti")
 
 
 def get_sigma_clipped_stats(
@@ -575,13 +489,13 @@ def get_sigma_clipped_stats(
     group_by_columns: list[str] | None = None,
 ) -> pl.LazyFrame:
     """
-    Get sigma clipped statistics for the dh_corrected column.
+    Compute sigma-clipped mean elevation statistics per grid cell and epoch.
     Replicates the functionality of the sigma_clipped_stats function from astropy.stats
     using the default parameters.
 
     Args:
         surface_fit_lf (pl.LazyFrame): Input LazyFrame containing elevation and time data.
-        logger (logging.Logger): Logger for progress messages.
+        logger (logging.Logger): Logger Object.
         sigma (float): Number of standard deviations for clipping threshold. Default is 3.0.
         max_iter (int): Maximum number of clipping iterations. Default is 5.
         group_by_columns (list[str] | None): Columns to group by. Default is
@@ -615,9 +529,6 @@ def get_sigma_clipped_stats(
             )
             .drop(["dh_median", "dh_std"])
         )
-        # To avoid an infinitely deep lazy plan which can cause hangs on large data,
-        # we periodically collect if max_iter is large, but for 5 its usually okay.
-        # However, to help debugging the hang, we'll keep it lazy but add the logs.
 
     logger.debug("Grouping and aggregating clipped statistics")
     epoch_stats_lf = surface_fit_lf.group_by(group_by_columns).agg(
@@ -648,23 +559,84 @@ def filter_epochs_by_coverage_lf(epoch_stats_lf: pl.LazyFrame, threshold: float)
     Returns:
         Filtered epoch statistics.
     """
-    epoch_coverage_lf = epoch_stats_lf.group_by("epoch_number").agg(
-        pl.col("x_bin").len().alias("n_cells")
-    )
-    max_cells_per_epoch = epoch_coverage_lf.select(pl.col("n_cells").max()).collect().item()
-    min_cells_threshold = max(1, int(threshold * max_cells_per_epoch))
+    coverage = epoch_stats_lf.group_by("epoch_number").agg(pl.col("x_bin").len().alias("n_cells"))
+    max_cells_per_epoch = coverage.select(pl.col("n_cells").max()).collect().item()
+    min_cells = max(1, int(threshold * max_cells_per_epoch))
+    valid_lf = coverage.filter(pl.col("n_cells") >= min_cells).select("epoch_number")
+    return epoch_stats_lf.join(valid_lf, on="epoch_number")
 
-    valid_epochs_lf = epoch_coverage_lf.filter(pl.col("n_cells") >= min_cells_threshold).select(
-        "epoch_number"
+
+# ----------------------- #
+# Main processing flow   #
+# ----------------------- #
+def process_partition(
+    params: argparse.Namespace,
+    parquet_glob: str,
+    standard_epoch: datetime,
+    epoch_lf: pl.LazyFrame,
+    uplift_lf: pl.LazyFrame | None,
+    logger: logging.Logger,
+) -> pl.LazyFrame:
+    """
+    Run the full epoch-averaging pipeline for one partition.
+
+      1. Load surface-fit data
+      2. Assign epochs via range join
+      3. Apply optional GIA correction
+      4. Filter bad surface fits by grid-parameter thresholds
+      5. Compute sigma-clipped epoch statistics
+      6. Filter epochs by spatial coverage
+
+    Args:
+        params: Command line parameters.
+        parquet_glob: Glob pattern for input surface fit parquet files.
+        standard_epoch: Reference epoch for computing time deltas.
+        epoch_lf: Pre-computed epoch intervals.
+        uplift_lf: Pre-computed GIA uplift values or None.
+        logger: Logger for progress messages.
+
+    Returns:
+        Epoch statistics LazyFrame.
+    """
+    # 1. Load surface fit
+    logger.info("Loading surface fit data from %s", parquet_glob)
+    surface_fit_lf = pl.scan_parquet(parquet_glob).with_columns(
+        (pl.lit(standard_epoch) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
     )
 
-    return epoch_stats_lf.join(valid_epochs_lf, on="epoch_number")
+    # 2. Assign epochs
+    logger.info("Assigning epochs")
+    surface_fit_lf = assign_epochs_lf(surface_fit_lf, epoch_lf, params.epoch_length)
+
+    # 3. Apply GIA correction
+    surface_fit_lf = apply_gia_lf(surface_fit_lf, uplift_lf, logger)
+
+    # 4. Filter bad surface fits
+    logger.info("Applying surface-fit quality filters")
+    surface_fit_lf = filter_surface_fit_lf(
+        params,
+        surface_fit_lf,
+        params.grid_params_glob,
+    )
+
+    # 5. Compute epoch statistics
+    logger.info("Computing sigma-clipped epoch statistics")
+    epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf, logger)
+
+    # 6. Filter epochs by coverage
+    if params.epoch_filter_threshold is not None:
+        logger.info("Filtering epochs by coverage (threshold=%.2f)", params.epoch_filter_threshold)
+        epoch_stats_lf = filter_epochs_by_coverage_lf(
+            epoch_stats_lf, threshold=params.epoch_filter_threshold
+        )
+
+    return epoch_stats_lf
 
 
 # ----------------------- #
 # Data output functions  #
 # ----------------------- #
-def write_epoch_stats_lf(
+def write_output(
     epoch_stats_lf: pl.LazyFrame, output_path: Path, logger: logging.Logger | None = None
 ) -> None:
     """Write epoch statistics to parquet file.
@@ -677,13 +649,13 @@ def write_epoch_stats_lf(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     if logger is not None:
-        logger.info("Materializing epoch statistics to %s", output_path)
+        logger.info("Writing epoch statistics to %s", output_path)
     epoch_stats_lf.sink_parquet(output_path, compression="zstd")
     if logger is not None:
-        logger.info("Finished writing epoch statistics in %.2fs", time.time() - t0)
+        logger.info("Wrote in %.2fs", time.time() - t0)
 
 
-def get_metadata_json(
+def write_metadata_json(
     params: argparse.Namespace,
     stats: pl.LazyFrame,
     start_time: float,
@@ -701,122 +673,33 @@ def get_metadata_json(
         stats (pl.LazyFrame): LazyFrame containing epoch average statistics.
         start_time (float): Start time of the processing.
     """
+    args_dict: dict[str, Any] = {
+        k: v.isoformat() if isinstance(v, datetime) else str(v) if isinstance(v, Path) else v
+        for k, v in vars(params).items()
+    }
 
-    epochs_with_data = stats.select("epoch_number").collect().n_unique()
-    ncells_with_data = stats.select(["x_bin", "y_bin"]).collect().n_unique()
-
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    args_dict: dict[str, Any] = {}
-    for k, v in vars(params).items():
-        if isinstance(v, datetime):
-            args_dict[k] = v.isoformat()
-        elif isinstance(v, Path):
-            args_dict[k] = str(v)
-        else:
-            args_dict[k] = v
-
-    # Remove fallback grid params that were sourced from upstream metadata
-    # (resolver sets them to None on params when resolved from grid_meta)
-    if args_dict.get("gridarea") is None:
-        args_dict.pop("gridarea", None)
-    if args_dict.get("binsize") is None:
-        args_dict.pop("binsize", None)
-
-    meta_json_path = Path(params.out_dir) / f"{params.algo}_meta.json"
-
+    meta_json_path = Path(params.out_dir)
     try:
         write_metadata(
             params,
+            get_algo_name(__file__),
             meta_json_path,
             {
                 **args_dict,
-                "epochs_with_data": epochs_with_data,
-                "cells_with_data": ncells_with_data,
-                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+                "epochs_with_data": stats.select("epoch_number").collect().n_unique(),
+                "cells_with_data": stats.select(["x_bin", "y_bin"]).collect().n_unique(),
+                "execution_time": elapsed(start_time),
             },
         )
-        logger.info("Wrote data_set metadata to %s", meta_json_path)
+        logger.info("Metadata written to %s", params.out_dir)
 
     except OSError as e:
         logger.error("Failed to write surface_fit_meta.json with %s", e)
 
 
-# ----------------------- #
-# Main processing flow   #
-# ----------------------- #
-def process_partition(
-    params: argparse.Namespace,
-    parquet_glob: str,
-    epoch_lf: pl.LazyFrame,
-    uplift_lf: pl.LazyFrame | None,
-    logger: logging.Logger,
-) -> pl.LazyFrame:
-    """
-    Processing pipeline for one partition:
-      1. Load surface-fit data
-      2. Assign epochs via range join
-      3. Apply optional GIA correction
-      4. Filter bad surface fits by grid-parameter thresholds
-      5. Compute sigma-clipped epoch statistics
-      6. Filter epochs by spatial coverage
-
-    Args:
-        params: Command line parameters.
-        epoch_lf: Pre-computed epoch intervals.
-        uplift_lf: Pre-computed GIA uplift values or None.
-        logger: Logger for progress messages.
-
-    Returns:
-        Epoch statistics LazyFrame.
-    """
-    # 1. Load surface fit
-    logger.info("Loading surface fit data")
-    surface_fit_lf = pl.scan_parquet(parquet_glob).with_columns(
-        (pl.lit(params.standard_epoch) + pl.duration(seconds=pl.col("time"))).alias("time_dt")
-    )
-
-    # 2. Assign epochs
-    logger.info("Assigning epochs")
-    epoch_origin_dt = infer_epoch_origin_dt(epoch_lf, params.epoch_length)
-    surface_fit_lf = assign_epochs_lf(
-        surface_fit_lf, epoch_lf, epoch_origin_dt, params.epoch_length
-    )
-
-    # 3. Apply GIA correction
-    surface_fit_lf = apply_gia_lf(surface_fit_lf, uplift_lf, logger)
-
-    # 4. Filter bad surface fits
-    logger.info("Applying surface-fit quality filters")
-    surface_fit_lf = filter_surface_fit_lf(
-        params,
-        surface_fit_lf,
-        params.grid_params_glob,
-    )
-
-    # 5. Compute epoch statistics
-    logger.info("Preparing sigma-clipped epoch statistics lazy plan")
-    epoch_stats_lf = get_sigma_clipped_stats(surface_fit_lf, logger)
-
-    # 6. Filter epochs by coverage
-    if params.epoch_filter_threshold is not None:
-        logger.info(
-            "Filtering epochs by spatial coverage (threshold=%.2f)",
-            params.epoch_filter_threshold,
-        )
-        epoch_stats_lf = filter_epochs_by_coverage_lf(
-            epoch_stats_lf, threshold=params.epoch_filter_threshold
-        )
-
-    return epoch_stats_lf
-
-
 # ----------------
 # Main Function #
 # ----------------
-
-
 # pylint: disable=R0914
 def epoch_average(args: list[str] | None = None) -> None:
     """Main entry point for epoch averaging.
@@ -840,71 +723,63 @@ def epoch_average(args: list[str] | None = None) -> None:
     )
 
     try:
-        standard_epoch, grid_area, binsize = _resolve_grid_params(
+        grid_params = get_metadata_params(
             params,
             ["standard_epoch", "gridarea", "binsize"],
         )
+        standard_epoch = datetime.fromisoformat(str(grid_params["standard_epoch"]))
+        logger.info("Standard epoch time: %s", standard_epoch)
     except ValueError as exc:
         sys.exit(str(exc))
 
-    params.standard_epoch = datetime.fromisoformat(standard_epoch)
-    logger.info("Standard epoch time: %s", params.standard_epoch)
-
     # Get input/output paths
-    in_dir_root = Path(params.in_dir)
-    out_dir_root = Path(params.out_dir)
+    in_dir, out_dir = Path(params.in_dir), Path(params.out_dir)
+    paths = (
+        [(in_dir / b, out_dir / b) for b in get_basins_to_process(params, in_dir, logger)]
+        if params.basin_structure
+        else [(in_dir, out_dir)]
+    )
 
-    if params.basin_structure is True:
-        paths = [
-            (in_dir_root / basin, out_dir_root / basin)
-            for basin in get_basins_to_process(params, in_dir_root, logger)
-        ]
-    else:
-        paths = [(in_dir_root, out_dir_root)]
-
-    epoch_stats_lf = None
     uplift_lf = (
-        get_gia_correction_lf(params.gia_model, grid_area, binsize, logger)
+        get_gia_correction_lf(
+            params.gia_model, str(grid_params["gridarea"]), int(grid_params["binsize"]), logger
+        )
         if params.gia_model
         else None
     )
 
     for in_dir, out_dir in paths:
-        base_parquet_glob = params.parquet_glob
         # Build epoch intervals once per basin/dataset
         logger.info("Get epoch intervals for %s", in_dir)
-        epoch_lf = get_epoch_lf(params, f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}", logger)
+        epoch_lf = get_epoch_lf(
+            params, f"{in_dir}/x_part=*/y_part=*/{params.parquet_glob}", standard_epoch, logger
+        )
 
         params.grid_params_glob = f"{in_dir}/{params.grid_params_parquet_glob}"
 
         if params.partitioned:
             for row in get_unique_chunks(params).iter_rows(named=True):
-                logger.info(
-                    "Processing partition x_part=%s, y_part=%s", row["x_part"], row["y_part"]
-                )
-                partition_parquet_glob = (
-                    f"{in_dir}/x_part={row['x_part']}/y_part={row['y_part']}/{base_parquet_glob}"
-                )
+                x = row["x_part"]
+                y = row["y_part"]
 
-                epoch_stats_lf = process_partition(
-                    params,
-                    partition_parquet_glob,
-                    epoch_lf,
-                    uplift_lf,
+                logger.info("Processing partition x_part=%s, y_part=%s", x, y)
+                glob = f"{in_dir}/x_part={x}/y_part={y}/{params.parquet_glob}"
+                output_path = out_dir / f"x_part={x}/y_part={y}/epoch_average.parquet"
+
+                write_output(
+                    process_partition(
+                        params,
+                        glob,
+                        standard_epoch,
+                        epoch_lf,
+                        uplift_lf,
+                        logger,
+                    ),
+                    output_path,
                     logger,
                 )
 
-                output_path = (
-                    out_dir
-                    / f"x_part={row['x_part']}"
-                    / f"y_part={row['y_part']}"
-                    / "epoch_average.parquet"
-                )
-                write_epoch_stats_lf(epoch_stats_lf, output_path, logger)
-                logger.info("Wrote partition results to %s", output_path)
-
-            # Write metadata once after all partitions - scan all written files for accurate stats
-            get_metadata_json(
+            write_metadata_json(
                 params=params,
                 stats=pl.scan_parquet(str(out_dir / "**" / "epoch_average.parquet")),
                 start_time=start_time,
@@ -914,18 +789,22 @@ def epoch_average(args: list[str] | None = None) -> None:
 
         else:
             logger.info("Processing all data.")
-            epoch_stats_lf = process_partition(
-                params,
-                f"{in_dir}/x_part=*/y_part=*/{base_parquet_glob}",
-                epoch_lf,
-                uplift_lf,
+            glob = f"{in_dir}/x_part=*/y_part=*/{params.parquet_glob}"
+            output_path = out_dir / "epoch_average.parquet"
+            write_output(
+                process_partition(
+                    params,
+                    glob,
+                    standard_epoch,
+                    epoch_lf,
+                    uplift_lf,
+                    logger,
+                ),
+                output_path,
                 logger,
             )
 
-            output_path = out_dir / "epoch_average.parquet"
-            write_epoch_stats_lf(epoch_stats_lf, output_path, logger)
-            logger.info("Wrote combined results to %s", output_path)
-            get_metadata_json(
+            write_metadata_json(
                 params=params,
                 stats=pl.scan_parquet(str(output_path)),
                 start_time=start_time,

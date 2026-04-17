@@ -51,7 +51,11 @@ from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change_corrections import (
     apply_corrections,
 )
-from cpom.altimetry.tools.sec_tools.metadata_helper import get_algo_name, write_metadata
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
+    get_algo_name,
+    write_metadata,
+)
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -1046,11 +1050,7 @@ def get_metadata_json(
     output["grid_crs"] = thisgrid.coordinate_reference_system
     output["grid_x_size"] = thisgrid.grid_x_size
     output["grid_y_size"] = thisgrid.grid_y_size
-
-    elapsed_time = time.time() - start_time
-    output["gridding_time"] = (
-        f"{elapsed_time // 3600}h {(elapsed_time % 3600) // 60}m {elapsed_time % 60}s"
-    )
+    output["gridding_time"] = elapsed(start_time)
 
     # replace these lines by calling function
     write_metadata(

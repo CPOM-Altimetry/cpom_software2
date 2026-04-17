@@ -34,8 +34,9 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     get_basins_to_process,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
-    _resolve_basin_in_meta,
-    _resolve_grid_params,
+    elapsed,
+    get_algo_name,
+    get_metadata_params,
     write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
@@ -62,9 +63,10 @@ def parse_arguments(args) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--algo",
+        "--in_step",
+        help="Input algorithm step to source metadata from",
         type=str,
-        default="interpolate_grids_of_dh",
+        required=False,
     )
     # Required arguments
     parser.add_argument(
@@ -77,18 +79,11 @@ def parse_arguments(args) -> argparse.Namespace:
         "--parquet_glob",
         type=str,
         default="*.parquet",
-        help="Glob pattern to match surface fit parquet files.",
+        help="Glob pattern to parquet files.",
     )
     parser.add_argument("--out_dir", help="Output directory", required=True)
     parser.add_argument(
-        "--in_meta",
-        type=str,
-        required=False,
-        help="Path to upstream metadata JSON for resolving grid parameters.",
-    )
-
-    parser.add_argument(
-        "--timestamp_column", help="Timestamp/ grouping column to loop through", required=True
+        "--timestamp_column", help="Timestamp / grouping column to loop through", required=True
     )
     parser.add_argument(
         "--variables_in",
@@ -112,6 +107,19 @@ def parse_arguments(args) -> argparse.Namespace:
         "Space separated list of values for the number of variables",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    # Fall back if grid parameters are not provided in metadata
+    parser.add_argument(
+        "--gridarea",
+        type=str,
+        required=False,
+        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        required=False,
+        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
+    )
     add_basin_selection_arguments(parser)
 
     return parser.parse_args(args)
@@ -154,7 +162,8 @@ def get_grid_and_flags(
     grid_flags[y_bins, x_bins] = 1
 
     # Find points containing values
-    populated_idx = np.where(grid_flags != 0)
+    row_idx, col_idx = np.where(grid_flags != 0)
+    populated_idx = (row_idx, col_idx)
 
     return grid, grid_flags, populated_idx, x_bins, y_bins
 
@@ -532,53 +541,50 @@ def process_timesteps(
     return pl.concat(dataframes), status
 
 
-def write_output(
+def process_target(
     params: argparse.Namespace,
-    interpolated_df: pl.DataFrame,
     start_time: float,
-    status: dict[str, Any],
-    output_dir: str,
-) -> Path:
-    """
-    Write interpolated results and metadata to output files.
+    logger: logging.Logger,
+    sub_basin: str | None = None,
+) -> None:
+    """Process one root or basin target using temporary params overrides."""
 
-    Args:
-        params (argparse.Namespace): Parsed command line arguments.
-        interpolated_df (pl.DataFrame): Interpolated results for all epochs.
-        start_time (float): Script start time (seconds since epoch).
+    grid_params = get_metadata_params(
+        params=params,
+        fields=["gridarea", "binsize"],
+        basin_name=sub_basin,
+    )
 
-    Returns:
-        Path: Path to the output parquet file.
-    """
-    output_path = Path(output_dir) / f"{params.algo}_meta.parquet"
-    # Ensure output directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ga = GridArea(grid_params["gridarea"], grid_params["binsize"])
+
+    ncols, nrows = ga.get_ncols_nrows()
+
+    in_dir = Path(params.in_dir) / sub_basin if sub_basin else Path(params.in_dir)
+    out_dir = Path(params.out_dir) / sub_basin if sub_basin else Path(params.out_dir)
+    output_path = out_dir / "interpolated.parquet"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    interpolated_df, status = process_timesteps(
+        params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
+    )
 
     interpolated_df.write_parquet(output_path, compression="zstd")
 
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    args_dict = dict(vars(params))
-    if args_dict.get("gridarea") is None:
-        args_dict.pop("gridarea", None)
-    if args_dict.get("binsize") is None:
-        args_dict.pop("binsize", None)
-
-    meta_path = Path(output_dir) / f"{params.algo}_meta.json"
     try:
         write_metadata(
             params,
-            meta_path,
+            get_algo_name(__file__),
+            out_dir,
             {
-                **args_dict,
+                **vars(params),
                 "status": status,
-                "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+                "execution_time": elapsed(start_time),
             },
+            basin_name=sub_basin,
+            logger=logger,
         )
     except OSError as e:
         sys.exit(str(e))
-    return output_path
 
 
 # -------------------
@@ -610,46 +616,25 @@ def interpolate_grids_of_dh(args):
     if params.basin_structure is False:
         logger.info("Processing root-level data")
         try:
-            resolved = _resolve_grid_params(
+            process_target(
                 params,
-                ["gridarea", "binsize"],
+                start_time,
+                logger,
             )
         except ValueError as exc:
             logger.error("Couldn't resolve required grid parameters: %s", exc)
             sys.exit(str(exc))
-
-        grid_area = str(resolved[0])
-        binsize = float(resolved[1])
-
-        ga = GridArea(grid_area, binsize)
-        ncols, nrows = ga.get_ncols_nrows()
-        input_df = pl.read_parquet(Path(params.in_dir) / params.parquet_glob)
-        interpolated_df, status = process_timesteps(params, input_df, nrows, ncols, logger)
-        write_output(params, interpolated_df, start_time, status, params.out_dir)
     else:
         logger.info("Processing basin/sub-basin level data")
         # Determine which sub-basins to process
         for sub_basin in get_basins_to_process(params, params.in_dir, logger=logger):
             logger.info("Processing sub-basin: %s", sub_basin)
-            basin_in_dir = Path(params.in_dir) / sub_basin
-            basin_out_dir = Path(params.out_dir) / sub_basin
-            basin_out_dir.mkdir(parents=True, exist_ok=True)
-
-            basin_params = argparse.Namespace(**vars(params))
-            basin_params.in_dir = str(basin_in_dir)
-            basin_params.out_dir = str(basin_out_dir)
-            basin_params.region_selector = [sub_basin]
-            basin_params.in_meta = _resolve_basin_in_meta(
-                getattr(params, "in_meta", None),
-                sub_basin,
-                basin_in_dir,
-                logger,
-            )
-
             try:
-                resolved = _resolve_grid_params(
-                    basin_params,
-                    ["gridarea", "binsize"],
+                process_target(
+                    params,
+                    start_time,
+                    logger,
+                    sub_basin=sub_basin,
                 )
             except ValueError as exc:
                 logger.error(
@@ -658,17 +643,6 @@ def interpolate_grids_of_dh(args):
                     exc,
                 )
                 continue
-
-            grid_area = str(resolved[0])
-            binsize = float(resolved[1])
-
-            ga = GridArea(grid_area, binsize)
-            ncols, nrows = ga.get_ncols_nrows()
-            input_df = pl.read_parquet(basin_in_dir / params.parquet_glob)
-            interpolated_df, status = process_timesteps(
-                basin_params, input_df, nrows, ncols, logger
-            )
-            write_output(basin_params, interpolated_df, start_time, status, str(basin_out_dir))
 
 
 if __name__ == "__main__":

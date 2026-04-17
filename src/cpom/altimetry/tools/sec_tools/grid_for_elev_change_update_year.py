@@ -14,6 +14,7 @@ Output:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -26,9 +27,8 @@ from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
     process_file,
 )
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
-    get_algo_name,
-    get_metadata_for_algo,
-    write_metadata,
+    get_metadata_params,
+    get_metadata_path,
 )
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
@@ -50,7 +50,23 @@ def parse_arguments(args):
         description=("Update a single year of gridded elevation change data ")
     )
     parser.add_argument(
-        "--in_meta", type=str, required=True, help="Path to the grid metadata JSON file."
+        "--in_step",
+        help="Input algorithm step to source metadata from",
+        type=str,
+        required=False,
+        default="grid_for_elev_change",
+    )
+    parser.add_argument(
+        "--in_dir",
+        type=str,
+        required=False,
+        help="Directory containing the existing grid metadata file.",
+    )
+    parser.add_argument(
+        "--in_meta",
+        type=str,
+        required=False,
+        help="Explicit metadata JSON path or directory containing <in_step>_meta.json.",
     )
     parser.add_argument(
         "--update_year",
@@ -86,21 +102,14 @@ def get_set_up_objects(args):
 
     Args:
         args (Argparse.Namespace): Parsed command line arguments.
-        logger (logging.Logger): Logger object for logging.
 
     Returns:
         tuple: Contains the dataset, grid, area, mask and grid metadata.
     """
-    grid_meta = get_metadata_for_algo(args.in_meta, "grid_for_elev_change")
+    grid_meta = get_metadata_params(args, "all", "grid_for_elev_change")
 
-    args.out_dir = grid_meta["out_dir"]
-    args.partition_columns = grid_meta["partition_columns"]
-    args.partition_xy_chunking = grid_meta["partition_xy_chunking"]
-    args.fill_missing_poca = grid_meta["fill_missing_poca"]
-    args.flush_every = int(grid_meta.get("flush_every", 60))
-    # Required by process_file/apply_corrections path in grid_for_elev_change.py
-    args.correction_function = grid_meta.get("correction_function", "default_corrections")
-    args.add_vars = grid_meta.get("add_vars", {})
+    for key, value in grid_meta.items():
+        args.__setattr__(key, value)
 
     # Construct dataset object
     dataset = DatasetHelper(
@@ -177,17 +186,42 @@ def update_metadata_json(grid_meta, args, status, logger):
         grid_meta["total_rows_ingested"] = grid_meta["total_rows_ingested"] + (
             new_year_rows_ingested - old_year_rows_ingested
         )
+    metadata_path = get_metadata_path(args, basin_name=None, logger=logger)
+    if metadata_path is None:
+        raise ValueError("Could not resolve metadata path for updating grid metadata.")
+
+    metadata_file = Path(metadata_path)
+
     try:
-        write_metadata(args, get_algo_name(__file__), Path(args.out_dir), grid_meta)
-        logger.info("Wrote data_set metadata to %s", args.in_meta)
+        with open(metadata_file, "r", encoding="utf-8") as handle:
+            entry_store = json.load(handle)
+    except OSError as exc:
+        logger.error("Failed to read metadata.json: %s", exc)
+        raise
+
+    matching_keys = [key for key in entry_store if key.startswith("grid_for_elev_change_")]
+    if not matching_keys:
+        raise ValueError(f"No grid_for_elev_change entry found in {metadata_file}")
+
+    latest_key = max(matching_keys)
+    entry_store[latest_key] = grid_meta
+
+    try:
+        with open(metadata_file, "w", encoding="utf-8") as handle:
+            json.dump(entry_store, handle, indent=2)
+            handle.write("\n")
+        logger.info("Updated grid metadata counts in %s", metadata_file)
     except OSError as exc:
         logger.error("Failed to write metadata.json: %s", exc)
+        raise
 
 
 # ---------------#
 # Main Function #
 # ---------------#
-def grid_for_elev_change_update_year(args):
+def grid_for_elev_change_update_year(
+    args,
+):
     """
     Main function to parse arguments and initiate the year update process.
         1. Parse command line arguments.

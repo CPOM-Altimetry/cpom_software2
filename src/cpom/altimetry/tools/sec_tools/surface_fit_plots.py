@@ -24,8 +24,9 @@ from pathlib import Path
 import polars as pl
 
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
     get_algo_name,
-    get_grid_params,
+    get_metadata_params,
     write_metadata,
 )
 from cpom.areas.area_plot import Polarplot
@@ -49,8 +50,8 @@ def parse_arguments(args):
         required=True,
     )
     parser.add_argument(
-        "--in_meta",
-        help="Path to input metadata file",
+        "--in_step",
+        help="Input algorithm step to source metadata from",
         type=str,
         required=False,
     )
@@ -95,13 +96,13 @@ def get_objects(params: argparse.Namespace) -> tuple[Area, pl.DataFrame]:
             (Area object, grid data with latitude/longitude columns)
     """
     grid_data = pl.read_parquet(Path(params.in_dir) / "grid_data.parquet")
-    grid_params = get_grid_params(
-        params,
-        ["gridarea", "binsize", "area"],
-        "grid_for_elev_change",
+    grid_params = get_metadata_params(
+        params=params,
+        fields=["gridarea", "binsize", "area"],
+        algo_name="grid_for_elev_change",
     )
 
-    this_grid_area = GridArea(str(grid_params["gridarea"]), float(grid_params["binsize"]))
+    this_grid_area = GridArea(str(grid_params["gridarea"]), int(grid_params["binsize"]))
     this_area = Area(str(grid_params["area"]))
 
     lats, lons = this_grid_area.get_cellcentre_lat_lon_from_col_row(
@@ -181,9 +182,6 @@ def surface_fit_plots(args):
     for key, limits in plot_params.items():
         plot(params, grid_data, area, (key, plot_labels[key], limits))
 
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
     write_metadata(
         params,
         get_algo_name(__file__),
@@ -191,7 +189,7 @@ def surface_fit_plots(args):
         {
             **vars(params),
             **{"plot_params": plot_params},
-            "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
+            "execution_time": elapsed(start_time),
         },
     )
 

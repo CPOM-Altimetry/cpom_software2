@@ -7,28 +7,30 @@ Purpose:
     with optional glacier boundary overlays from shapefiles.
 
 Output:
-    - Basin plots: Saved to <out_dir>/<basin>/<dh_column>_<basin>_epoch_{id}_{start}_{end}.png
-    - Ice sheet plots: Saved to <out_dir>/plots/<dh_column>_epoch_{id}_{start}-{end}.png
-
-Supports:
-    - Root-level (entire ice sheet) data
-    - Basin-level (individual glaciers or drainage basins)
+    - Basin plots: <out_dir>/<basin>/area_plots/<dh_column>_<basin>_epoch_{id}_{start}_to_{end}.png
+    - Ice sheet plots: <out_dir>/plots/<dh_column>_epoch_{id}_{start}_to_{end}.png
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
+import geopandas as gpd
 import polars as pl
-from geopandas import gpd
 from matplotlib import pyplot as plt
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
+    get_algo_name,
+    get_metadata_params,
+    write_metadata,
 )
 from cpom.areas.area_plot import Polarplot
 from cpom.areas.areas import Area
@@ -49,58 +51,41 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
                             input/output directories, and region selection.
     """
     parser = argparse.ArgumentParser(
-        description="Generate plots from dhdt.parquet files produced by calculate_dhdt.py"
+        description="Generate plots from epoch-averaged parquet files."
     )
 
     # I/O Arguments
     parser.add_argument(
+        "--in_step",
+        type=str,
+        required=False,
+        help="Input algorithm step to source metadata from",
+    )
+    parser.add_argument(
         "--in_dir",
-        help="Path to the directory containing dhdt.parquet file.",
+        type=str,
         required=True,
+        help="Path to the directory containing dhdt.parquet file.",
     )
     parser.add_argument(
         "--out_dir",
-        help="Path to the output directory for plots.",
+        type=str,
         required=True,
+        help="Path to the output directory for plots.",
     )
     parser.add_argument(
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="Glob pattern to match parquet files in input directory.",
-    )
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the metadata JSON file from calculate_dhdt.",
-        required=False,
-        default=None,
+        help="Glob pattern to parquet files in in_dir",
     )
     # Plotting Arguments
-    parser.add_argument(
-        "--area_name",
-        help="Name of the area to plot. If not provided, will be read from metadata JSON.",
-        required=False,
-        default=None,
-    )
-    parser.add_argument(
-        "--grid_area",
-        help="Grid area name. If not provided, will be read from metadata JSON.",
-        required=False,
-        default=None,
-    )
-    parser.add_argument(
-        "--binsize",
-        type=float,
-        help="Grid bin size. If not provided, will be read from metadata JSON.",
-        required=False,
-        default=None,
-    )
     parser.add_argument(
         "--plot_range",
         nargs=2,
         type=float,
-        help="Plot range for dhdt values [min max]. Default: -1.0 1.0",
         default=[-1.0, 1.0],
+        help="Plot range for dhdt [min max], default: -1.0 1.0",
     )
     parser.add_argument(
         "--shapefile", type=str, help="Path to the shapefile to use for clipping", required=False
@@ -108,14 +93,14 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--shp_file_column",
         type=str,
-        help="Column name in the shapefile to use for basin selection",
+        help="Column name in the shapefile to select basin",
         required=False,
     )
     parser.add_argument(
         "--mask",
         type=str,
-        help="CPOM mask name to use for loading predefined shapefile boundaries.",
         required=False,
+        help="CPOM mask name to load shapefile boundaries.",
     )
     # Columns to use
     parser.add_argument(
@@ -141,45 +126,46 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Enable DEBUG level logging",
     )
+    # Optional grid metadata overrides
+    parser.add_argument(
+        "--area",
+        help="Name of the area to plot. If not provided, will be read from metadata JSON.",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--gridarea",
+        help="Grid area name. If not provided, will be read from metadata JSON.",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        help="Grid bin size. If not provided, will be read from metadata JSON.",
+        required=False,
+        default=None,
+    )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
-
     return parser.parse_args(params)
 
 
-def get_objects(params):
-    """
-    Load Area and GridArea objects for plotting.
+# --------------------------
+# Helper functions
+# --------------------------
+def _load_grid_params(
+    params: argparse.Namespace, basin_name: str | None, logger: logging.Logger
+) -> dict:
+    """Load gridarea, binsize (and optionally area) from metadata."""
+    keys = ["gridarea", "binsize"] if basin_name is not None else ["gridarea", "binsize", "area"]
+    return get_metadata_params(
+        params, keys, algo_name="grid_for_elev_change", basin_name=basin_name, logger=logger
+    )
 
-    Retrieves grid area and area name from either:
-    1. Command line arguments (--grid_area, --binsize, --area_name), or
-    2. Metadata JSON file (--grid_info_json)
 
-    params:
-        params (argparse.Namespace): Command line arguments with either:
-            - grid_area (str), binsize (float), area_name (str), or
-            - grid_info_json (str): Path to dhdt_metadata.json
-
-    Returns:
-        tuple: A tuple containing:
-            - Area: The Area object
-            - GridArea: The GridArea object
-    """
-
-    # Get grid area and area name from params or metadata
-    if params.grid_area is not None and params.binsize is not None:
-        this_grid_area = GridArea(params.grid_area, params.binsize)
-        this_area = Area(params.area_name)
-    else:
-        with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-            metadata = json.load(f)
-
-        this_grid_area = GridArea(
-            metadata.get("grid_name", "greenland"), metadata.get("binsize", 5000)
-        )
-        this_area = Area(metadata.get("area", "greenland"))
-
-    return this_area, this_grid_area
+def _iter_epochs(data: pl.DataFrame, epoch_col: str) -> list:
+    return sorted(data.select(pl.col(epoch_col)).unique().to_series().to_list())
 
 
 def get_data(
@@ -189,12 +175,12 @@ def get_data(
     sub_basin: str | None = None,
 ) -> pl.LazyFrame:
     """
-    Load epoch averaged data from parquet file and add geographic coordinates.
+    Load epoch-averaged data from parquet and append projected coordinates.
 
-    Loads epoch averaged data from either root directory or basin subdirectory,
-    then converts grid cell coordinates (x_bin, y_bin) to latitude/longitude.
+    For basin data: appends projected x/y columns (metres).
+    For root data: appends latitude/longitude columns.
 
-    params:
+    Args:
         params (argparse.Namespace): Command line arguments.
             Includes:
             - in_dir (str): Input directory containing dhdt.parquet file(s)
@@ -204,262 +190,106 @@ def get_data(
             If None or "None", loads from root directory. Defaults to None.
 
     Returns:
-        pl.LazyFrame: data with added 'latitude' and 'longitude' columns.
+        pl.LazyFrame: Loaded data with appended coordinate columns.
     """
     if sub_basin is not None and sub_basin != "None":
-        logger.info(
-            "Loading data for sub-basin: %s from path %s",
-            sub_basin,
-            Path(params.in_dir) / sub_basin / params.parquet_glob,
-        )
-        epoch_data = pl.scan_parquet(Path(params.in_dir) / sub_basin / params.parquet_glob)
+        path = Path(params.in_dir) / sub_basin / params.parquet_glob
+        logger.info("Loading basin data: %s", path)
+        epoch_data = pl.scan_parquet(path)
 
         row_count = epoch_data.select(pl.len()).collect().item()
-        logger.info("Loaded %d rows for sub-basin %s", row_count, sub_basin)
         if row_count == 0:
-            logger.info("Skipping sub-basin %s with no data", sub_basin)
+            logger.info("No data found for sub-basin %s; skipping", sub_basin)
             return epoch_data
+        logger.info("Loaded %d rows for sub-basin %s", row_count, sub_basin)
 
         # Apply plot range
         epoch_data = epoch_data.filter(
-            (pl.col(params.plotting_column) >= params.plot_range[0])
-            & (pl.col(params.plotting_column) <= params.plot_range[1])
+            pl.col(params.plotting_column).is_between(params.plot_range[0], params.plot_range[1])
         )
+
         # Convert grid coordinates to x/y
         x, y = this_grid_area.get_cellcentre_x_y_from_col_row(
-            epoch_data.select(pl.col("x_bin")).collect().to_numpy(),
-            epoch_data.select(pl.col("y_bin")).collect().to_numpy(),
+            epoch_data.select("x_bin").collect().to_numpy(),
+            epoch_data.select("y_bin").collect().to_numpy(),
         )
         return epoch_data.with_columns([pl.Series("x", x), pl.Series("y", y)])
 
-    logger.info("Loading root-level data from %s", Path(params.in_dir) / params.parquet_glob)
-    epoch_data = pl.scan_parquet(Path(params.in_dir) / params.parquet_glob)
+    path = Path(params.in_dir) / params.parquet_glob
+    logger.info("Loading root-level data from %s", path)
+    epoch_data = pl.scan_parquet(path)
 
     row_count = epoch_data.select(pl.len()).collect().item()
-    logger.info("Loaded %d rows for root-level data", row_count)
     if row_count == 0:
         logger.info("No root-level data found; skipping plot")
         return epoch_data
+    logger.info("Loaded %d rows for root-level data", row_count)
+
     # Convert grid coordinates to lat/lon
     collected_data = epoch_data.collect()
-    x_bins = collected_data.select(pl.col("x_bin")).to_numpy()
-    y_bins = collected_data.select(pl.col("y_bin")).to_numpy()
     lats, lons = this_grid_area.get_cellcentre_lat_lon_from_col_row(
-        x_bins,
-        y_bins,
+        collected_data.select("x_bin").to_numpy(),
+        collected_data.select("y_bin").to_numpy(),
     )
     return epoch_data.with_columns([pl.Series("latitude", lats), pl.Series("longitude", lons)])
 
 
-def get_shapefile(params: argparse.Namespace):
+def get_shapefile(params: argparse.Namespace, logger: logging.Logger | None = None):
     """
     Load the shapefile for basin plots
 
     params:
-        params (argparse.Namespace):
-            Includes :
-                - shapefile (str): Path to the shapefile
-                - shp_file_column (str): Column name in the shapefile to use for basin selection
-            or :
-                - mask (str): Optional mask name to load predefined shapefile from masks
+        params (argparse.Namespace): Includes shapefile and shp_file_column or a
+        mask name to load predefined shapefile from masks.
 
     Returns:
-        gpd.GeoDataFrame: Loaded shapefile GeoDataFrame
+        gpd.GeoDataFrame: (GeoDataFrame, column_name) or (None, None) if unavailable.
     """
     try:
         if params.mask is not None:
             mask = Mask(params.mask)
             shp = gpd.read_file(mask.shapefile_path)
-            selector = mask.shapefile_column_name
-            # Ensure shapefile is in the same projection as the grid/mask
             if shp.crs is None or shp.crs != mask.crs_bng:
                 shp = shp.to_crs(mask.crs_bng)
-            return shp, selector
+            return shp, mask.shapefile_column_name
 
-        shp = gpd.read_file(params.shapefile)
-        selector = params.shp_file_column
-        return shp, selector
+        if not params.shapefile:
+            if logger is not None:
+                logger.info("No shapefile or mask provided; skipping boundary overlay")
+            return None, None
 
-    except (TypeError, ValueError):
+        if params.shp_file_column is None:
+            if logger is not None:
+                logger.warning(
+                    "--shp_file_column not provided; boundary filtering will be skipped."
+                )
+
+        return gpd.read_file(params.shapefile), params.shp_file_column
+
+    except (TypeError, ValueError, OSError) as exc:
+        if logger is not None:
+            logger.warning(
+                "Could not load shapefile overlay (%s); continuing without boundaries", exc
+            )
         return None, None
-
-
-def plot_basins(
-    params: argparse.Namespace,
-    this_grid_area: GridArea,
-    sub_basins_to_process: list,
-    logger: logging.Logger,
-):
-    """
-    Generate spatial scatter plots of dh/dt data for each basin and time period.
-
-    For each basin and period, creates a plot showing:
-    - Scatter points colored by dh/dt value
-    - Glacier/basin boundaries from shapefile overlay
-    - Color scale and axis labels
-
-    Output files: <out_dir>/<basin>/area_plots/<basin>_dhdt_period_{id}_{start}-{end}.png
-
-    params:
-        params (argparse.Namespace): Command line arguments.
-            Includes:
-            - in_dir (str): Input directory with dhdt.parquet files
-            - out_dir (str): Output directory for plots
-            - shapefile (str): Shapefile identifier for boundaries
-            - plot_range (list): [min, max] for color scale
-        this_area (Area): CPOM Area object (used for fallback plotting)
-        this_grid_area (GridArea): CPOM Grid area object
-        sub_basins_to_process (list[str]): Basin paths to process (e.g., ["West/H-Hp", "East/A-Ap"])
-    """
-
-    shp, selector = get_shapefile(params)
-
-    for sub_basin in sub_basins_to_process:
-        clipped_data = get_data(
-            params,
-            this_grid_area,
-            logger=logger,
-            sub_basin=sub_basin,
-        ).collect()
-
-        if clipped_data.select(pl.len()).item() == 0:
-            logger.info("No data points found for basin %s; skipping", sub_basin)
-            continue
-
-        plot_timeseries(
-            params,
-            clipped_data,
-            out_path=Path(params.out_dir)
-            / sub_basin
-            / f"{sub_basin}_{params.dh_column}_epoch_average_timeseries.png",
-        )
-
-        # Loop through and plot for each Epoch
-        for epoch in sorted(
-            clipped_data.select(pl.col(params.epoch_plotting_column)).unique().to_series().to_list()
-        ):
-            epoch_data = clipped_data.filter(pl.col(params.epoch_plotting_column) == epoch)
-            _, ax = plt.subplots(figsize=(10, 8))
-
-            scatter = ax.scatter(
-                epoch_data.select(pl.col("x")).to_series().to_numpy(),
-                epoch_data.select(pl.col("y")).to_series().to_numpy(),
-                c=epoch_data.select(pl.col(params.plotting_column)).to_series().to_numpy(),
-                cmap="coolwarm",  # Reverse colormap to match reference colors
-                vmin=-1,
-                vmax=1,
-                s=10,
-                alpha=0.7,
-            )
-
-            plt.colorbar(scatter, ax=ax, label="dh (m)")
-
-            # Overlay glacier boundaries
-            if shp is not None:
-                shp[shp[selector] == sub_basin].boundary.plot(ax=ax, edgecolor="black", linewidth=1)
-
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-            ax.set_aspect("equal")
-            min_date = epoch_data.select(pl.col("epoch_lo_dt").min().dt.date()).to_series().item()
-            max_date = epoch_data.select(pl.col("epoch_hi_dt").max().dt.date()).to_series().item()
-
-            ax.set_title(f"Clipped Data for {sub_basin} - Epoch {epoch} : {min_date} to {max_date}")
-
-            plt.tight_layout()
-            plot_path = (
-                Path(params.out_dir)
-                / sub_basin
-                / "area_plots"
-                / f"{params.dh_column}_{sub_basin}_epoch_{epoch}_{min_date}_to_{max_date}.png"
-            )
-            plot_path.parent.mkdir(parents=True, exist_ok=True)
-            plt.savefig(plot_path, dpi=300)
-            plt.close()
-
-
-def plot_icesheet(
-    params: argparse.Namespace, this_area: Area, this_grid_area: GridArea, logger: logging.Logger
-):
-    """
-    Generate ice sheet-wide spatial plots of dh/dt data .
-
-    Creates plots for each time period showing elevation change rates across the entire
-    ice sheet using the Polarplot class.
-
-    Output files: <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
-
-    params:
-        params (argparse.Namespace): Command line arguments.
-            Includes:
-            - in_dir (str): Input directory with dhdt.parquet file
-            - out_dir (str): Output directory for plots
-            - plot_range (list): [min, max] for color scale (m/yr)
-        this_area (Area): CPOM Area object
-        this_grid_area (GridArea): CPOM Grid area object
-        logger (Logger): Logger object
-    """
-
-    data = get_data(params, this_grid_area, logger=logger, sub_basin=None)
-    row_count = data.select(pl.len()).collect().item()
-    if row_count == 0:
-        logger.info("No root-level data found; skipping icesheet plots")
-        return
-
-    logger.info("Loaded %d rows for icesheet plots", row_count)
-    plot_timeseries(
-        params,
-        data.collect(),
-        out_path=Path(params.out_dir) / f"icesheet_{params.dh_column}_epoch_average_timeseries.png",
-    )
-    epochs = sorted(
-        data.select(pl.col(params.epoch_plotting_column)).unique().collect().to_series().to_list()
-    )
-    logger.info("Found %d epochs for icesheet plotting: %s", len(epochs), epochs)
-    for epoch_id in epochs:
-        epoch_data = data.filter(pl.col(params.epoch_plotting_column) == epoch_id).collect()
-
-        # Get period boundaries (not actual data times)
-        min_date = epoch_data.select(pl.col("epoch_lo_dt").min().dt.date()).to_series().item()
-        max_date = epoch_data.select(pl.col("epoch_hi_dt").max().dt.date()).to_series().item()
-        plot_dir = Path(params.out_dir) / "plots"
-        plot_dir.mkdir(parents=True, exist_ok=True)
-
-        Polarplot(this_area.name).plot_points(
-            {
-                "name": f"dh_{epoch_id}",
-                "lats": epoch_data["latitude"],
-                "lons": epoch_data["longitude"],
-                "vals": epoch_data[params.dh_column],
-                "valid_range": tuple(params.plot_range),
-                "units": "m",
-                "cmap_name": "coolwarm",
-            },
-            output_dir=str(plot_dir),
-            output_file=f"{params.dh_column}_epoch_{epoch_id}_{min_date}-{max_date}.png",
-        )
 
 
 def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     """
-    Plot the epoch-averaged time series for the selected `dh_column`.
-    Filter data based on `plot_range`.
-    Computes mean, median, standard error, and count per `epoch_midpoint_dt`,
-    then plots the mean series shifted to start at zero.
+    Plot the epoch-averaged time series for `dh_column`.
+    Computes mean, median, and standard error per epoch midpoint, then plots
+    each series shifted to start at zero.
 
     Args:
         params (argparse.Namespace): Command line arguments.
         data (pl.DataFrame): Input data with `epoch_midpoint_dt` and `dh_column`.
-        out_path (Path | str): Output path for saving the plot.
+        out_path (Path): Output path for saving the plot.
     """
     out_path = Path(out_path)
 
     # Aggregate stats
     data_ts = (
-        data.filter(
-            (pl.col(params.dh_column) >= params.plot_range[0])
-            & (pl.col(params.dh_column) <= params.plot_range[1])
-        )
+        data.filter(pl.col(params.dh_column).is_between(params.plot_range[0], params.plot_range[1]))
         .group_by("epoch_midpoint_dt")
         .agg(
             [
@@ -479,7 +309,6 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     )
 
     if data_ts.height == 0:
-        print("No data available to plot.")
         return
 
     # Shift time series to start at zero
@@ -490,9 +319,11 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
         ]
     )
     _, ax = plt.subplots(figsize=(12, 6))
+    times = data_ts["epoch_midpoint_dt"].to_list()
+
     # Mean and rolling mean
     ax.plot(
-        data_ts["epoch_midpoint_dt"].to_list(),
+        times,
         data_ts["shifted_mean"].to_list(),
         alpha=0.8,
         linewidth=2,
@@ -501,7 +332,7 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     )
 
     ax.plot(
-        data_ts["epoch_midpoint_dt"].to_list(),
+        times,
         data_ts["shifted_median"].to_list(),
         label=f"Median {params.dh_column} (m)",
         color="red",
@@ -510,7 +341,7 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     )
 
     ax.fill_between(
-        data_ts["epoch_midpoint_dt"].to_list(),
+        times,
         (data_ts["shifted_mean"] - data_ts["se_dh"]).to_list(),
         (data_ts["shifted_mean"] + data_ts["se_dh"]).to_list(),
         alpha=0.3,
@@ -528,11 +359,142 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
 
     ax.legend(loc="best", fontsize=10)
     ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.5)
-
     plt.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(str(out_path), dpi=300, bbox_inches="tight")
     plt.close()
+
+
+def plot_basins(
+    params: argparse.Namespace,
+    sub_basins_to_process: list,
+    logger: logging.Logger,
+) -> dict[str, str]:
+    """
+    Generate scatter plots of dh/dt for each basin and time period.
+    Output files: <out_dir>/<basin>/area_plots/<basin>_dhdt_period_{id}_{start}-{end}.png
+
+    params:
+        params (argparse.Namespace): Command line arguments.
+        sub_basins_to_process (list[str]): Basin name to process.
+    """
+
+    shp, selector = get_shapefile(params, logger=logger)
+    basin_execution_times: dict[str, str] = {}
+
+    for sub_basin in sub_basins_to_process:
+        basin_start_time = time.time()
+
+        grid_params = _load_grid_params(params, sub_basin, logger)
+        this_grid_area = GridArea(grid_params["gridarea"], grid_params["binsize"])
+        clipped_data = get_data(params, this_grid_area, logger, sub_basin).collect()
+
+        if clipped_data.is_empty():
+            logger.info("No data for basin %s; skipping.", sub_basin)
+            basin_execution_times[sub_basin] = elapsed(basin_start_time)
+            continue
+
+        plot_timeseries(
+            params,
+            clipped_data,
+            out_path=Path(params.out_dir)
+            / sub_basin
+            / f"{sub_basin}_{params.dh_column}_epoch_average_timeseries.png",
+        )
+
+        # Loop through and plot for each Epoch
+        for epoch in _iter_epochs(clipped_data, params.epoch_plotting_column):
+            epoch_data = clipped_data.filter(pl.col(params.epoch_plotting_column) == epoch)
+            min_date = epoch_data.select(pl.col("epoch_lo_dt").min().dt.date()).item()
+            max_date = epoch_data.select(pl.col("epoch_hi_dt").max().dt.date()).item()
+            _, ax = plt.subplots(figsize=(10, 8))
+
+            scatter = ax.scatter(
+                epoch_data["x"].to_numpy(),
+                epoch_data["y"].to_numpy(),
+                c=epoch_data[params.plotting_column].to_numpy(),
+                cmap="coolwarm",
+                vmin=params.plot_range[0],
+                vmax=params.plot_range[1],
+                s=10,
+                alpha=0.7,
+            )
+
+            plt.colorbar(scatter, ax=ax, label="dh (m)")
+
+            # Overlay glacier boundaries
+            if shp is not None and selector is not None:
+                shp[shp[selector] == sub_basin].boundary.plot(ax=ax, edgecolor="black", linewidth=1)
+
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+            ax.set_aspect("equal")
+            ax.set_title(f"Clipped Data for {sub_basin} - Epoch {epoch} : {min_date} to {max_date}")
+            plt.tight_layout()
+
+            plot_path = (
+                Path(params.out_dir)
+                / sub_basin
+                / f"{params.dh_column}_{sub_basin}_epoch_{epoch}_{min_date}_to_{max_date}.png"
+            )
+            plot_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(plot_path, dpi=300)
+            plt.close()
+
+            basin_execution_times[sub_basin] = elapsed(basin_start_time)
+
+    return basin_execution_times
+
+
+def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
+    """
+    Generate ice sheet-wide polar plots and a time series for each epoch.
+    Output files: <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+
+    params:
+        params (argparse.Namespace): Command line arguments.
+        logger (Logger): Logger object
+    """
+
+    grid_params = _load_grid_params(params, None, logger)
+    this_grid_area = GridArea(grid_params["gridarea"], grid_params["binsize"])
+    data_lf = get_data(params, this_grid_area, logger, None)
+
+    if data_lf.select(pl.len()).collect().item() == 0:
+        logger.info("No root-level data; skipping ice sheet plots.")
+        return
+
+    data = data_lf.collect()
+    logger.info("Loaded %d rows for ice sheet plots.", len(data))
+    plot_timeseries(
+        params,
+        data,
+        Path(params.out_dir) / f"icesheet_{params.dh_column}_epoch_average_timeseries.png",
+    )
+
+    area_name = Area(str(grid_params["area"])).name
+
+    for epoch_id in _iter_epochs(data, params.epoch_plotting_column):
+        epoch_data = data.filter(pl.col(params.epoch_plotting_column) == epoch_id)
+
+        # Get period boundaries (not actual data times)
+        min_date = epoch_data.select(pl.col("epoch_lo_dt").min().dt.date()).item()
+        max_date = epoch_data.select(pl.col("epoch_hi_dt").max().dt.date()).item()
+
+        Polarplot(area_name).plot_points(
+            {
+                "name": f"dh_{epoch_id}",
+                "lats": epoch_data["latitude"],
+                "lons": epoch_data["longitude"],
+                "vals": epoch_data[params.dh_column],
+                "valid_range": tuple(params.plot_range),
+                "units": "m",
+                "cmap_name": "coolwarm",
+            },
+            output_dir=str(params.out_dir),
+            output_file=f"{params.dh_column}_epoch_{epoch_id}_{min_date}-{max_date}.png",
+        )
 
 
 # -----------------------
@@ -543,12 +505,9 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
 def epoch_average_plots(params):
     """
     Epoch Average plotting script.
-
-    Steps :
-    1. Parses command line arguments.
-    2. Determines which sub-basins to process.
-    3. Loads Area and GridArea objects.
-    4. Plots either entire ice sheet or individual sub-basins based on arguments.
+    1. Parses arguments.
+    2. Routes to basin or ice sheet plotting.
+    3. Writes metadata for each output target.
 
     params:
         params (list): Command line arguments
@@ -561,15 +520,39 @@ def epoch_average_plots(params):
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
-    this_area, this_grid_area = get_objects(params)
+    start_time = time.time()
+    basin_execution_times: dict[str, str] = {}
+
     if params.basin_structure is False:
-        logger.info("Processing root-level data")
-        plot_icesheet(params, this_area, this_grid_area, logger=logger)
+        logger.info("Processing root-level (ice sheet) data.")
+        plot_icesheet(params, logger=logger)
+        metadata_targets: list[str | None] = [None]
     else:
         logger.info("Processing basin/sub-basin level data")
-        # Determine which sub-basins to process
         sub_basins_to_process = get_basins_to_process(params, params.in_dir, logger=logger)
-        plot_basins(params, this_grid_area, sub_basins_to_process, logger=logger)
+        basin_execution_times = plot_basins(params, sub_basins_to_process, logger)
+        metadata_targets = sub_basins_to_process
+
+    total_time = elapsed(start_time)
+
+    for basin_name in metadata_targets:
+        out_meta_dir = (
+            Path(params.out_dir) if basin_name is None else Path(params.out_dir) / basin_name
+        )
+        write_metadata(
+            params,
+            get_algo_name(__file__),
+            out_meta_dir,
+            {
+                **vars(params),
+                "execution_time": (
+                    basin_execution_times.get(basin_name, total_time) if basin_name else total_time
+                ),
+                **({"basin_name": basin_name} if basin_name else {}),
+            },
+            basin_name=basin_name,
+            logger=logger,
+        )
 
 
 if __name__ == "__main__":

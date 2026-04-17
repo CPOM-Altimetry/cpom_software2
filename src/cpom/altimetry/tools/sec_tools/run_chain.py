@@ -51,7 +51,7 @@ def dict_to_cli_args(config):
     args = []
     for key, value in config.items():
         # Skip internal configuration keys
-        if key in ["out_folder_name", "in_step", "base_folder", "algo", "algo_name"]:
+        if key in ["out_folder_name", "base_folder"]:
             continue
 
         # Handle different value types
@@ -164,7 +164,12 @@ def get_merged_algo_config(config, algo, mission=None):
     return algo_config, mission_config
 
 
-def build_args(algo, config, mission=None, persist_metadata=True):
+def build_args(
+    algo,
+    config,
+    mission=None,
+    # persist_metadata=True
+):
     """
     Build complete command-line arguments for an algorithm from merged configuration.
 
@@ -205,10 +210,10 @@ def build_args(algo, config, mission=None, persist_metadata=True):
     if "in_dir" not in algo_config and "in_step" in algo_config:
         in_step_config, _ = get_merged_algo_config(config, algo_config["in_step"], mission)
         in_dir = build_path(config["base_out"], base_folder, in_step_config)
-        if algo != "grid_for_elev_change_update_year":
-            args.extend(["--in_dir", str(in_dir)])
+        args.extend(["--in_dir", str(in_dir)])
         print(
-            f"Auto-detected input directory for {algo}: {in_dir} from in_step: {algo_config['in_step']}"
+            f"Auto-detected input directory for {algo}: {in_dir} from in_step: "
+            f"{algo_config['in_step']}"
         )
 
     # Output directory
@@ -216,49 +221,11 @@ def build_args(algo, config, mission=None, persist_metadata=True):
         if "out_folder_name" in algo_config:
             out_dir = build_path(config["base_out"], base_folder, algo_config)
             print(
-                f"Built output directory for {algo}:{out_dir} from base_out: {config['base_out']} and out_folder_name: {algo_config['out_folder_name']}"
+                f"Built output directory for {algo}:\n"
+                f"{out_dir} from base_out: {config['base_out']} \n"
+                f"and out_folder_name: {algo_config['out_folder_name']}"
             )
             args.extend(["--out_dir", str(out_dir)])
-
-    # Load previous stage metadata
-    if (
-        persist_metadata or algo == "grid_for_elev_change_update_year"
-    ) and algo != "grid_for_elev_change":
-        metadata: Path | None = None
-
-        if "in_meta" in algo_config:
-            metadata = Path(algo_config["in_meta"])
-
-        elif "in_dir" in algo_config:
-            if "in_step" in algo_config:
-                metadata = Path(algo_config["in_dir"]) / f"{algo_config['in_step']}_meta.json"
-        else:
-            try:
-                metadata = in_dir / f"{algo_config['in_step']}_meta.json"
-            except KeyError:
-                print("'in_step' missing, cannot construct metadata path")
-
-        if metadata:
-            if metadata.exists():
-                print(f"Auto-detected metadata for {algo} at {metadata}")
-                args.extend(["--in_meta", str(metadata)])
-            else:
-                # Basin-structured workflows may keep metadata one level below in basin folders.
-                basin_candidates = sorted(metadata.parent.glob(f"*/{metadata.name}"))
-                if basin_candidates:
-                    print(
-                        f"Metadata file for {algo} not found at {metadata}; found basin metadata files under {metadata.parent}"
-                    )
-                    args.extend(["--in_meta", str(metadata.parent)])
-                else:
-                    print(f"Expected metadata file for {algo} not found at {metadata}")
-                    sys.exit(1)
-        else:
-            print(
-                f"No metadata path could be determined for {algo}, and 'in_meta' not specified. Exiting."
-            )
-            sys.exit(1)
-    print("TEST THESE ARE THE ARGS", args)
     return args
 
 
@@ -372,7 +339,7 @@ def main(args):
                     algo,
                     config,
                     mission=mission,
-                    persist_metadata=parsed_args.persist_metadata,
+                    # persist_metadata=parsed_args.persist_metadata,
                 )
                 run_algorithm(algo, args, debug_args)
     else:
@@ -383,7 +350,11 @@ def main(args):
         except ValueError as exc:
             parser.error(str(exc))
         for algo in algorithms_to_run:
-            args = build_args(algo, config, persist_metadata=parsed_args.persist_metadata)
+            args = build_args(
+                algo,
+                config,
+                # persist_metadata=parsed_args.persist_metadata
+            )
             run_algorithm(algo, args, debug_args)
 
 
