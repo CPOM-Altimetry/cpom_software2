@@ -398,8 +398,8 @@ class Slopes:
             self.zarr_type = True  # from a Zarr file type
         elif self.name == "rema_100m_slope_svd_9x9_zarr":
             # Slopes calculated from REMA DEM V2 using range(min-max) by J.Phillips (CPOM/Lancs).
-            filename = "REMA_Slope_100m_svd_9x9.zarr"
-            filled_filename = "REMA_Slope_100m_svd_9x9.zarr"
+            filename = "rema_100m_roughness_range_svd_9x9.zarr"
+            filled_filename = "rema_100m_roughness_range_svd_9x9.zarr"
             # default_dir can be modified in class init
             default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness/V2'
             self.src_url = "TBD"  # Add REMA src URL

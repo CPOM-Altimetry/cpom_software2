@@ -19,9 +19,19 @@ def test_slopes():
         _ = Slopes(scenario)
 
 
-def test_slopes_ant():
-    """test Antarctic slop scenarios"""
-    this_slope = Slopes("rema_100m_900ws_slopes_zarr")
+@pytest.mark.parametrize(
+    "slope_name",
+    [
+        "rema_100m_slope_svd_9x9_zarr",  # v2 slope solution
+        "rema_100m_900ws_slopes_zarr",  # v1 slope solution
+        "cpom_ant_2018_1km_slopes",
+    ],
+)
+def test_slopes_ant(slope_name):
+    """test Antarctic slope scenarios for sensible slope values
+    over Lake Vostok"""
+
+    this_slope = Slopes(slope_name)
 
     # Test the slope for locations in Lake Vostok: -77.5, 106
 
@@ -31,31 +41,22 @@ def test_slopes_ant():
     # slopes = this_slope.interp_slope_from_lat_lon(lats, lons)
     slopes = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
 
-    # Test values returned are not nan
-    assert np.count_nonzero(~np.isnan(slopes)) == len(lats), "Nan values returned"
+    # Test values returned are not nan:
+    assert np.count_nonzero(~np.isnan(slopes)) == len(lats), f"{slope_name} Nan values returned"
 
-    assert (slopes > 0.01).sum() == 0, " Should not have slopes > 0.01 at this Vostok location"
-    assert (slopes < 0.0).sum() == 0, " Should not have slopes < 0"
-
-    this_slope = Slopes("cpom_ant_2018_1km_slopes")
-
-    # Test the slope for locations in Lake Vostok: -77.5, 106
-
-    lats = np.array([-77.5])
-    lons = np.array([106])
-
-    # slopes = this_slope.interp_slope_from_lat_lon(lats, lons)
-    slopes = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
-
-    # Test values returned are not nan
-    assert np.count_nonzero(~np.isnan(slopes)) == len(lats), "Nan values returned"
-
-    assert (slopes > 0.01).sum() == 0, " Should not have slopes > 0.01 at this Vostok location"
-    assert (slopes < 0.0).sum() == 0, " Should not have slopes < 0"
+    assert (
+        slopes > 0.01
+    ).sum() == 0, f" {slope_name} should not have slopes > 0.01 at this Vostok location : {slopes}"
+    assert (slopes < 0.0).sum() == 0, f"{slope_name}  should not have slopes < 0"
 
 
 @pytest.mark.parametrize(
-    "slope_name", ["arcticdem_100m_900ws_slopes_zarr", "awi_grn_2013_1km_slopes"]
+    "slope_name",
+    [
+        "arcticdem_100m_900ws_slopes_zarr",  # v1 slope solution
+        "arcticdem_cropped_100m_slope_svd_9x9_zarr",  # v2 slope solution
+        "awi_grn_2013_1km_slopes",
+    ],
 )
 def test_slopes_grn(slope_name):
     """test Greenland slope scenarios"""
@@ -75,10 +76,19 @@ def test_slopes_grn(slope_name):
     assert (slopes < 0.0).sum() == 0, " Should not have slopes < 0"
 
 
+@pytest.mark.parametrize(
+    "slope_name",
+    [
+        "rema_100m_slope_svd_9x9_zarr",  # v2 slope solution
+        "rema_100m_900ws_slopes_zarr",  # v1 slope solution
+        "cpom_ant_2018_1km_slopes",
+    ],
+)
 @pytest.mark.plots  # only run if 'pytest -m plots' is used
-def test_slope_map_vostok():
+def test_slope_map_vostok(slope_name):
     """test Antarctic slope scenarios"""
-    this_slope = Slopes("rema_100m_900ws_slopes_zarr")
+    # this_slope = Slopes("rema_100m_900ws_slopes_zarr")
+    this_slope = Slopes(slope_name)
 
     thisarea = Area("vostok")
     lon_step = 0.01
@@ -94,7 +104,7 @@ def test_slope_map_vostok():
     slopes = this_slope.interp_slopes(lats, lons, method="linear", xy_is_latlon=True)
 
     dataset = {
-        "name": "slope",
+        "name": f"{this_slope.name}",
         "units": "degs",
         "lats": lats,
         "lons": lons,
