@@ -892,7 +892,7 @@ def main():
 
                 if args.south:
                     annotation_list.append(
-                        Annotation(0.37, 0.84, "Southern Ocean", fontsize=12, fontweight="normal")
+                        Annotation(0.37, 0.85, "Southern Ocean", fontsize=12, fontweight="normal")
                     )
                     annotation_list.append(
                         Annotation(0.39, 0.5, "Antarctica", fontsize=12, fontweight="normal")
