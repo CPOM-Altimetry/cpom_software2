@@ -51,8 +51,12 @@ def parse_args():
     # For testing and flexibility
     parser.add_argument(
         "--input-dir",
-        default="/cpnet/altimetry/seaice/nrt_system/latest",
-        help="Override input directory (default: /cpnet/altimetry/seaice/nrt_system/latest).",
+        default=None,
+        help=(
+            "Override NRT input directory "
+            "(default: /cpnet/altimetry/seaice/nrt_system/latest for Arctic, "
+            "/cpnet/altimetry/seaice/nrt_system_anto/latest for Antarctic)."
+        ),
     )
     return parser.parse_args()
 
@@ -180,17 +184,21 @@ def to_snake_case(name):
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-def process_map_file(latency, input_dir, output_dir, max_cog_dist, version):
+def process_map_file(latency, hemisphere, input_dir, output_dir, max_cog_dist, version):
     """Process a single map file to generate a NetCDF product.
 
     Args:
         latency (str): The latency of the sea ice thickness data (e.g., "02", "14", "28").
+        hemisphere (str): The hemisphere to process, either "arco" (Arctic) or "anto"
+            (Antarctic).
         input_dir (str): The directory containing the input map and info files.
         output_dir (str): The directory where the output NetCDF file will be saved.
         max_cog_dist (float): The maximum centre of gravity distance in km to
         filter out data points.
         version (int): The product version number.
     """
+    print(f"process_map_file called with latency: {latency}, hemisphere: {hemisphere}")
+    region_title = "Antarctic" if hemisphere == "anto" else "Arctic"
     map_filename = f"thk_{latency}.map"
     info_filename = f"thk_{latency}.info"
 
@@ -238,7 +246,7 @@ def process_map_file(latency, input_dir, output_dir, max_cog_dist, version):
 
     # Output file path
     out_filename = (
-        f"cpom_nrt_sea_ice_thickness_{latency}days_"
+        f"cpom_nrt_{hemisphere}_sea_ice_thickness_{latency}days_"
         f"{start_str}_{end_str}_5km_sparse_grid_v{version:03d}.nc"
     )
     out_path = os.path.join(output_dir, out_filename)
@@ -250,7 +258,7 @@ def process_map_file(latency, input_dir, output_dir, max_cog_dist, version):
     # Create NetCDF
     with Dataset(out_path, "w", format="NETCDF4") as nc:
         nc.Title = (
-            "Near Real Time (NRT) Arctic Sea Ice Thickness Product"
+            f"Near Real Time (NRT) {region_title} Sea Ice Thickness Product"
             " from CryoSat-2 at 5km sparse grid resolution"
         )
         nc.Conventions = "CF-1.11"
@@ -431,7 +439,7 @@ def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, pro
         # Create NetCDF
         with Dataset(out_path, "w", format="NETCDF4") as nc:
             nc.Title = (
-                f"Non-Time Critical (NTC) Arctic Sea Ice Thickness Product"
+                f"Non-Time Critical (NTC) {hemisphere_name} Sea Ice Thickness Product"
                 f" from CryoSat-2 at 5km sparse grid resolution for {date_str}"
             )
             nc.Conventions = "CF-1.11"
@@ -551,9 +559,23 @@ def main():
     args = parse_args()
 
     if args.nrt:
+        if args.arco and args.anto:
+            print("Error: --arco and --anto are mutually exclusive.")
+            sys.exit(1)
+        hemisphere = "anto" if args.anto else "arco"
+
+        if args.input_dir is not None:
+            input_dir = args.input_dir
+        elif hemisphere == "anto":
+            input_dir = "/cpnet/altimetry/seaice/nrt_system_anto/latest"
+        else:
+            input_dir = "/cpnet/altimetry/seaice/nrt_system/latest"
+
         latencies = ["02", "14", "28"]
         for lat in latencies:
-            process_map_file(lat, args.input_dir, args.output, args.max_cog_dist, args.version)
+            process_map_file(
+                lat, hemisphere, input_dir, args.output, args.max_cog_dist, args.version
+            )
     elif args.ntc:
         tasks = []
 
