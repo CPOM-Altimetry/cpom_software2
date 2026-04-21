@@ -121,11 +121,7 @@ def main():
     parser.add_argument(
         "--param",
         "-p",
-        help=(
-            "[optional] parameter_name: "
-            "only plot this sea ice parameter"
-            f"one of {all_si_params}"
-        ),
+        help=(f"[optional] parameter_name: only plot this sea ice parameterone of {all_si_params}"),
     )
     parser.add_argument("--year", "-y", help="YYYY")
     parser.add_argument(
@@ -803,16 +799,17 @@ def main():
         # --------------------------------------------------------------------------------------------
         #  Process CS2 NRT (currently only thickness)
         #
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_02.map   # sparse grid
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_14.map
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_28.map
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_02.map   # sparse grid
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_14.map
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_28.map
         #
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_02.info #start/end date, 29 1 2022 25 2 2022
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_14.info
-        # /cpnet/altimetry/seaice/nrt_system/latest/thk_28.info
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_02.info #start/end date, 29 1 2022 25 2 2022
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_14.info
+        # /cpnet/altimetry/seaice/nrt_system[_anto]/latest/thk_28.info
         #
         # Output to
-        # <outdir>/<mission>/<arco,anto>/<mission>_<area>_<period>days_<parameter>.<image width>.png
+        # <outdir>/<mission>/nrt/<arco,anto>/<mission>_<arco,anto>_<period>days_thickness.webp
+        # example:  <outdir>/cs2/nrt/arco/cs2_arco_14days_thickness.webp
         # --------------------------------------------------------------------------------------------
 
         si_param = SIParams("Thickness")
@@ -820,8 +817,12 @@ def main():
         latency = "Near Real Time"
 
         for period in nrt_periods:
-            map_file = f"/cpnet/altimetry/seaice/nrt_system/latest/thk_{period}.map"
-            info_file = f"/cpnet/altimetry/seaice/nrt_system/latest/thk_{period}.info"
+            if args.south:
+                map_file = f"/cpnet/altimetry/seaice/nrt_system_anto/latest/thk_{period}.map"
+                info_file = f"/cpnet/altimetry/seaice/nrt_system_anto/latest/thk_{period}.info"
+            else:
+                map_file = f"/cpnet/altimetry/seaice/nrt_system/latest/thk_{period}.map"
+                info_file = f"/cpnet/altimetry/seaice/nrt_system/latest/thk_{period}.info"
 
             # Read the .info file
             with open(info_file, "r", encoding="utf-8") as f:
