@@ -890,9 +890,19 @@ def main():
                     )
                 )
 
-                annotation_list.append(
-                    Annotation(0.4, 0.87, f"{thisarea.long_name}", fontsize=17, fontweight="normal")
-                )
+                if args.south:
+                    annotation_list.append(
+                        Annotation(0.37, 0.84, "Southern Ocean", fontsize=12, fontweight="normal")
+                    )
+                    annotation_list.append(
+                        Annotation(0.39, 0.5, "Antarctica", fontsize=12, fontweight="normal")
+                    )
+                else:
+                    annotation_list.append(
+                        Annotation(
+                            0.4, 0.87, f"{thisarea.long_name}", fontsize=17, fontweight="normal"
+                        )
+                    )
 
                 # Mission:
                 annotation_list.append(
