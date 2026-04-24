@@ -5,16 +5,14 @@ Purpose:
     Interpolate missing values in gridded elevation change data.
 
     Uses Delaunay triangulation (matplotlib LinearTriInterpolator) to fill gaps
-    in gridded data from epoch_average or calculate_dhdt outputs. Original input
-    values are preserved; only missing cells are interpolated.
+    in gridded data produced by epoch_average or calculate_dhdt. Original input
+    values are preserved; only missing cells are interpolated. A variable flag column distinguishes
+    between original and interpolated values (0 = no data, 1 = original input, 2 = interpolated).
 
 Output:
-    - Interpolated data: <out_dir>/interpolated_<variable
-    Set up enmpty grid and flag arraymatricies es to be populated in at interpoolation.
-    >- grud    Builds 2D arrats ys of shape (nrows, ncols) for the grid.  and flgladlagdgflags.
-    Populate the firlag frgrid with 1'ss where dinput data is present.
-    .parquet
-    - Includes 'interpolation_flag' column to distinguish original vs interpolated values
+    <out_dir>/interpolated.parquet
+    Parquet file containing x_bin, y_bin, interpolated variable values, per-variable
+    flags, and any static metadata columns present in the input.
 """
 
 import argparse
@@ -33,6 +31,7 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
+from cpom.altimetry.tools.sec_tools.clip_to_basins import get_data
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
     elapsed,
     get_algo_name,
@@ -41,6 +40,7 @@ from cpom.altimetry.tools.sec_tools.metadata_helper import (
 )
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
+from cpom.masks.masks import Mask
 
 
 def _parse_optional_float(value: Any) -> float | None:
@@ -55,70 +55,75 @@ def _parse_optional_float(value: Any) -> float | None:
 def parse_arguments(args) -> argparse.Namespace:
     """
     Parse command line arguments for grid interpolation.
-
-    Args:
-        args (list): Command line arguments
-    Returns:
-        argparse.Namespace: Parsed arguments
     """
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Interpolate missing values in gridded elevation"
+        " change data using Delaunay triangulation."
+    )
+    # I/O Arguments
     parser.add_argument(
         "--in_step",
-        help="Input algorithm step to source metadata from",
         type=str,
-        required=False,
+        help="Input algorithm step to source metadata from",
     )
-    # Required arguments
-    parser.add_argument(
-        "--in_dir",
-        help="Input directory, with path to the directory containing variables of interest. "
-        "E.g. epoch averaged grids",
-        required=True,
-    )
+    parser.add_argument("--in_dir", required=True, help="Input data directory (epoch_average)")
+    parser.add_argument("--out_dir", required=True, help="Output directory Path")
+
     parser.add_argument(
         "--parquet_glob",
         type=str,
         default="*.parquet",
-        help="Glob pattern to parquet files.",
+        help="File glob pattern for input Parquet files, relative to --in_dir.",
     )
-    parser.add_argument("--out_dir", help="Output directory", required=True)
+    # Variable arguments
     parser.add_argument(
-        "--timestamp_column", help="Timestamp / grouping column to loop through", required=True
+        "--timestamp_column",
+        type=str,
+        default="epoch_number",
+        help="Column name for grouping timestamps (e.g. epoch_number or period_number)."
+        " Each group will be interpolated separately.",
     )
     parser.add_argument(
         "--variables_in",
-        help="Comma-separated list of variable(s) names to process",
         required=True,
         nargs="+",
+        help="Column names to interpolate. Comma-separated list",
     )
-    parser.add_argument("--tri_lim", default=20.0)
     parser.add_argument(
         "--lo_filter",
         nargs="+",
-        help="Lowest allowable data value, used to clip before and after interpolation. "
-        "Lower values are removed, not set to the lo_filter value."
-        "Space separated list of values for the number of variables",
+        help="Lower bound per variable for filtering before and after interpolation."
+        " Space -seperated list of length -- variables in.",
     )
     parser.add_argument(
         "--hi_filter",
         nargs="+",
-        help="Highest allowable data value, used to clip before and after interpolation. "
-        "Higher values are removed, not set to the hi_filter value."
-        "Space separated list of values for the number of variables",
+        help="Upper bound per variable for filtering before and after interpolation."
+        " Space -seperated list of length -- variables in.",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--tri_lim", default=20.0, help="Maximum triangle edge length for Delaunay triangulation"
+    )
+
+    parser.add_argument("--mask", help="CPOM Mask name to apply to output data")
+    parser.add_argument(
+        "--mask_values",
+        nargs="+",
+        help="Mask pixel values to accept as valid, e.g. --mask_values 1, 2, 3.",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable DEBUG level logging")
     # Fall back if grid parameters are not provided in metadata
     parser.add_argument(
         "--gridarea",
         type=str,
         required=False,
-        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+        help="Grid area name. Grid metadata fallback",
     )
     parser.add_argument(
         "--binsize",
         type=float,
         required=False,
-        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
+        help="Grid bin size. Grid metadata fallback",
     )
     add_basin_selection_arguments(parser)
 
@@ -129,22 +134,19 @@ def get_grid_and_flags(
     group: pl.DataFrame, nrows: int, ncols: int
 ) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray], np.ndarray, np.ndarray]:
     """
-    Builds empty 2D (nrows, ncols) arrays for a single group (e.g. epoch).
-    Marks cells that contain input data with flag 1, and
-    returns the grid, flags, and populated indices for interpolation.
+    Get a 2D grid and flag array for a single group. Mark cells with 1 where input data is present.
 
     Args:
-        group (pl.DataFrame): Grouped DataFrame for a single epoch/period.
-        nrows (int): Number of grid rows, from GridArea metadata.
-        ncols (int): Number of grid columns, from GridArea metadata.
+        group (pl.DataFrame): Rows for a single group. (Epoch or period)
+        nrows (int): Grid row count from GridArea metadata.
+        ncols (int): Grid column count from GridArea metadata.
 
     Returns:
-        grid (np.ndarray): 2D (nrows, ncols) variable array. Initialised with NaNs.
-        grid_flags (np.ndarray): 2D (nrows, ncols) array. Initialised with 0.
-        Cells with observations are set to 1.
-        populated_idx (tuple[np.ndarray, np.ndarray]): Row and col indicies of populated cells.
-        x_bins (np.ndarray): Populated x_bins
-        y_bins (np.ndarray): Populated y_bins
+        grid (np.ndarray): 2D float array of shape (nrows, ncols) filled with NaN.
+        grid_flags (np.ndarray): 2D int array of shape (nrows, ncols). 0 = No data, 1 = input data.
+        populated_idx (tuple[np.ndarray, np.ndarray]): Row and column idx of populated cells.
+        x_bins (np.ndarray): x_bin values for populated cells
+        y_bins (np.ndarray): y_bin values for populated cells
     """
 
     # Get array of populated grid cell indices
@@ -175,16 +177,20 @@ def triangulate_points(
     logger: logging.Logger,
 ) -> Triangulation | None:
     """
-    Build Delaunay triangulation object from populated grid cell indicies.
-    Mask triangles whose longest edge exceeds params.tri_lim.
+    Build Delaunay triangulation object from populated grid cell indicies, masking long edges.
+
+    Triangles whose longest edge exceeds params.tri_lim are masked to prevent
+    interpolation across large data gaps.
 
     Args:
-        params (argparse.Namespace): Parsed command line arguments.
-        group_name (str): Name of the epoch group or period being processed.
+        params (argparse.Namespace): Command line arguments (uses tri_lim).
+        group_name (str): Name of the params.timestamp_column value being processed.
         populated_idx (tuple[np.ndarray, np.ndarray]): Row and column indices of populated cells.
+        logger (logging.Logger): Logger object.
 
     Returns:
-        Triangulation or None: Triangulation object if successful, None otherwise.
+        Triangulation | None: Triangulation with long-edge mask applied, or None if there are too
+        few points or triangulation fails.
     """
     # --------------------------------------------------------#
     # If no or too few points (3 is minimum, in the points
@@ -219,28 +225,28 @@ def get_trilinear_interpolation(
     logger: logging.Logger,
 ) -> tuple[dict[str, np.ndarray] | None, str | None]:
     """
-    Interpolate missing grid cells for selected variables using Delaunay triangulation.
+    Fill missing grid cells for all variables in one group, using LinearTriInterpolator.
 
-    A LinearTriInterpolator is fitted to the Triangulation and estimates values at for each
-    missing grid cell.
+    Fits a Delaunay triangulation to the populated cells and estimates values at every
+    empty cell within the triangulated region.
 
     Flag values :
-        0 : No data (missing input, and not interpolated)
+        0 : No data (empty in input, not reached by interpolation).
         1 : Original input data
-        2 : Interpolated data (added by LinearTriInterpolator)
+        2 : Interpolated by LinearTriInterpolator.
 
     Args:
-        params (argparse.Namespace): Parsed command line arguments.
+        params (argparse.Namespace): Command line arguments (uses tri_lim , variables_in).
         group_name (str): Name of the params.timestamp_column value being processed.
-        group (pl.DataFrame): DataFrame for one grouped timestamp.
-        nrows (int): Number of grid rows.
-        ncols (int): Number of grid columns.
+        group (pl.DataFrame): Rows for a single group. (Epoch or period)
+        nrows (int): Grid row count from GridArea metadata.
+        ncols (int): Grid column count from GridArea metadata.
 
     Returns:
-        tuple[dict[str, np.ndarray] | None, str | None]:
-            - dict of interpolated variable arrays and flag arrays if successful, None otherwise.
-            - String reason for failure if interpolation was not successful, None otherwise.
-
+        tuple:
+            - dict[str, np.ndarray]: Dictionary of interpolated variable arrays and flag arrays
+                if successful, None otherwise.
+            - str | None: Failure reason string if interpolation fails, None otherwise.
     """
 
     group_label = str(group_name[0]) if isinstance(group_name, tuple) else str(group_name)
@@ -299,9 +305,18 @@ def get_trilinear_interpolation(
     return grids, None
 
 
-def apply_range_filters(params, group_df: pl.DataFrame) -> pl.DataFrame:
-    """Apply per-variable lo/hi range filters to the input data,
-    setting out-of-range values to None."""
+def apply_range_filters(params: argparse.Namespace, group_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Null out per-variable measurements outside their configured lo/hi bounds.
+
+    Args:
+        params (argparse.Namespace): Command line arguments.
+            (uses lo_filter, hi_filter, variables_in).
+        group_df (pl.DataFrame): Rows for a single group. (Epoch or period)
+
+    Returns:
+        pl.DataFrame: DataFrame with out-of-range values set to None.
+    """
     # Set measurements outside lo/hi filters to None
     if params.lo_filter or params.hi_filter:
         for idx, var in enumerate(params.variables_in):
@@ -333,16 +348,18 @@ def get_epoch_stats(
     including counts of populated input cells, cells in output and interpolated cells.
 
     Args:
-        group_label (str): String label for the group being processed (e.g. epoch or period).
-        rows_before (int): Number of rows in the group before interpolation.
-        populated_input_cells (int): Number of populated input cells before interpolation.
-        df (pl.DataFrame | None): DataFrame for the group after interpolation.
-        grids (dict[str, np.ndarray]): Raw grids dict returned by get_trilinear_interpolation,
-            or None if interpolation failed.
-        failure_reason (str | None): Reason for interpolation failure, or None.
+        group_label (str): String label for epoch or period.
+        rows_before (int): Row count before interpolation.
+        populated_input_cells (int): Unique grid cells present in the input.
+        df (pl.DataFrame | None): Output DataFrame after interpolation,None if interpolation failed.
+        grids (dict[str, np.ndarray] | None): Raw grids arras from get_trilinear_interpolation,
+            or None on failure.
+        failure_reason (str | None): String reason for interpolation failure, or None if successful.
 
     Returns:
-        dict[str, Any]: Dictionary containing statistics for the group.
+        dict[str, Any]: Statistics dictionary with keys: timestamp, rows_before,
+            rows_after, populated_input_cells, cells_in_output, interpolated_cells,
+            failure_reason.
     """
     if grids is None or df is None:
         return {
@@ -368,7 +385,16 @@ def get_epoch_stats(
 
 
 def aggregate_epoch_stats(epoch_stats_list: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate per-epoch statistics for metadata output."""
+    """Aggregate per-epoch statistics into a summary for metadata output.
+
+    Args:
+        epoch_stats_list (list[dict[str, Any]]): Per-epoch statistics from get_epoch_stats.
+    Returns:
+        dict[str, Any]: Dictionary with keys:
+            aggregated (dict): Total groups, succeeded, failed, input/output row counts,
+                populated input cells, cells in output, and interpolated cells.
+            failure_counts (dict[str, int]): Count of each failure reason string.
+    """
     failure_counts: dict[str, int] = {}
     failed = 0
 
@@ -406,32 +432,27 @@ def process_timesteps(
     logger: logging.Logger,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
-    Process each params.timestamp_column group (e.g. Epoch or Period) in the input DataFrame:
+    Interpolate missing grid cells for every group in the input DataFrame.
 
     For each group :
         1. Extract static (single-value) metadata columns to re-attach after interpolation.
         2. Null out per-variable measurements outside lo/hi range filters.
-        3. Interpolate missing grid cells via Delaunay triangulation (get_trilinear_interpolation).
-        4. Build a boolean mask of cells where every variable has a valid value (flag > 0).
-        5. Assemble an output DataFrame for all valid cells, including interpolated
-            values, flags, and static metadata columns.
-
-    Concatinate all group DataFrames into a single output DataFrame.
+        3. Interpolate missing cells via Delaunay triangulation.
+        4. Retain cells where every variable has a valid value (flag > 0).
+        5. Assemble an output DataFrame with interpolated values, flags, and static columns.
 
     Args:
-        params (argparse.Namespace): Parsed command line arguments.
-        input_df (pl.DataFrame): DataFrame containing all epochs.
-        nrows (int): Number of grid rows.
-        ncols (int): Number of grid columns.
+        params (argparse.Namespace): Command line arguments
+        input_df (pl.DataFrame): All input rows to process.
+        nrows (int): Grid row count from GridArea metadata.
+        ncols (int): Grid column count from GridArea metadata.
+        logger (logging.Logger): Logger object.
 
     Returns:
-        pl.DataFrame: Concatenated DataFrame containing :
-            x_bin,
-            y_bin,
-            params.timestamp_column,
-            interpolated variables,
-            variable flags,
-            and static metadata columns for all valid grid cells across all groups.
+        pl.DataFrame: Concatenated output with columns: y_bin, x_bin,
+            params.timestamp_column, interpolated variables, per-variable flags,
+            and static metadata columns. Empty DataFrame if all groups fail.
+        dict[str, Any]: Aggregated statistics from aggregate_epoch_stats.
     """
     # Group by the specified column (e.g., epoch if input is epoch averaged grids)
     logger.info("Loaded input rows: %d", input_df.height)
@@ -547,7 +568,17 @@ def process_target(
     logger: logging.Logger,
     sub_basin: str | None = None,
 ) -> None:
-    """Process one root or basin target using temporary params overrides."""
+    """
+    Interpolate and write output for a single root directory or named basin.
+    Resolves grid parameters, runs process_timesteps, applies the configured mask,
+        writes interpolated.parquet, and records pipeline metadata.
+
+    Args:
+    params (argparse.Namespace): Command line arguments.
+    start_time (float): Pipeline start time for metadata.
+    logger (logging.Logger): Logger object.
+    sub_basin (str | None): Sub-basin name if processing with basin structure.
+    """
 
     grid_params = get_metadata_params(
         params=params,
@@ -567,7 +598,15 @@ def process_target(
     interpolated_df, status = process_timesteps(
         params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
     )
-
+    # # Mask out-of-range values in the output DataFrame as well, to be safe
+    interpolated_df = get_data(
+        grid_area=ga, logger=logger, lazyframe=interpolated_df, get_lat_lon=False
+    )
+    interpolated_df = (
+        Mask(params.mask)
+        .points_inside_polars(interpolated_df.lazy(), basin_numbers=params.mask_values)
+        .drop(["x", "y"])
+    )
     interpolated_df.write_parquet(output_path, compression="zstd")
 
     try:
@@ -594,14 +633,10 @@ def interpolate_grids_of_dh(args):
     """
     Main entry point for grid interpolation.
 
-    1. Parse command line arguments
-    2. Load grid metadata
-    3. Read epoch data
-    4. Interpolate missing grid cells
-    5. Write results and metadata to output files
+    Parses arguments, resolves basins, and calls process_target for each target.
 
     Args:
-        args (list): Command line arguments (typically sys.argv[1:])
+        args (list[str]): Command line arguments, e.g. sys.argv[1:].
     """
 
     start_time = time.time()

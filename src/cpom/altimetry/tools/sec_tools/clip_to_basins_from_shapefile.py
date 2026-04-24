@@ -2,32 +2,24 @@
 cpom.altimetry.tools.sec_tools.clip_to_basins_from_shapefile
 
 Purpose:
+    Clip gridded altimetry data to basin, glacier, or region boundaries defined
+    by polygon geometries in a shapefile, using grid cell centres.
 
-    Clips data to basin, glacier, or region boundaries defined by polygon geometries
-    in a shapefile, based on whether the cell centre lies within a polygon boundary.
+    - Non-partitioned: full dataset loaded into memory and clipped in one pass.
+    - Partitioned: large datasets processed partition-by-partition using
+                       bounding-box pre-filtering to limit memory usage.
 
-    It supports both:
-        - Non-partitioned datasets, loaded and processed in memory.
-        - Large partitioned datasets, processed incrementally using bounding-box
-        pre-filtering to reduce memory usage.
-
-    It is reccommended to use this tool after epoch_average.
-
-Shapefile requirements:
-    - Polygon geometries defining basin/region boundaries
-    - A column containing basin/region identifiers (name, ID, etc.)
+    Recommended for use after epoch_average.
 
 Shapefile configuration options:
-    - Use a CPOM Mask class that defines a shapefile and selector column.
-    - Provide a shapefile path and selector column explicitly via CLI arguments.
+    - Pass a CPOM Mask class name (--mask); its shapefile and selector column are used.
+    - Supply a shapefile path (--shapefile) and column name (--shp_file_column) directly.
 
 Output:
     - Clipped Parquet data written per basin:
-        * Non-partitioned:
-            <out_dir>/<basin_name>/data.parquet
-        * Partitioned:
-            <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
-    - metadata.json summarising processing parameters and execution time
+        - Non-partitioned: <out_dir>/<basin_name>/data.parquet
+        - Partitioned:     <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
+    - metadata.json summarising processing parameters and execution time.
 """
 
 import argparse
@@ -55,64 +47,49 @@ from cpom.masks.masks import Mask
 
 
 def parse_arguments(args: list[str]) -> argparse.Namespace:
-    """
-    Parse command-line arguments for clipping altimetry data to basin polygons.
-
-    Args:
-        args: List of command-line arguments.
-
-    Returns:
-        argparse.Namespace: Parsed command line arguments.
-    """
+    """Parse command-line arguments for clipping altimetry data to basin polygons."""
     parser = argparse.ArgumentParser(
         description="Clip altimetry data to basin polygons from shapefile"
     )
     parser.add_argument(
         "--in_step",
+        type=str,
         help="Input algorithm step to source metadata from",
-        type=str,
-        required=False,
     )
-    parser.add_argument(
-        "--in_dir",
-        type=str,
-        required=True,
-        help="Directory containing input altimetry data",
-    )
+    parser.add_argument("--in_dir", type=str, required=True, help="Input data directory")
     parser.add_argument(
         "--out_dir",
-        help="Directory for output clipped results",
         type=str,
         required=True,
+        help="Output directory Path",
     )
     parser.add_argument(
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="File glob pattern for selecting input files.",
+        help="Glob pattern for selecting input files relative to --in_dir.",
     )
     parser.add_argument(
         "--mask",
         type=str,
         default=None,
-        help="CPOM mask class. If the mask class has shapefile info, "
-        "this will be used for clipping.",
+        help="CPOM Mask class name. Its shapefile path and selector column are used for clipping.",
     )
     parser.add_argument(
-        "--shapefile", type=str, help="Path to the shapefile to use for clipping", required=False
+        "--shapefile",
+        type=str,
+        help="Path to the shapefile for clipping (alternative to --mask).",
     )
     parser.add_argument(
         "--shp_file_column",
         type=str,
-        help="Column name in the shapefile to use for basin selection",
-        required=False,
+        help="Shapefile column containing basin/region identifiers.",
     )
     parser.add_argument(
         "--partitioned",
         action="store_true",
-        help="Optional flag for large partitioned datasets. "
-        "If set, data will be loaded one partition and a bounding box filter applied "
-        "before clipping to each basin shape.",
+        help="Enable partition-by-partition processing for large datasets. "
+        "Each partition is bounding-box filtered before clipping.",
     )
     parser.add_argument(
         "--debug",
@@ -124,13 +101,13 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--gridarea",
         type=str,
         required=False,
-        help="Grid area name used for GIA interpolation when metadata is unavailable.",
+        help="Grid area name. Grid metadata fallback",
     )
     parser.add_argument(
         "--binsize",
         type=float,
         required=False,
-        help="Grid bin size used for GIA interpolation when metadata is unavailable.",
+        help="Grid bin size. Grid metadata fallback",
     )
 
     # Standardize basin selection arguments across tools
@@ -144,17 +121,17 @@ def add_coordinates_to_data(
     grid_area: GridArea,
 ) -> pl.LazyFrame:
     """
-    Add projected x/y coordinates for grid-cell centres to a dataset.
+    Add projected x/y coordinates for grid-cell centres to the dataset.
 
     Coordinates are derived from x_bin and y_bin indices using the GridArea
-    definition and appended as new columns.
+    definition and added as columns 'x' and 'y'.
 
     Args:
-        data (pl.LazyFrame): Data with x_bin and y_bin columns.
+        data (pl.LazyFrame): LazyFrame with x_bin and y_bin columns.
         grid_area (GridArea): CPOM GridArea object for coordinate conversion.
 
     Returns:
-        pl.LazyFrame: Data with added 'x' and 'y' columns.
+        pl.LazyFrame: Input data with 'x' and 'y' columns appended.
     """
     x, y = grid_area.get_cellcentre_x_y_from_col_row(
         col=data.select(pl.col("x_bin")).collect().to_numpy().flatten(),
@@ -169,31 +146,25 @@ def add_coordinates_to_data(
 
 
 def load_partitioned_data_for_basin(
-    grid_area: GridArea,
     params: argparse.Namespace,
+    grid_area: GridArea,
     basin_shape: gpd.GeoDataFrame,
     logger: logging.Logger,
 ):
     """
-    Incrementally load partitioned Parquet data filtered to a basin bounding box.
+    Yeild partitioned parquet data filtered to a basin bounding box.
 
-    Each partition is read independently, spatially filtered using the basin
-    bounding box, and yielded as a DataFrame. This avoids loading the full
-    dataset into memory.
-
-    If projected coordinates are not present, they are derived from grid indices.
+    Each partition is read independently, rows outside the bounding box are disguarded.
 
     Args:
-        grid_area (GridArea): CPOM GridArea object.
-        params (argparse.Namespace): Command line parameters.
-            Includes:
-            - in_dir (str): Directory containing partitioned parquet files
-            - parquet_glob (str): Glob pattern for parquet files
-        basin_shape (geopandas.GeoDataFrame): Basin geometry used to determine bounding-box limits.
-        logger (logging.Logger): Logger for progress and status messages.
+        params (argparse.Namespace): Command line parameters (uses in_dir, parquet_glob).
+        grid_area (GridArea): CPOM GridArea object for coordinate conversion.
+        basin_shape (geopandas.GeoDataFrame): Basin geometry to determine bounding-box limits.
+        logger (logging.Logger): Logger Object.
 
     Yields:
-        pl.DataFrame: Each partition with x/y coordinates added and filtered by basin bounds.
+        pl.DataFrame: One partition per file, with x/y coordinates present
+                      and rows filtered to the basin bounding box.
     """
     # Get basin bounds
     minx, miny, maxx, maxy = basin_shape.total_bounds
@@ -244,12 +215,15 @@ def clip_data_to_shape(
     data: pl.LazyFrame | pl.DataFrame,
 ) -> pl.LazyFrame:
     """
-    Spatially clip data to a basin polygon using grid-cell centre locations.
+    Keep grid cells, where the cell centre falls within basin polygon.
+
+    Finds unique (x_bin, y_bin) pairs in the data, performs a spatial join
+    against the basin polygon, then filters the full dataset to matching bins.
 
     Args:
         grid_area (GridArea): CPOM GridArea object for coordinate conversion.
-        subregion_shape ( geopandas.GeoDataFrame ):Basin or region polygon geometry.
-        data (pl.LazyFrame | pl.DataFrame): Input data containing [x_bin, y_bin, x , y] columns.
+        subregion_shape ( geopandas.GeoDataFrame ): Basin or region polygon geometry.
+        data (pl.LazyFrame | pl.DataFrame): Input data containing (x_bin, y_bin, x , y).
 
     Returns:
         pl.LazyFrame: Clipped data containing only bins whose centres are within the basin.
@@ -294,24 +268,26 @@ def process_single_basin(
     """
     Clip altimetry data to a single basin and write results to disk.
 
-    Supports two processing modes:
-    - Non-partitioned:
-        The full dataset is loaded, clipped, and written as a single Parquet file.
-    - Partitioned:
-        Data are processed one partition at a time, clipped to the basin,
-        and written to partitioned output directories. --partitioned flag must be set.
+    Non-partitioned: Loads the full dataset, clips it, and writes a single file.
+    Partitioned: Iterates over partitions, clips each one, and writes per-partition
+    output directories (requires --partitioned flag).
 
     Args:
-        params: Command line parameters.
-        grid_area: CPOM GridArea
-        basin_shape: GeoDataFrame containing the basin polygon geometry.
-        basin_name: Name of the basin to clip to.
-        logger: Logger object.
+        params (argparse.Namespace): Command line parameters.
+        grid_area (GridArea): CPOM GridArea Object.
+        basin_shape (gpd.GeoDataFrame): GeoDataFrame containing the basin polygon geometry.
+        basin_name (str): Basin identifier
+        logger (logging.Logger): Logger object.
+
+    Returns:
+        dict with keys:
+            - output_file (str): Path to the output file or directory.
+            - n_rows (int): Total rows written.
+            - n_unique_cells (int): Number of unique grid cells written.
 
     Output:
         - Non-partitioned: <out_dir>/<basin_name>/data.parquet
         - Partitioned: <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
-                      (one file per non-empty partition)
     """
     logger.info(f"Clipping to: {basin_name}")
     output_dir = Path(params.out_dir) / basin_name
@@ -336,7 +312,7 @@ def process_single_basin(
         clipped_df.write_parquet(output_file)
         logger.info(f"Wrote: {output_file}")
     else:
-        for partition in load_partitioned_data_for_basin(grid_area, params, basin_shape, logger):
+        for partition in load_partitioned_data_for_basin(params, grid_area, basin_shape, logger):
             # Clip this partition to the basin shape by bin centres
             clipped_chunk = clip_data_to_shape(grid_area, basin_shape, partition)
             clipped_df = clipped_chunk.collect()
@@ -380,11 +356,15 @@ def get_metadata_json(
     basin_stats: dict[str, int | str],
 ):
     """
-    Generate metadata JSON for clipped data.
+    Generate metadata JSON for processed basin.
+
     Args:
         params (argparse.Namespace): Command line parameters.
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
+        basin_name (str): Basin identifier.
+        basin_output_dir (Path): Output basin directory
+        basin_stats (dict): Output statistics from process_single_basin()
     """
     try:
         write_metadata(
@@ -409,19 +389,17 @@ def get_metadata_json(
 # ----------------#
 def clip_to_basins_from_shapefile(args):
     """
-    Entry point for clipping altimetry data to shapefile basins.
+    Main entry point for clipping altimetry data to shapefile basins.
+    For each selected region, clip the input dataset to polygon and write results to disk.
+
     Steps:
-        1. Parse command line arguments
-        2. Set up output directory and logging
-        3. Load grid metadata from JSON file
-        4. Initialize GridArea object
-        5. Load shapefile (from CPOM mask or explicit path/column)
-        6. (Non-partitioned) Load full dataset into memory
-        7. Process and clip data by shapefile basins
-        8. Write metadata JSON
+        1. Parse command line arguments and initialise logging.
+        2. Resolve grid parameters and build GridArea object.
+        3. Load shapefile (from CPOM mask or explicit path/column)
+        4. For each region: Clip data and write output and metadata.
 
     Args:
-        args (list[str]): Command line arguments.
+        args (list[str]): Arguments.
     """
 
     start_time = time.time()

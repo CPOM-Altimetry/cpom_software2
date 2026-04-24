@@ -8,27 +8,13 @@ Purpose:
     Each x_part/y_part is a group of grid cells. The size defined by
     partition_xy_chunking parameter.
 
-Outputs:
+Output:
     - Partitioned Parquet files in out_dir, with ragged layout.
     - Each partition stored in a single Parquet file:
         <out_dir>/year=YYYY/x_part=XX/y_part=YY/data.parquet
         or
         <out_dir>/year=YYYY/month=MM/x_part=XX/y_part=YY/data.parquet
     - Metadata: <out_dir>/metadata.json
-
-Parameters:
-    --data_input_dir: Directory containing L2 files
-    --dataset: Path to dataset definition YAML file
-                or inline dataset config as JSON string.
-    --out_dir: Output directory
-    --area: CPOM area object
-    --gridarea: CPOM grid area object
-    --binsize: Grid bin size in meters
-    --standard_epoch: Standard epoch for time conversion (e.g., '1991-01-01T00:00:00')
-    --partition_columns: Columns to partition data by, must include 'year', 'x_part', 'y_part'
-    --partition_xy_chunking: Chunking factor for spatial partitioning
-    --fill_missing_poca: Fill missing POCA lat/lons with nadir values.
-    Set True for FDR4ALT datasets.
 """
 
 import argparse
@@ -41,7 +27,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import numpy as np
 import polars as pl
@@ -69,106 +55,29 @@ from cpom.masks.masks import Mask
 
 
 def parse_arguments(args):
-    """
-    Parse command line arguments for gridding altimetry data.
-
-    Return:
-        parser.parse_args(args)
-    """
+    """Parse command line arguments for gridding altimetry data."""
     parser = argparse.ArgumentParser(description="""Convert altimetry data into partitioned parquet
         with ragged layout, storing each partition in a single file""")
+    # I/O parameters
     parser.add_argument(
-        "--data_input_dir", type=str, required=True, help="Directory containing L2 files"
+        "--data_input_dir",
+        type=str,
+        required=True,
+        help="Root directory containing L2 input files to grid.",
     )
     parser.add_argument(
         "--dataset",
         type=str,
         required=True,
-        help="Path to dataset definition YAML file"
-        " or inline dataset config as JSON string defined in the rcf configuration yml",
+        help="Path to a dataset YAML file or an inline JSON string with dataset config.",
     )
-    parser.add_argument("--out_dir", type=str, required=True, help="Output directory")
-    parser.add_argument("--area", type=str, required=True, help="CPOM area object")
-    parser.add_argument(
-        "--mask_name",
-        type=str,
-        required=False,
-        help="Optional Mask Name to apply instead of Area Mask",
-    )
-    parser.add_argument(
-        "--mask_values",
-        default=None,
-        required=False,
-        nargs="+",
-        help="Optional list of values to filter the mask by, e.g. --mask_values 1 2 3. ",
-        type=int,
-    )
+    parser.add_argument("--out_dir", required=True, help="Output directory Path")
     parser.add_argument(
         "--correction_function",
         type=str,
         default="default_corrections",
-        help=("Correction function name from grid_for_elev_change_corrections.py."),
+        help="Correction function name from grid_for_elev_change_corrections.py.",
     )
-    parser.add_argument("--gridarea", type=str, required=True, help="CPOM grid area object")
-    parser.add_argument("--binsize", type=int, default=5000, help="Grid bin size in meters")
-    parser.add_argument(
-        "--standard_epoch",
-        type=str,
-        default="1991-01-01T00:00:00",
-        help="Standard epoch for time conversion (e.g., '1991-01-01T00:00:00')",
-    )
-    parser.add_argument("--min_date", type=str, help="Minimum date to include (e.g., '2000.01.01')")
-    parser.add_argument("--max_date", type=str, help="Maximum date to include (e.g., '2020.12.31')")
-    parser.add_argument(
-        "--partition_columns",
-        type=str,
-        nargs="+",
-        default=["year", "x_part", "y_part"],
-        help="Columns to partition data by, must include 'year', 'x_part', 'y_part'",
-    )
-    parser.add_argument(
-        "--partition_xy_chunking",
-        help=(
-            "This parameter sets the chunking factor for spatial partitioning. "
-            "Individual grid cells (identified by x_bin and y_bin) are grouped into larger "
-            "partitions by dividing them by this factor. e.g. 20 => x_part=x_bin//20, "
-            "y_part=y_bin//20."
-        ),
-        type=int,
-        default=20,
-    )
-    parser.add_argument(
-        "--fill_missing_poca",
-        action="store_true",
-        help="Fill missing POCA lat/lons with nadir values, "
-        "where the 'expert/ice_sheet_qual_relocation' is > 0. "
-        "This is specific to the FDR4ALT dataset.",
-    )
-    parser.add_argument(
-        "--max_workers",
-        type=int,
-        default=max(1, os.cpu_count() or 1),
-        help="Maximum worker processes for multiprocessing.",
-    )
-    parser.add_argument(
-        "--flush_every",
-        type=int,
-        default=60,
-        help="Number of files to process before writing to disk",
-    )
-    parser.add_argument(
-        "--add_vars",
-        type=json.loads,
-        default="{}",
-        help="Optional extra variables as JSON dict, "
-        'e.g. {"tide_ocean":"land_ice_segments/geophysical/tide_ocean"}',
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable DEBUG level logging and collect per-file processing stats",
-    )
-
     parser.add_argument(
         "--force_regrid",
         action="store_true",
@@ -177,6 +86,76 @@ def parse_arguments(args):
             "WARNING: This will delete the existing output directory and all its contents."
         ),
     )
+    # Data processing function parameters
+    parser.add_argument("--area", type=str, required=True, help="CPOM Area object")
+    parser.add_argument(
+        "--mask_name",
+        type=str,
+        help="Optional CPOM Mask to apply, instead of the default --area mask.",
+    )
+    parser.add_argument(
+        "--mask_values",
+        default=None,
+        nargs="+",
+        help="Mask pixel values to accept as valid, e.g. --mask_values 1, 2, 3.",
+        type=int,
+    )
+    parser.add_argument("--gridarea", type=str, required=True, help="CPOM GridArea object")
+    parser.add_argument("--binsize", type=int, default=5000, help="Grid binsize in meters.")
+    parser.add_argument(
+        "--fill_missing_poca",
+        action="store_true",
+        help="Replace failed POCA relocations with nadir lat/lon. FDR4ALT datasets only.",
+    )
+    # Time filtering parameters
+    parser.add_argument(
+        "--standard_epoch",
+        type=str,
+        default="1991-01-01T00:00:00",
+        help="Reference epoch for time values. Default: '1991-01-01T00:00:00'",
+    )
+    parser.add_argument("--min_date", type=str, help="Minimum date to include (e.g., '2000.01.01')")
+    parser.add_argument("--max_date", type=str, help="Maximum date to include (e.g., '2020.12.31')")
+
+    # Multiprocessing parameters
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=max(1, os.cpu_count() or 1),
+        help="Number of parallel worker processes. Default: number of CPU cores.",
+    )
+    parser.add_argument(
+        "--flush_every",
+        type=int,
+        default=60,
+        help="Number of files to buffer before flushing to disk. Default: 60.",
+    )
+    parser.add_argument(
+        "--add_vars",
+        type=json.loads,
+        default="{}",
+        help="Extra variables to extract as a JSON dict mapping output name to NetCDF path,"
+        ' e.g. \'{"tide_ocean": "land_ice_segments/geophysical/tide_ocean"}\'.',
+    )
+    # Output partitioning parameters
+    parser.add_argument(
+        "--partition_columns",
+        type=str,
+        nargs="+",
+        default=["year", "x_part", "y_part"],
+        help="Partition columns. Must include 'year', 'x_part', 'y_part'",
+    )
+    parser.add_argument(
+        "--partition_xy_chunking",
+        type=int,
+        default=20,
+        help=(
+            "Number of grid cells per spatial partition. "
+            "x_part = x_bin // chunk, y_part = y_bin // chunk. Default = 20"
+        ),
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable DEBUG level logging")
+
     return parser.parse_args(args)
 
 
@@ -241,13 +220,14 @@ def _robust_rmtree(path: str) -> None:
 
 def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_regrid=False):
     """
-    Validate and clear the output directory if it exists. Prompt user for confirmation
-    if confirm_regrid is True.
+    Clear the output directory if it exists, then recreate it.
+    Optionally prompt the user for confirmation before deleting if confirm_regrid is True.
+    Exits if the directory fails the safety check, (must contain the mission name and not be root).
 
     Args:
-        params (argparse.Namespace): Command line parameters
-        dataset (DatasetHelper): Dataset configuration object
-        confirm_regrid (bool): Boolean flag to prompt user for regridding.
+        params (argparse.Namespace): Command line arguments.
+        dataset (DatasetHelper): CPOM DatasetHelper object.
+        confirm_regrid (bool): If True, prompt the user to confirm deletion.
 
     """
     # Full regrid => remove entire directory, then create fresh
@@ -270,28 +250,32 @@ def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_
     os.makedirs(params.out_dir, exist_ok=True)
 
 
-def get_processing_objects(params, dataset):
+def get_processing_objects(
+    params: argparse.Namespace, dataset: DatasetHelper
+) -> tuple[dict, Any, GridArea, logging.Logger]:
     """
-    Get processing objects: grid area, area, mask, logger, and construct
-    worker partial function for multiprocessing.
+    Set up objects needed to process altimetry files.
 
-    Get file_and_dates from the dataset with a list of all netcdf files and their associated dates.
+    Initalises logger, GridArea, Area, and Mask objects based on command line parameters,
+    computes the time-epoch offset and builds the worker partial function for multiprocessing.
 
     Args:
         params (argparse.Namespace): Command line parameters
-        dataset (DatasetHelper): Dataset configuration object
+        dataset (DatasetHelper): CPOM DatasetHelper object.
+
     Returns:
-        tuple: file_and_dates (dict),
-        worker (partial function),
-        thisgrid (GridArea),
-        logger
+        tuple:
+            - file_and_dates (np.ndarray): Structured array of file paths and date information.
+            - worker (partial function): Partial function to be used by process_file.
+            - thisgrid (GridArea): GridArea object representing the grid to be used for processing
+            - logger (logging.Logger): Logger object.
     """
 
     logger = set_loggers(
         log_dir=params.out_dir,
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
-    logger.info("output_dir=%s", params.out_dir)
+    logger.info("Output_dir=%s", params.out_dir)
 
     thisgrid = GridArea(params.gridarea, params.binsize)
     thisarea = Area(params.area)
@@ -300,13 +284,13 @@ def get_processing_objects(params, dataset):
     else:
         thismask = None
 
-    logger.info("finding files and dates...")
+    logger.info("Finding files and dates")
 
     file_and_dates = dataset.get_files_and_dates(
         hemisphere=thisarea.hemisphere, min_dt_time=params.min_date, max_dt_time=params.max_date
     )
 
-    logger.info("found %s files", len(file_and_dates))
+    logger.info("Found %s files", len(file_and_dates))
 
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(params.standard_epoch, dataset.dataset_epoch)
@@ -333,18 +317,18 @@ def _fill_missing_poca_with_nadir_fdr4alt(
     dataset: DatasetHelper, nc, lats: np.ndarray, lons: np.ndarray, strict_missing: bool = False
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    FDR4ALT specific function to:
-        Fill missing POCA lat/lons with nadir values, where the 'expert/ice_sheet_qual_relocation'
-    is > 0.
+    Replace missing POCA lat/lons with nadir values for FDR4ALT datasets.
+    Points where 'expert/ice_sheet_qual_relocation' > 0 are filled with nadir lat/lon values.
 
     Args:
-        dataset (DatasetHelper): The dataset configuration.
-        nc (netcdf Dataset or h5py.File): Opened NetCDF or HDF5 file.
-        lats (np.ndarray): Array of latitudes.
-        lons (np.ndarray): Array of longitudes.
+        dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        nc (netcdf Dataset or h5py.File): Opened file handle.
+        lats (np.ndarray): Array of POCA latitudes.
+        lons (np.ndarray): Array of POCA longitudes.
+        strict_missing (bool): If True, raise an error if expected variables are absent.
 
     Returns:
-        tuple(np.ndarray): Filled latitudes and longitudes arrays.
+        tuple[np.ndarray, np.ndarray]: Filled latitude and longitude arrays.
     """
     try:
         # Check if nadir parameters are configured
@@ -382,7 +366,13 @@ def _fill_missing_poca_with_nadir_fdr4alt(
 
 
 def _log_file_stats(logger, file_stats):
-    """Extracted helper to keep the hot loop clean."""
+    """
+    Log per-file processing statistics at DEBUG level.
+
+    Args:
+        logger (logging.Logger): Logger object.
+        file_stats (dict): Per-file counts and rejection reason from process_file.
+    """
     logger.debug(
         "file=%s | accepted=%d/%d | rejected(area/mask=%d, quality/time/nan=%d, elev_range=%d)%s%s",
         file_stats.get("path"),
@@ -411,17 +401,18 @@ def get_coordinates_from_file(
     strict_missing: bool = False,
 ) -> dict:
     """
-    Get latitude and longitude arrays as arrays from a netCDF or HDF5 file.
-    Optionally fills missing POCA lat/lons with nadir values for FDR4ALT datasets.
-    Optionally returns an array of beam numbers if dataset.beams is not empty.
+    Get latitude , longitude and optionally beam arrays (for is2) from an open netCDF or HDF5 file.
+    Longitudes are normalised to (0, 360) range.
+    For FDR4ALT datasets,optionally fill POCA lat/lon values with nadir lat/lon.
 
     Args:
-        dataset (DatasetHelper): DatasetHelper object.
-        nc (netcdf Dataset or h5py.File): Opened NetCDF or HDF5 file.
-        fill_missing_poca (bool): Flag to fill POCA with Nadir (Set True for FDR4ALT data)
+        dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        nc (netcdf Dataset or h5py.File): Opened file handle.
+        fill_missing_poca (bool): If True, replace failed POCA relocations with nadir values.
+        strict_missing (bool): If True, raise an error if expected variables are absent.
 
     Returns:
-        dict: A dictionary containing arrays of "latitude", "longitude", and optionally "beams".
+        dict[str, np.ndarray]: Dictionary of "latitude", "longitude", and optionally "beams" arrays.
     """
     if dataset.latitude_param is None:
         raise ValueError("dataset.latitude_param is required but None was provided")
@@ -451,21 +442,25 @@ def get_coordinates_from_file(
 
 
 def get_spatial_filter(
-    variable_dict: dict, this_area: Area, this_mask: Mask
+    variable_dict: dict, this_area: Area, this_mask: Mask | None
 ) -> tuple[dict, int, np.ndarray]:
     """
-    Get indicies of latitude and longitude arrays that are inside the CPOM Mask (if specified)
-    or Area.
+    Filter arrays to points inside CPOM Area bounds or Mask (if specified),
+    and convert lat/lon to x/y coordinates.
+
+    First clips to areas lat/lon bounds, then applies mask if specified or area mask if not.
 
     Args:
-        variable_dict (dict): Dictionary containing arrays of latitudes and longitudes.
-        this_area (Area): CPOM Area object.
-        this_mask (Mask): CPOM Mask object.
+        variable_dict (dict): Loaded arrays (must include: latitude, longitude).
+        this_area (Area): CPOM Area object for bounding-box and polygon filtering.
+        this_mask (Mask): CPOM Mask object for mask-based filtering. If None, the
+            area polygon is used instead.
 
     Returns:
-        tuple: Updated variable dictionary to include "x" and "y", the
-            number of points inside area/mask, and the bounded mask object.
-
+        tuple:
+            - variable_dict (dict[str, np.ndarray]): Updated variable_dict arrays filtered to mask.
+            - n_inside (int): Number of points inside the area/mask.
+            - valid_original_indices (np.ndarray): Surviving indices.
     """
     bounded_lat, bounded_lon, bounded_indices, n_bounded = this_area.inside_latlon_bounds(
         variable_dict["latitude"], variable_dict["longitude"]
@@ -500,22 +495,23 @@ def get_variables_and_mask(
     params: argparse.Namespace,
     offset: float,
     area_mask: np.ndarray,
-):
+) -> tuple[dict, np.ndarray] | tuple[None, None]:
     """
-    Get elevation, time, optional power/quality and additional variables from
-    an open netCDF or HDF5 file.
-    Returns a masked variable dictionary and combined area and finite (elevation/time/power) mask.
+    Reads elevation, time, optionally power, mode, uncertainty and any additional variables from
+    an open file. Derives an ascending/descending flag.
+    Applies the area_mask, adds the time offset to correct time. Builds a combined finite mask of
+    elevation, time and power and subsets all arrays.
+
     Args:
-        dataset (DatasetHelper): CPOM DatasetHelper object.
-        nc: Opened NetCDF/HDF5 handle for the current file.
-        variable_dict (dict): Must already contain latitude/longitude and derived x/y.
-        offset (float): Seconds to add to the raw time variable.
-        area_mask (np.ndarray): Boolean mask marking points inside the area/mask.
-        strict_missing (bool): Whether to raise an error if a required variable is missing.
+        dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        nc (netcdf Dataset or h5py.File): Opened file handle.
+        variable_dict (dict): Loaded arrays (must include: latitude, longitude, x, y).
+        offset (float): Seconds to add to raw time values to convert to standard epoch.
+        area_mask (np.ndarray): Boolean index array from get_spatial_filter.
     Returns:
-        tuple[dict, np.ndarray] | tuple[None, None]:
-            (updated variable_dict, combined_mask) when at least two valid points remain;
-            (None, None) when fewer than two points survive masking.
+        - variable_dict (dict[str, np.ndarray]): Updated variable_dict arrays.
+        - combined_mask (np.ndarray): Combined boolean mask of area_mask and
+            finite elevation/time/power or (None, None) if fewer than two valid points remain.
     """
     elevation_param = dataset.elevation_param
     if elevation_param is None:
@@ -579,16 +575,13 @@ def get_variables_and_mask(
 
 def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
     """
-    Convert latlon to x/y coordinates.
-
-    Get grid cell indices and offsets for each point.
+    Compute grid cell indices and cell offsets to the grid cell centre for each point.
 
     Args:
-        variable_dict (dict): Dictionary containing arrays of x and y coordinates.
+        variable_dict (dict): Loaded arrays (must include: x, y).
         this_grid (GridArea): CPOM GridArea object.
     Returns:
-        dict: Updated variable dictionary with
-        "x_bin", "y_bin", "x_cell_offset", and "y_cell_offset".
+        dict: Updated variable_dict arrays (adds: x_bin, y_bin, x_cell_offset, y_cell_offset).
     """
     variable_dict["x_bin"], variable_dict["y_bin"] = this_grid.get_col_row_from_x_y(
         variable_dict["x"], variable_dict["y"]
@@ -608,34 +601,33 @@ def process_file(
     offset: float,
     this_grid: GridArea,
     this_area: Area,
-    this_mask: Mask,
+    this_mask: Mask | None,
     params: argparse.Namespace,
 ) -> pl.LazyFrame | tuple[pl.LazyFrame | None, dict | None] | None:
     """
-    Extract and process data from a single altimetry file.
-    To be run in parallel called in get_data_and_status_multiprocessed.
+    Extract and grid data from a single altimetry file.
 
-    Steps:
-        1. Load coordinates (lat/lon, optional beams) from file
-        2. Apply spatial filtering (area/mask bounds, convert to x/y coordinates)
-        3. Load variables (elevation, time, power, quality) and build combined quality mask
-        4. Apply mask to all variables
-        5. Calculate grid cell positions and offsets
-        6. Cast variables to appropriate data types
-        7. Create Polars LazyFrame and apply elevation range filter
+    Runs a full per file pipeline:
+        1. Load coordinates
+        2. Spatial filter to area/mask and convert to x/y
+        3. Load variables, apply corrections and mask.
+        4. Compute grid cell positions.
+        5. Cast dtypes
+        6. Create Polars LazyFrame and apply elevation range filter.
 
     Args:
-        file_and_date (dict): Dictionary with 'path', 'year', 'month' keys
-        dataset (DatasetHelper): CPOM dataset object
-        offset (float): Time offset in seconds to apply to time data
-        this_grid (GridArea): CPOM grid area object
-        this_area (Area): CPOM area object
-        this_mask (Mask): Optional CPOM mask object (None uses area mask)
-        params (argparse.Namespace): Command Line Parameters
+        file_and_date (dict): File metadata (must include: 'path', 'year', 'month' keys)
+        dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        offset (float): Time offset in seconds to convert to standard epoch.
+        this_grid (GridArea): CPOM GridArea object
+        this_area (Area): CPOM Area object
+        this_mask (Mask):CPOM mask object, or None to use the area polygon.
+        params (argparse.Namespace): Command line arguments
 
     Returns:
-        pl.LazyFrame | tuple[pl.LazyFrame | None, dict | None] | None:
-            In debug mode, returns `(frame_or_none, stats)`; otherwise returns `frame` or `None`.
+        pl.LazyFrame | [pl.LazyFrame | None, dict | None] | None: Processed data frame,
+        or None if the file is rejected.
+        In debug mode returns a tuple of (frame or None, stats dict).
     """
     # Get filetype from search pattern
 
@@ -689,15 +681,16 @@ def process_file(
 
             # 3. Get variables and combined finite mask
             # 4. Apply mask to variables
-            variable_dict, mask = get_variables_and_mask(
+            tmp_variable_dict, mask = get_variables_and_mask(
                 dataset, nc, variable_dict, params, offset, area_mask
             )
-            if variable_dict is None:
+            if tmp_variable_dict is None or mask is None:
                 if params.debug:
                     if stats is not None:
                         stats["file_reject_reason"] = "too_few_points_after_finite_mask"
                     return None, stats
                 return None
+            variable_dict = tmp_variable_dict
 
             if (
                 dataset.default_elev_correction is not None
@@ -794,20 +787,23 @@ def process_file(
 
 
 # --------------------------------------#
-# File Writing Helpers   #
+# File Writing Helpers                  #
 # --------------------------------------#
 
 
-def _group_periods(file_and_dates, use_month):
+def _group_periods(
+    file_and_dates: np.ndarray, use_month: bool
+) -> Generator[tuple[str, np.ndarray], None, None]:
     """
-    Group files by processing period (year/month or just year).
+    Group files by processing period and yield each period's label and file subset.
 
     Args:
-        file_and_dates (np.ndarray): Structured array with year/month data
+        file_and_dates (np.ndarray): Structured array of file paths and date information.
         use_month (bool): If True, group by year/month. If False, group by year only.
 
     Yields:
-        tuple: (period_label, files_in_period)
+        tuple[str, np.ndarray]: Period label (e.g. "2020" or "2020-03") and
+            the subset of file_and_dates for that period.
     """
     if use_month:
         # Group by year/month pairs
@@ -828,21 +824,24 @@ def _group_periods(file_and_dates, use_month):
 
 
 def write_partitions_to_disk(
-    final_df,
-    partition_columns,
-    partition_xy_chunking,
-    out_dir,
-    writer_cache=None,
+    final_df: pl.DataFrame,
+    partition_columns: list[str],
+    partition_xy_chunking: int,
+    out_dir: str,
+    writer_cache: dict[str, pq.ParquetWriter] | None = None,
 ):
     """
-    Write altimetry data to disk.
-    Partitioned by ('year', 'month', 'x_part', 'y_part') or ('year', 'x_part', 'y_part')
+    Write a DataFrame to disk as hive-partitioned Parquet files.
+
+    Computes x_part and y_part from x_bin and y_bin. Reuses open ParquetWriters to
+    avoid opening and closing files repeatedly during streaming writes.
+
     Args:
         final_df (DataFrame | LazyFrame): The data to write.
         partition_columns (list): List of columns to partition by.
-        partition_xy_chunking (int): Chunking factor for spatial partitioning.
-        out_dir (str): Full path to the output directory.
-        writer_cache (dict | None): Cache of open ParquetWriters keyed by output path.
+        partition_xy_chunking (int): Divisor applied to x_bin/y_bin to get x_part/y_part.
+        out_dir (str): Output directory path.
+        writer_cache (dict | None): Open ParquetWriters.
 
     Returns:
         int: Total number of rows written to disk.
@@ -862,9 +861,10 @@ def write_partitions_to_disk(
     for key, group in final_df.partition_by(
         partition_columns, as_dict=True, maintain_order=False
     ).items():
+        key_tuple = key if isinstance(key, tuple) else (key,)
         subdir = os.path.join(
             out_dir,
-            *[f"{col}={val}" for col, val in zip(partition_columns, key)],
+            *[f"{col}={val}" for col, val in zip(partition_columns, key_tuple)],
         )
         outfile = os.path.join(subdir, "data.parquet")
 
@@ -886,29 +886,26 @@ def write_partitions_to_disk(
 
 
 def get_data_and_status_multiprocessed(
-    params, file_and_dates: np.ndarray, worker, logger
-):  # pylint: disable=too-many-arguments
+    params: argparse.Namespace, file_and_dates: np.ndarray, worker: partial, logger: logging.Logger
+) -> dict[str, Any]:  # pylint: disable=too-many-arguments
     """
-    Extract and process data from altimetry netcdf or hdf5 files
-    in parallel and write the results to disk as a partitioned parquet file.
+    Process altimetry files in parallel and write results to partitioned Parquet files.
 
-    Uses multiprocessing and writes on year of data at a time.
-
-    Calls:
-        process_file: Function to process a single file.
-        write_partitions_to_disk: Function to write processed data to disk.
+    Iterates over periods (years or year/months), submits files to a process pool,
+    collects LazyFrames into a buffer, and flushes to disk every flush_every files.
+    Returns a status dictionary with per-period and total ingestion counts.
 
     Args:
-        params (argparse.Namespace): Command line parameters
-        file_and_dates (np.ndarray): Structured numpy array of file paths and date information.
+        params (argparse.Namespace): Command line parameters.
+        file_and_dates (np.ndarray): Structured array of file paths and date information.
         worker (partial): Partial function for processing files.
-        logger (Logger): Logger object.
+        logger (logging.Logger): Logger object.
 
     Returns:
         dict: Processing status dictionary, containing information about the files processed.
     """
 
-    status: dict = {
+    status: dict[str, Any] = {
         "empty_periods": [],
         "years_ingested": [],
         "years_files_ingested": [],
@@ -932,11 +929,12 @@ def get_data_and_status_multiprocessed(
                 try:
                     for result in executor.map(worker, files_in_period, chunksize=chunksize):
 
-                        frame, file_stats = (
-                            result
-                            if isinstance(result, tuple) and len(result) == 2
-                            else (result, None)
-                        )
+                        frame: pl.LazyFrame | None
+                        file_stats: dict[str, Any] | None
+                        if isinstance(result, tuple) and len(result) == 2:
+                            frame, file_stats = result
+                        else:
+                            frame, file_stats = result, None
 
                         if params.debug and file_stats and isinstance(file_stats, dict):
                             _log_file_stats(logger, file_stats)
@@ -1013,21 +1011,18 @@ def get_metadata_json(
     start_time: float,
 ) -> None:
     """
-    Create and save metadata.json to the output directory.
-    Metadata includes:
-        - Command line parameters
-        - Dataset parameters
-        - Processing status
-        - Grid details
-        - Execution time
+    Write processing metadata to a JSON file.
+
+    Merges command line parameters, dataset attributes, processing status and grid
+    details into a single dict, appends the elapsed processing time, and writes it
+    via write_metadata.
 
     Args:
-        params (argparse.Namespace): Command line parameters
-        dataset (dict): Dataset configuration
-        config (dict): Gridding configuration
-        status (dict): Processing status dictionary
-        thisgrid (GridArea): CPOM GridArea object
-        start_time (float): Processing start time
+        params (argparse.Namespace): Command line parameters.
+        dataset (DatasetHelper): CPOM DatasetHelper object.
+        status (dict): Processing status dictionary.
+        thisgrid (GridArea): CPOM GridArea object.
+        start_time (float): Processing start time.
     """
     # get dict from command line parameters
     ds_dict = vars(dataset)
@@ -1066,50 +1061,51 @@ def get_metadata_json(
 # --------------------------------------#
 
 
-def grid_for_elev_change(args):
+def grid_for_elev_change(args: list[str]) -> None:
     """
-    Main function to grid altimetry data for elevation change processing.
+    Main entry point to grid altimetry data for elevation change processing.
 
-    1. Load command line arguments
-    2. Load DatasetHelper object - From a dataset YAML file or inline JSON string
-    3. Clean output directory if it is populated
-    4. Set up processing objects
-    5. Process each year of data and write to Parquet files
-    6. Write metadata JSON file with gridding details
+    Loads the dataset from a YAML file or inline JSON string, clears the output
+    directory, processes all files in parallel, and writes metadata on completion.
+
+    Args:
+        args (list[str]): Command line arguments, e.g. sys.argv[1:].
     """
     # ------------------------------#
     # 1.Load command line arguments#
     # ------------------------------#
-    args = parse_arguments(args)
+    parsed_args = parse_arguments(args)
 
     start_time = time.time()
     # ------------------------------#
     # 2. Load Dataset Object
     # ------------------------------#
-    dataset_path = Path(args.dataset)
+    dataset_path = Path(parsed_args.dataset)
     if dataset_path.exists() and dataset_path.suffix in [".yml", ".yaml"]:
         # Method 1: Load from YAML file
-        dataset = DatasetHelper(data_dir=args.data_input_dir, dataset_yaml=args.dataset)
+        dataset = DatasetHelper(
+            data_dir=parsed_args.data_input_dir, dataset_yaml=parsed_args.dataset
+        )
     else:
         # Method 2: Treat as JSON string (inline config)
         try:
-            dataset_config = json.loads(args.dataset)
-            dataset = DatasetHelper(data_dir=args.data_input_dir, **dataset_config)
+            dataset_config = json.loads(parsed_args.dataset)
+            dataset = DatasetHelper(data_dir=parsed_args.data_input_dir, **dataset_config)
         except json.JSONDecodeError:
             sys.exit(
-                f"Invalid dataset configuration: {args.dataset}. "
+                f"Invalid dataset configuration: {parsed_args.dataset}. "
                 f"Must be either a path to a YAML file or a valid JSON string"
             )
 
-    clean_directory(args, dataset, confirm_regrid=not args.force_regrid)
+    clean_directory(parsed_args, dataset, confirm_regrid=not parsed_args.force_regrid)
 
-    file_and_dates, worker, thisgrid, logger = get_processing_objects(args, dataset)
+    file_and_dates, worker, thisgrid, logger = get_processing_objects(parsed_args, dataset)
 
     # --------------------------------------------------------#
     # 5. Process each year of data and write to Parquet files #
     # --------------------------------------------------------#
     status = get_data_and_status_multiprocessed(
-        params=args,
+        params=parsed_args,
         file_and_dates=file_and_dates,
         worker=worker,
         logger=logger,
@@ -1118,7 +1114,7 @@ def grid_for_elev_change(args):
     # --------------------------------------------------#
     # 6. Write metadata JSON file with gridding details #
     # --------------------------------------------------#
-    get_metadata_json(args, dataset, status, thisgrid, start_time)
+    get_metadata_json(parsed_args, dataset, status, thisgrid, start_time)
 
 
 if __name__ == "__main__":

@@ -3,12 +3,13 @@ cpom.altimetry.tools.sec_tools.epoch_average_plots
 
 Purpose:
     Generate spatial plots of epoch-averaged elevation data from epoch_average.py output.
-    Creates scatter plots showing elevation values across ice sheet regions or basins,
-    with optional glacier boundary overlays from shapefiles.
+    Supports both ice-sheet-wide polar plots and per-basin scatter plots, with optional
+    glacier boundary overlays from shapefiles.
 
-Output:
-    - Basin plots: <out_dir>/<basin>/area_plots/<dh_column>_<basin>_epoch_{id}_{start}_to_{end}.png
-    - Ice sheet plots: <out_dir>/plots/<dh_column>_epoch_{id}_{start}_to_{end}.png
+    - Ice-sheet-wide: single Polarplot per period (--basin_structure False).
+         <out_dir>/<basin>/area_plots/<dh_column>_<basin>_epoch_{id}_{start}_to_{end}.png
+    - Basin-level: scatter plot per basin per period (--basin_structure True).
+        <out_dir>/plots/<dh_column>_epoch_{id}_{start}_to_{end}.png
 """
 
 import argparse
@@ -40,16 +41,7 @@ from cpom.masks.masks import Mask
 
 
 def parse_arguments(params: list[str]) -> argparse.Namespace:
-    """
-    Parse command line arguments for epoch average plotting.
-
-    params:
-        params: List of command-line arguments.
-
-    Returns:
-        argparse.Namespace: Parsed command line arguments including mask name,
-                            input/output directories, and region selection.
-    """
+    """Parse command-line arguments for epoch-average plotting."""
     parser = argparse.ArgumentParser(
         description="Generate plots from epoch-averaged parquet files."
     )
@@ -61,23 +53,18 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
         required=False,
         help="Input algorithm step to source metadata from",
     )
-    parser.add_argument(
-        "--in_dir",
-        type=str,
-        required=True,
-        help="Path to the directory containing dhdt.parquet file.",
-    )
+    parser.add_argument("--in_dir", type=str, required=True, help="Input data directory")
     parser.add_argument(
         "--out_dir",
         type=str,
         required=True,
-        help="Path to the output directory for plots.",
+        help="Output directory Path",
     )
     parser.add_argument(
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="Glob pattern to parquet files in in_dir",
+        help="Glob pattern for selecting input files relative to --in_dir.",
     )
     # Plotting Arguments
     parser.add_argument(
@@ -85,41 +72,35 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
         nargs=2,
         type=float,
         default=[-1.0, 1.0],
-        help="Plot range for dhdt [min max], default: -1.0 1.0",
+        help="Colour scale limits for elevation change values [min max]. Default: -1.0 1.0.",
     )
     parser.add_argument(
-        "--shapefile", type=str, help="Path to the shapefile to use for clipping", required=False
+        "--shapefile",
+        type=str,
+        help="Path to a shapefile for glacier boundary overlays.",
     )
     parser.add_argument(
         "--shp_file_column",
         type=str,
-        help="Column name in the shapefile to select basin",
-        required=False,
+        help="Path to a shapefile for glacier boundary overlays.",
     )
     parser.add_argument(
         "--mask",
         type=str,
-        required=False,
-        help="CPOM mask name to load shapefile boundaries.",
+        help="CPOM Mask class name for predefined shapefile boundaries.",
     )
     # Columns to use
     parser.add_argument(
         "--epoch_plotting_column",
         type=str,
         default="epoch_number",
-        help="Column name to use for epoch identification in plots (default: epoch_number).",
+        help="Column name used to identify epochs in plots.",
     )
     parser.add_argument(
         "--plotting_column",
         type=str,
         default="dh_ave",
-        help="Column name to use for elevation change values in basin plots (default: dh_ave).",
-    )
-    parser.add_argument(
-        "--dh_column",
-        type=str,
-        default="dh_ave",
-        help="Column name to use for elevation change values in ice sheet plots (default: dh_ave).",
+        help="Column name for dh values to plot.",
     )
     parser.add_argument(
         "--debug",
@@ -129,22 +110,19 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
     # Optional grid metadata overrides
     parser.add_argument(
         "--area",
-        help="Name of the area to plot. If not provided, will be read from metadata JSON.",
-        required=False,
         default=None,
+        help="Name of the area to plot.  Grid metadata fallback",
     )
     parser.add_argument(
         "--gridarea",
-        help="Grid area name. If not provided, will be read from metadata JSON.",
-        required=False,
         default=None,
+        help="Grid area name. Grid metadata fallback",
     )
     parser.add_argument(
         "--binsize",
         type=float,
-        help="Grid bin size. If not provided, will be read from metadata JSON.",
-        required=False,
         default=None,
+        help="Grid bin size. Grid metadata fallback",
     )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
@@ -157,7 +135,7 @@ def parse_arguments(params: list[str]) -> argparse.Namespace:
 def _load_grid_params(
     params: argparse.Namespace, basin_name: str | None, logger: logging.Logger
 ) -> dict:
-    """Load gridarea, binsize (and optionally area) from metadata."""
+    """Load gridarea and binsize (plus area for root-level runs) from metadata."""
     keys = ["gridarea", "binsize"] if basin_name is not None else ["gridarea", "binsize", "area"]
     return get_metadata_params(
         params, keys, algo_name="grid_for_elev_change", basin_name=basin_name, logger=logger
@@ -165,6 +143,7 @@ def _load_grid_params(
 
 
 def _iter_epochs(data: pl.DataFrame, epoch_col: str) -> list:
+    """Return a sorted list of unique epoch identifiers from the dataset."""
     return sorted(data.select(pl.col(epoch_col)).unique().to_series().to_list())
 
 
@@ -175,22 +154,18 @@ def get_data(
     sub_basin: str | None = None,
 ) -> pl.LazyFrame:
     """
-    Load epoch-averaged data from parquet and append projected coordinates.
+    Load epoch-averaged data and append projected coordinates.
 
     For basin data: appends projected x/y columns (metres).
     For root data: appends latitude/longitude columns.
+    Data is filtered to plot_range before coordinates are appended.
 
     Args:
         params (argparse.Namespace): Command line arguments.
-            Includes:
-            - in_dir (str): Input directory containing dhdt.parquet file(s)
-            - parquet_glob (str): Parquet file glob pattern
         this_grid_area (GridArea): Grid area object for coordinate conversion
-        sub_basin (str, optional): Basin path to load data from.
-            If None or "None", loads from root directory. Defaults to None.
-
+        sub_basin (str | None): Basin subdirectory to load, or None for root-level data.
     Returns:
-        pl.LazyFrame: Loaded data with appended coordinate columns.
+        pl.LazyFrame: Input data with coordinate columns appended.
     """
     if sub_basin is not None and sub_basin != "None":
         path = Path(params.in_dir) / sub_basin / params.parquet_glob
@@ -205,7 +180,7 @@ def get_data(
 
         # Apply plot range
         epoch_data = epoch_data.filter(
-            pl.col(params.plotting_column).is_between(params.plot_range[0], params.plot_range[1])
+            pl.col(params.dh_column).is_between(params.plot_range[0], params.plot_range[1])
         )
 
         # Convert grid coordinates to x/y
@@ -236,11 +211,15 @@ def get_data(
 
 def get_shapefile(params: argparse.Namespace, logger: logging.Logger | None = None):
     """
-    Load the shapefile for basin plots
+    Load a shapefile for glacier boundary overlays.
 
-    params:
-        params (argparse.Namespace): Includes shapefile and shp_file_column or a
-        mask name to load predefined shapefile from masks.
+    Attempts to load from a CPOM Mask class (--mask) or an explicit path
+    (--shapefile + --shp_file_column). Returns (None, None) if neither is
+    provided or if loading fails.
+
+    Args:
+        params (argparse.Namespace): Command line arguments (uses mask, shapefile, shp_file_column).
+        logger (logging.Logger): Logger object
 
     Returns:
         gpd.GeoDataFrame: (GeoDataFrame, column_name) or (None, None) if unavailable.
@@ -276,14 +255,15 @@ def get_shapefile(params: argparse.Namespace, logger: logging.Logger | None = No
 
 def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     """
-    Plot the epoch-averaged time series for `dh_column`.
-    Computes mean, median, and standard error per epoch midpoint, then plots
-    each series shifted to start at zero.
+    Plot the epoch-averaged elevation change time series.
+    Computes mean, median, and standard error per epoch midpoint, shifts each
+    series to start at zero, and saves a single figure with all three overlaid.
 
     Args:
         params (argparse.Namespace): Command line arguments.
         data (pl.DataFrame): Input data with `epoch_midpoint_dt` and `dh_column`.
         out_path (Path): Output path for saving the plot.
+
     """
     out_path = Path(out_path)
 
@@ -372,12 +352,21 @@ def plot_basins(
     logger: logging.Logger,
 ) -> dict[str, str]:
     """
-    Generate scatter plots of dh/dt for each basin and time period.
-    Output files: <out_dir>/<basin>/area_plots/<basin>_dhdt_period_{id}_{start}-{end}.png
+    Generate per-epoch scatter plots and a time series for each basin.
+    For each basin, produces one scatter plot per epoch and a single time series
+        plot. Basins with no data are skipped. An optional glacier boundary overlay
+        is applied if a shapefile is available.
 
-    params:
+    Args:
         params (argparse.Namespace): Command line arguments.
-        sub_basins_to_process (list[str]): Basin name to process.
+        sub_basins_to_process (list[str]): List of basin subdirectory paths to plot.
+        logger: Logger object.
+
+    Returns:
+        dict[str, str]: Map of basin name to elapsed processing time string.
+
+    Output:
+        <out_dir>/<basin>/area_plots/<dh_column>_<basin>_epoch_{id}_{start}_to_{end}.png
     """
 
     shp, selector = get_shapefile(params, logger=logger)
@@ -413,7 +402,7 @@ def plot_basins(
             scatter = ax.scatter(
                 epoch_data["x"].to_numpy(),
                 epoch_data["y"].to_numpy(),
-                c=epoch_data[params.plotting_column].to_numpy(),
+                c=epoch_data[params.dh_column].to_numpy(),
                 cmap="coolwarm",
                 vmin=params.plot_range[0],
                 vmax=params.plot_range[1],
@@ -449,12 +438,14 @@ def plot_basins(
 
 def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
     """
-    Generate ice sheet-wide polar plots and a time series for each epoch.
-    Output files: <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+    Generate ice-sheet-wide Polarplots and a time series for each epoch.
 
-    params:
+    Args:
         params (argparse.Namespace): Command line arguments.
         logger (Logger): Logger object
+
+    Output:
+        <out_dir>/plots/<dh_column>_epoch_{id}_{start}-{end}.png
     """
 
     grid_params = _load_grid_params(params, None, logger)
@@ -504,13 +495,14 @@ def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
 
 def epoch_average_plots(params):
     """
-    Epoch Average plotting script.
-    1. Parses arguments.
-    2. Routes to basin or ice sheet plotting.
-    3. Writes metadata for each output target.
+    Main entry point for epoch-average plotting.
 
-    params:
-        params (list): Command line arguments
+    Parses arguments, then either:
+    - Plots the full ice sheet (--basin_structure False), or
+    - Plots each sub-basin individually (--basin_structure True)
+
+    Args:
+        args (list[str]): Arguments.
     """
 
     params = parse_arguments(params)

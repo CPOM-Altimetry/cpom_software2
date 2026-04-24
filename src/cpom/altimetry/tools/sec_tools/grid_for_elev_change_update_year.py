@@ -39,34 +39,23 @@ log = logging.getLogger(__name__)
 
 
 def parse_arguments(args):
-    """
-    Parse command line arguments for updating an altimetry grid.
-
-    Return:
-        parser.parse_args(args)
-    """
-
+    """Parse command line arguments for updating an altimetry grid."""
     parser = argparse.ArgumentParser(
         description=("Update a single year of gridded elevation change data ")
     )
+    # I/O Arguments
     parser.add_argument(
         "--in_step",
-        help="Input algorithm step to source metadata from",
         type=str,
         required=False,
         default="grid_for_elev_change",
+        help="Input algorithm step to source metadata from",
     )
     parser.add_argument(
         "--in_dir",
         type=str,
-        required=False,
-        help="Directory containing the existing grid metadata file.",
-    )
-    parser.add_argument(
-        "--in_meta",
-        type=str,
-        required=False,
-        help="Explicit metadata JSON path or directory containing <in_step>_meta.json.",
+        required=True,
+        help="Input data directory (grid_for_elev_change output directory)",
     )
     parser.add_argument(
         "--update_year",
@@ -81,12 +70,6 @@ def parse_arguments(args):
         help="Maximum worker processes for multiprocessing.",
     )
     parser.add_argument(
-        "--hive_mode",
-        action="store_true",
-        help="Writes partitions slower, "
-        "but lower memory footprint. May be needed for antarctica is2",
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
@@ -94,22 +77,28 @@ def parse_arguments(args):
     return parser.parse_args(args)
 
 
-def get_set_up_objects(args):
+def get_set_up_objects(params):
     """
-    Reconstruct command line argumets from grid metadata JSON file.
-    Reconstruct DatasetHelper, GridArea, Area and Mask objects.
-    Validates if the output directory exists.
+    Reconstruct processing objects from an existing grid metadata file.
+
+    Reads grid metadata, merges stored parameters into arguments and constructs
+    DatasetHelper, GridArea, Area and Mask objects.
 
     Args:
-        args (Argparse.Namespace): Parsed command line arguments.
+        params (argparse.Namespace): Command line parameters.
 
     Returns:
-        tuple: Contains the dataset, grid, area, mask and grid metadata.
+        tuple:
+            - dataset (DatasetHelper): Dataset helper for the mission.
+            - thisgrid (GridArea): Grid definition for the target area.
+            - thisarea (Area): Area definition for spatial filtering.
+            - thismask (Mask): Mask used during gridding.
+            - grid_meta (dict): Metadata dictionary loaded from grid_meta.json.
     """
-    grid_meta = get_metadata_params(args, "all", "grid_for_elev_change")
+    grid_meta = get_metadata_params(params, "all", "grid_for_elev_change")
 
     for key, value in grid_meta.items():
-        args.__setattr__(key, value)
+        params.__setattr__(key, value)
 
     # Construct dataset object
     dataset = DatasetHelper(
@@ -134,21 +123,23 @@ def get_set_up_objects(args):
     return dataset, thisgrid, thisarea, thismask, grid_meta
 
 
-def update_metadata_json(grid_meta, args, status, logger):
+def update_metadata_json(params, grid_meta, status, logger):
     """
-    Update the metadata JSON file with the new status information.
-    for the year that has been reprocessed.
+    Update grid metadata with ingestion counts for the reprocessed year.
+    Append the year if new, or replaces counts for a reprocessed year.
 
     Args:
-        grid_meta (dict): The original grid metadata.
-        status (dict): The new status information to update.
+        params (argparse.Namespace): Command line parameters.
+        grid_meta (dict): Metadata dictionary from get_set_up_objects, modified in place.
+        status (dict): Ingestion counts.
+        logger (logging.Logger): Logger for logging messages.
     """
 
     new_year_file_ingested = status["years_files_ingested"][0]
     new_year_file_rejected = status["years_files_rejected"][0]
     new_year_rows_ingested = status["years_rows_ingested"][0]
 
-    year_label = str(args.update_year)
+    year_label = str(params.update_year)
     existing_year_labels = [str(y) for y in grid_meta["years_ingested"]]
 
     if year_label not in existing_year_labels:
@@ -186,7 +177,7 @@ def update_metadata_json(grid_meta, args, status, logger):
         grid_meta["total_rows_ingested"] = grid_meta["total_rows_ingested"] + (
             new_year_rows_ingested - old_year_rows_ingested
         )
-    metadata_path = get_metadata_path(args, basin_name=None, logger=logger)
+    metadata_path = get_metadata_path(params, basin_name=None, logger=logger)
     if metadata_path is None:
         raise ValueError("Could not resolve metadata path for updating grid metadata.")
 
@@ -223,14 +214,13 @@ def grid_for_elev_change_update_year(
     args,
 ):
     """
-    Main function to parse arguments and initiate the year update process.
-        1. Parse command line arguments.
-        2. Set up logging.
-        3. Get dataset, area and grid objects
-        4. Get files/ dates from the filename in the year to update
-        5. Get offset from the dataset
-        6. Process year of data and write to Parquet files
-        7. Update the metadata JSON file with the new year data
+    Main entry point for updating a year of gridded elevation change data.
+
+    Reconstruct grid_for_elev_change processing object using metadata, reprocess files for a
+    specified year, overwrite parquet partitions for that year and update metadata counts.
+
+    Args:
+        args (list): Command line arguments.
     """
     args = parse_arguments(args)
 
@@ -280,7 +270,7 @@ def grid_for_elev_change_update_year(
     # -----------------------------------------------------------------------
     # 5. Update the metadata JSON file with the new year data
     # -----------------------------------------------------------------------
-    update_metadata_json(grid_meta, args, status, logger)
+    update_metadata_json(args, grid_meta, status, logger)
 
 
 log = logging.getLogger(__name__)

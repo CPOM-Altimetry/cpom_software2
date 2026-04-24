@@ -1,14 +1,19 @@
 """
 cpom.altimetry.tools.sec_tools.metadata_helper
 
-Module with utilities for loading and managing metadata across SEC algorithms.
-Metadata is stored in JSON files using an "entry-store" format:
-{
-    "algo1_20260414T1200": {param1: val1, param2: val2, ...},
-    "algo2_20260414T1300": {param1: val1, ...},
-}
+Purpose:
+    Utilities for loading, resolving and writing metadata for SEC algorithms.
+
+    Metadata is stored as JSON entry stores, where each key identifies an algorithm run
+by name and UTC timestamp, and each value holds the parameters used for that run:
+
+    {
+        "algo1_20260414T1200": {"param1": val1, "param2": val2, ...},
+        "algo2_20260414T1300": {"param1": val1, ...},
+    }
 """
 
+import argparse
 import json
 import logging
 import time
@@ -18,7 +23,13 @@ from typing import Any
 
 
 def elapsed(t0: float) -> str:
-    """Return elapsed time since t0 as HH:MM:SS."""
+    """
+    Format elapsed time since t0 as HH:MM:SS.
+    Args:
+        t0 (float): Start time in seconds.
+    Returns:
+        str: Elapsed time formatted as "HH:MM:SS".
+    """
     h, rem = divmod(int(time.time() - t0), 3600)
     m, s = divmod(rem, 60)
     return f"{h:02}:{m:02}:{s:02}"
@@ -27,7 +38,7 @@ def elapsed(t0: float) -> str:
 # --------------------------------
 # Track metadata sourced fields #
 # --------------------------------
-def _add_sourced_field(params, field: str) -> None:
+def _add_sourced_field(params: argparse.Namespace, field: str) -> None:
     """Track fields sourced from upstream metadata."""
     sourced: set[str] = set(getattr(params, "_grid_sourced_fields", set()))
     setattr(params, "_grid_sourced_fields", sourced | {field})
@@ -37,51 +48,34 @@ def _add_sourced_field(params, field: str) -> None:
 # Path resolution
 # ------------------
 def get_metadata_path(
-    params,
+    params: argparse.Namespace,
     basin_name: str | None,
     logger: logging.Logger | None = None,
 ) -> str | None:
     """
-    Resolve metadata file path with priority:
-        1. Explicit metadata path (metadata_path)
-        2. <in_dir>/<in_step>_meta.json
-        3. in_dir/<basin_name>/<in_step>_meta.json (if basin_structure=True)
+    Resolve the metadata file path from params.
+        For root data : <in_dir>/<in_step>_meta.json
+        For basin data : <in_dir>/<basin_name>/<in_step>_meta.json
 
     Args:
-        params: Algorithm command line arguments.
-        basin_name: Name of the basin for basin-structured metadata lookup.
+        params (argparse.Namespace): Command line parameters
+            (includes: in_dir, in_step, basin_structure).
+        basin_name (str | None):  Basin subdirectory name, inserted into the path
+            when params.basin_structure is True.
+        logger (logging.Logger | None): Logger Object
 
     Returns:
         str | None: Resolved metadata path, or None.
     """
 
     in_dir = getattr(params, "in_dir", None)
-    in_meta = getattr(params, "in_meta", None)
     in_step = getattr(params, "in_step", None)
-
-    if in_meta is not None:
-        in_meta_path = Path(in_meta)
-        if in_meta_path.suffix == ".json":
-            if logger:
-                logger.info("Using explicit metadata path '%s'", in_meta_path)
-            return str(in_meta_path)
-        if in_step is not None:
-            filename = f"{in_step}_meta.json"
-            if getattr(params, "basin_structure", False) and basin_name:
-                basin_meta_path = in_meta_path / basin_name / filename
-                if logger:
-                    logger.info("Using explicit basin metadata path '%s'", basin_meta_path)
-                return str(basin_meta_path)
-            root_meta_path = in_meta_path / filename
-            if logger:
-                logger.info("Using explicit root metadata path '%s'", root_meta_path)
-            return str(root_meta_path)
 
     if in_dir is None or in_step is None:
         return None
 
     base_path = Path(in_dir)
-    filename = in_meta or f"{in_step}_meta.json"
+    filename = f"{in_step}_meta.json"
 
     # Attempt to derive metadata path from in_dir and in_step
     if getattr(params, "basin_structure", False) and basin_name:
@@ -102,7 +96,7 @@ def get_algo_name(script_path: str | Path) -> str:
     Args:
         script_path (str | Path): Path to the script file (e.g., '/path/to/clip_to_basins.py').
     Returns:
-        str: The stem of the path (filename without extension), e.g., 'clip_to_basins'.
+        str: Filename stem without extension (e.g., 'clip_to_basins').
     """
     return Path(script_path).stem
 
@@ -118,7 +112,8 @@ def _entry_sort_key(entry_key: str) -> tuple[int, float | str]:
     with most recent timestamps first.
 
     Returns:
-        tuple: (priority, sort_value) where priority=1 for timestamped entries.
+        tuple[int, float | str]: (1, -unix_timestamp) for timestamped entries,
+            (0, entry_key) otherwise.
     """
     try:
         _, timestamp = entry_key.rsplit("_", 1)
@@ -130,14 +125,12 @@ def _entry_sort_key(entry_key: str) -> tuple[int, float | str]:
 
 def _get_latest_entry(entry_store: dict[str, Any], algo_name: str) -> dict[str, Any]:
     """
-    Extract the latest metadata entry for a given algorithm.
+    Get the latest metadata entry for a given algorithm.
     Args:
-        entry_store: Full metadata entry store.
-        algo_name: Algorithm name to filter by.
+        entry_store (dict[str, Any]): Full metadata entry store.
+        algo_name (str): Algorithm prefix to filter by.
     Returns:
-        dict: The latest entry for this algorithm.
-    Raises:
-        KeyError: If no matching entries found.
+        dict[str, Any]: Parameter dict from the latest matching entry.
     """
     matching_keys = [k for k in entry_store if k.startswith(f"{algo_name}_")]
     if not matching_keys:
@@ -157,21 +150,18 @@ def get_metadata(
     logger: logging.Logger | None = None,
 ) -> dict[str, Any]:
     """
-    Load and optionally filter metadata from a JSON file.
+    Load metadata from a JSON entry store, optionally filtering to a single algorithm.
 
     Args:
-        metadata_path (str | Path | None): Explicit metadata file path.
-        params: Algorithm command line arguments.
+        params: Algorithm command line parameters.
         basin_name (str | None): Basin name.
-        algo_name (str | None): If provided, returns only the latest entry for this algorithm.
+        algo_name (str | None): If provided, returns only the latest entry for this
+            algorithm. If None, the full entry store is returned.
         logger (logging.Logger | None): Logger Object
-    Returns:
-        dict: Full entry store (if algo_name=None) or single filtered entry.
 
-    Raises:
-        ValueError: If no metadata path resolved, or format is invalid.
-        TypeError: If JSON is not a dict.
-        KeyError: If algo_name provided but no matching entries found.
+    Returns:
+        dict[str, Any]: Full entry store if algo_name is None, otherwise the parameter
+            dict for the latest matching entry.
     """
 
     resolved_path = get_metadata_path(
@@ -223,20 +213,21 @@ def get_metadata_params(
     logger: logging.Logger | None = None,
 ) -> dict[str, Any]:
     """
-    Load variables from metadata or from command line parameters.
+    Resolve parameter values from command-line arguments, falling back to metadata.
 
-    Priority: params attributes > metadata > raises ValueError.
+    For each requested field, params attributes take precedence over metadata values.
+    Fields sourced from metadata are tracked via _add_sourced_field so they can be
+    excluded from output metadata.
 
     Args:
-        params: Algorithm command line arguments.
+        params: Algorithm command line parameters.
         fields (list[str] | str): Field names to retrieve or 'all' to retrieve all fields.
-        basin_name (str | None): Basin name.
         algo_name (str, optional): Algorithm name to lookup. Defaults to "grid_for_elev_change".
+        basin_name (str | None): Basin name.
+        logger (logging.Logger | None): Logger Object.
 
     Returns:
-        dict[str, Any]: Resolved parameters {field: value}.
-    Raises:
-        ValueError: If a required field is missing from both metadata and params.
+        dict[str, Any]: Resolved field values keyed by field name.
     """
     try:
         grid_meta = get_metadata(
@@ -283,17 +274,18 @@ def write_metadata(
     logger: logging.Logger | None = None,
 ) -> None:
     """
-    Write metadata to a JSON file in entry-store format.
-    Creates <out_meta_path>/<algo_name>_meta.json with a timestamped entry.
-    Excludes fields sourced from upstream metadata.
-    Merges with existing upstream metadata if available.
+    Write a timestamped metadata entry to <out_meta_path>/<algo_name>_meta.json.
+    If upstream metadata exists, it is merged into the output file.
+    Fields sourced from upstream metadata (tracked via _add_sourced_field) are excluded from the
+    new entry to avoid re-propagating inherited values.
 
     Args:
-        params: Algorithm command line arguments.
+        params: Algorithm command line parameters.
         algo_name (str): Algorithm name for entry key and filename.
         out_meta_path (str | Path): Output directory for metadata JSON file.
         metadata (dict[str, Any]): Metadata content to write.
         basin_name (str | None): Basin name.
+        logger (logging.Logger | None): Logger Object.
     """
 
     # Build output path and timestamped entry key

@@ -2,14 +2,14 @@
 cpom.altimetry.tools.sec_tools.dhdt_plots
 
 Purpose:
-    Generate spatial plots of dh/dt (elevation change rate) data from calculate_dhdt.py output.
+    Generate spatial plots of dh/dt from calculate_dhdt output.
+    Supports both ice-sheet-wide and per-basin plots, with optional glacier boundary
+    overlays from shapefiles.
 
-    Creates scatter plots showing elevation change rates across ice sheet regions or basins,
-    with optional glacier boundary overlays from shapefiles.
-
-Output:
-    - Basin plots: Saved to <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
-    - Ice sheet plots: Saved to <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+    - Ice-sheet-wide: single Polarplot per period (--basin_structure False).
+        <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+    - Basin-level: scatter plot per basin per period (--basin_structure True).
+        <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
 """
 
 import argparse
@@ -44,14 +44,7 @@ from cpom.logging_funcs.logging import set_loggers
 
 
 def parse_arguments(args):
-    """
-    Parse command line arguments for dhdt plotting script.
-    Args:
-        args (list): Command line arguments
-    Returns:
-        argparse.Namespace: Parsed arguments
-    """
-
+    """Parse command-line arguments for dh/dt plotting."""
     parser = argparse.ArgumentParser(
         description="Generate plots from dhdt.parquet files produced by calculate_dhdt.py"
     )
@@ -63,81 +56,75 @@ def parse_arguments(args):
         required=False,
         help="Input algorithm step to source metadata from",
     )
-    parser.add_argument(
-        "--in_dir",
-        required=True,
-        help="Path to the directory containing dhdt.parquet file.",
-    )
+    parser.add_argument("--in_dir", required=True, help="Input data directory")
     parser.add_argument(
         "--out_dir",
         required=True,
-        help="Path to the output directory for plots.",
+        help="Output directory Path",
     )
     parser.add_argument(
         "--parquet_glob",
         type=str,
         required=True,
-        help="Glob pattern to match parquet files in input directory. e.g. '**/dhdt.parquet'",
+        help="Glob pattern for selecting input files relative to --in_dir.",
     )
     # Plotting Arguments
-    parser.add_argument(
-        "--area",
-        help="Name of the area to plot. If not provided, will be read from metadata JSON.",
-        required=False,
-        default=None,
-    )
-    parser.add_argument(
-        "--gridarea",
-        required=False,
-        default=None,
-        help="Grid area name. If not provided, will be read from metadata JSON.",
-    )
-    parser.add_argument(
-        "--binsize",
-        type=float,
-        required=False,
-        default=None,
-        help="Grid bin size. If not provided, will be read from metadata JSON.",
-    )
     parser.add_argument(
         "--plot_range",
         nargs=2,
         type=float,
-        help="Plot range for dhdt values [min max]. Default: -1.0 1.0",
         default=[-1.0, 1.0],
+        help="Colour scale limits for dh/dt values [min max]. Default: -1.0 1.0.",
     )
     parser.add_argument(
-        "--shapefile", type=str, help="Path to the shapefile to use for clipping", required=False
+        "--shapefile",
+        type=str,
+        help="Path to a shapefile for glacier boundary overlays.",
     )
     parser.add_argument(
         "--shp_file_column",
         type=str,
-        help="Column name in shapefile for basin selection.",
-        required=False,
+        help="Path to a shapefile for glacier boundary overlays.",
     )
     parser.add_argument(
         "--mask",
         type=str,
-        help="CPOM mask name for predefined shapefile boundaries.",
-        required=False,
+        help="CPOM Mask class name for predefined shapefile boundaries.",
     )
     # Column name arguments
     parser.add_argument(
         "--plotting_column",
         type=str,
         default="dhdt",
-        help="Column name for dh/dt values in the parquet file.",
+        help="Column name for dh/dt values to plot",
     )
     parser.add_argument(
         "--period_column",
         type=str,
         default="period",
-        help="Column name for period identifiers in the parquet file.",
+        help="Column name for period identifiers",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
+    )
+    # Optional grid metadata overrides
+    parser.add_argument(
+        "--area",
+        default=None,
+        help="Name of the area to plot.  Grid metadata fallback",
+    )
+    parser.add_argument(
+        "--gridarea",
+        default=None,
+        help="Grid area name. Grid metadata fallback",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        default=None,
+        help="Grid bin size. Grid metadata fallback",
     )
     # Shared basin/region selection arguments
     add_basin_selection_arguments(parser)
@@ -145,7 +132,8 @@ def parse_arguments(args):
 
 
 def _period_date_strings(period_data: pl.DataFrame) -> tuple[str, str]:
-    """Return (start_str, end_str) from actual data times in a period DataFrame."""
+    """Return (start_str, end_str)
+    date strings derived from actual data times in a period."""
     start = period_data.select(pl.col("input_dh_start_time").min()).item()
     end = period_data.select(pl.col("input_dh_end_time").max()).item()
     fmt = lambda dt: str(dt).split()[0]  # noqa: E731
@@ -155,7 +143,7 @@ def _period_date_strings(period_data: pl.DataFrame) -> tuple[str, str]:
 def _basin_plot_path(
     out_dir: str, sub_basin: str, period_id: int, period_data: pl.DataFrame
 ) -> Path:
-    """Build the output path for a basin period plot."""
+    """Build and return the output file path for a basin period plot."""
     start_str, end_str = _period_date_strings(period_data)
     plot_dir = Path(out_dir) / sub_basin
     plot_dir.mkdir(parents=True, exist_ok=True)
@@ -169,21 +157,22 @@ def plot_basins(
     logger: logging.Logger,
 ) -> dict[str, str]:
     """
-    Generate scatter plots of dh/dt data for each basin and time period.
+    Generate per-period scatter plots of dh/dt for each basin.
 
-    Output files: <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
+    For each basin and time period, produces a scatter plot of dh/dt values
+    in projected coordinates, with an optional glacier boundary overlay.
+    Basins with no data are skipped.
 
     Args:
         params (argparse.Namespace): Command line arguments.
-            Includes:
-            - in_dir (str): Input directory with dhdt.parquet files
-            - out_dir (str): Output directory for plots
-            - shapefile (str): Shapefile identifier for boundaries
-            - plot_range (list): [min, max] for color scale
-        this_area (Area): CPOM Area object
-        this_grid_area (GridArea): CPOM GridArea object
-        sub_basins_to_process (list[str]): Basin paths to process
+        sub_basins_to_process (list[str]):  List of basin subdirectory paths to plot.
         logger (logging.Logger): Logger object
+
+    Returns:
+        dict[str, str]: Map of basin name to elapsed processing time string.
+
+     Output:
+        <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
     """
 
     shp, selector = get_shapefile(params, logger)
@@ -246,18 +235,17 @@ def plot_basins(
 
 def plot_icesheet(params: argparse.Namespace, logger: logging.Logger) -> str:
     """
-    Generate ice sheet-wide scatter plots of dh/dt for each time period using Polarplot.
-    Output files: <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
+    Generate ice-sheet-wide Polarplots of dh/dt for each time period.
 
     Args:
         params (argparse.Namespace): Command line arguments.
-            Includes:
-            - in_dir (str): Input directory with dhdt.parquet file
-            - out_dir (str): Output directory for plots
-            - plot_range (list): [min, max] for color scale (m/yr)
-        this_area (Area): CPOM Area object
-        this_grid_area (GridArea): CPOM Grid area object
         logger (logging.Logger): Logger object
+
+    Returns:
+        str: Elapsed processing time.
+
+    Output:
+        <out_dir>/plots/dhdt_period_{id}_{start}-{end}.png
     """
 
     fn_start = time.time()
@@ -313,8 +301,8 @@ def dhdt_plots(args: list[str] | None = None) -> None:
     - Plots the full ice sheet (--basin_structure False), or
     - Plots each sub-basin individually (--basin_structure True)
 
-    args:
-        args (list): Command line arguments
+    Args:
+        args (list[str]): Arguments.
     """
 
     params = parse_arguments(args)
