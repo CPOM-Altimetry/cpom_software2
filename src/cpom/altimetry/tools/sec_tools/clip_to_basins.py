@@ -90,9 +90,59 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         help="Grid bin size. Grid metadata fallback",
     )
 
+    parser.add_argument(
+        "--mask_values",
+        nargs="+",
+        default=None,
+        help=(
+            "Mask values to clip to. Accepts integer pixel values (e.g. 1 2 3) or "
+            "string names from mask.grid_value_names (e.g. basin_A basin_B). "
+            "Overrides --region_selector when supplied."
+        ),
+    )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
     return parser.parse_args(args)
+
+
+def resolve_basin_names(mask: Mask, values: list[str]) -> list[str]:
+    """
+    Convert a mixed list of integer pixel values and/or string names to validated basin names.
+
+    Args:
+        mask (Mask): CPOM Mask object with grid_value_names populated.
+        values (list[str]): Raw CLI values — each item is either a decimal integer
+            string (e.g. '3') or a name that already appears in mask.grid_value_names.
+
+    Returns:
+        list[str]: Resolved basin name strings, in the same order as values.
+
+    Raises:
+        ValueError: If an integer index is out of range or a name is not found.
+    """
+    resolved: list[str] = []
+    for val in values:
+        # Try integer index first
+        try:
+            idx = int(val)
+        except ValueError:
+            idx = None
+
+        if idx is not None:
+            if idx < 0 or idx >= len(mask.grid_value_names):
+                raise ValueError(
+                    f"Mask value {idx} is out of range (mask has "
+                    f"{len(mask.grid_value_names)} values)."
+                )
+            resolved.append(mask.grid_value_names[idx])
+        elif val in mask.grid_value_names:
+            resolved.append(val)
+        else:
+            raise ValueError(
+                f"'{val}' is not a valid mask pixel index or name. "
+                f"Valid names: {mask.grid_value_names}"
+            )
+    return resolved
 
 
 def get_data(
@@ -160,54 +210,31 @@ def get_data(
 
 def clip_data_to_shape(
     mask: Mask,
-    basin_name: str,
+    basin_number: int,
     data: pl.LazyFrame,
 ) -> pl.LazyFrame:
     """
-
     Clip data rows where the grid-cell centre falls within the basin mask region.
 
-    Each row in the input data is assigned a mask label based on its latitude
-    and longitude. Only rows corresponding to the specified basin_name
-    (from mask.grid_value_names) are kept.
+    Uses Mask.points_inside_polars with x, y columns. x and y are dropped from
+    the returned frame.
 
     Args:
-        mask (Mask): CPOM Mask object used for grid value lookup.
-        basin_name (str): Basin identifier from mask.grid_value_names.
-        data (pl.LazyFrame): Input data containing 'lat' and 'lon' columns.
+        mask (Mask): CPOM Mask object. Must have x and y columns present in data.
+        basin_number (int): Integer pixel value in mask.grid_value_names to keep.
+        data (pl.LazyFrame): Input data containing 'x' and 'y' columns.
 
     Returns:
-        pl.LazyFrame: Rows whose mask label matches basin_name.
+        pl.LazyFrame: Rows inside the basin with x and y columns dropped.
     """
-    if isinstance(data, pl.LazyFrame):
-        data_df: pl.DataFrame = data.collect()
-    else:
-        data_df = data
-
-    # Evaluate mask values
-    mask_values = mask.grid_mask_values(
-        data_df.get_column("lat").to_numpy(), data_df.get_column("lon").to_numpy()
-    )
-
-    def _label_for_value(mask: Mask, value: int, unknown_label: str) -> str:
-        if 0 <= value < len(mask.grid_value_names):
-            return mask.grid_value_names[value]
-        return unknown_label
-
-    labels = [_label_for_value(mask, int(v), "unknown") for v in mask_values]
-
-    # Filter to target basin
-    data_df = (
-        data_df.with_columns(
-            [
-                pl.Series("mask_label", labels),
-            ]
-        )
-        .filter(pl.col("mask_label") == basin_name)
-        .drop("mask_label")
-    )
-
-    return data_df.lazy()
+    # points_inside_polars filters by self.basin_numbers; set it for this call then restore.
+    prev_basin_numbers = mask.basin_numbers
+    mask.basin_numbers = [basin_number]
+    try:
+        result = mask.points_inside_polars(data).drop(["x", "y"])
+    finally:
+        mask.basin_numbers = prev_basin_numbers
+    return result
 
 
 def process_single_basin(
@@ -243,9 +270,15 @@ def process_single_basin(
     output_dir = Path(params.out_dir) / basin_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        basin_number = mask.grid_value_names.index(basin_name)
+    except ValueError:
+        logger.warning("Basin '%s' not found in mask.grid_value_names — skipping", basin_name)
+        return {"output_file": "", "n_rows": 0, "n_unique_cells": 0}
+
     in_file = Path(params.in_dir) / params.parquet_glob
-    data = get_data(grid_area, logger, in_file)
-    clipped_data = clip_data_to_shape(mask, basin_name, data)
+    data = get_data(grid_area, logger, in_file, get_lat_lon=False)
+    clipped_data = clip_data_to_shape(mask, basin_number, data)
     stats_df = clipped_data.select(
         [
             pl.len().alias("n_rows"),
@@ -254,7 +287,7 @@ def process_single_basin(
     ).collect()
 
     output_file = output_dir / "data.parquet"
-    clipped_data.drop(["lat", "lon"]).sink_parquet(output_file)
+    clipped_data.sink_parquet(output_file)
     logger.info(f"Wrote: {output_file}")
 
     return {
@@ -297,10 +330,26 @@ def clip_to_basins(args):
         sys.exit(str(exc))
 
     mask = Mask(params.mask)
+
+    # Get basins to process.
+    if params.mask_values:
+        raw_values = params.mask_values
+    elif params.region_selector == ["all"]:
+        raw_values = None  # processed below
+    else:
+        raw_values = params.region_selector
+
+    if raw_values is not None:
+        try:
+            regions_to_process = resolve_basin_names(mask, raw_values)
+        except ValueError as exc:
+            logger.error("Invalid basin selection: %s", exc)
+            sys.exit(str(exc))
+    else:
+        regions_to_process = mask.grid_value_names
+
     # Clip to basin shape by bin centres
-    for region in (
-        mask.grid_value_names if params.region_selector == ["all"] else params.region_selector
-    ):
+    for region in regions_to_process:
         logger.info("Processing region: %s", region)
         output_dir = Path(params.out_dir) / region
         output_dir.mkdir(parents=True, exist_ok=True)
