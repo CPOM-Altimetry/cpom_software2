@@ -57,11 +57,7 @@ def parse_arguments(args):
         help="Input algorithm step to source metadata from",
     )
     parser.add_argument("--in_dir", required=True, help="Input data directory")
-    parser.add_argument(
-        "--out_dir",
-        required=True,
-        help="Output directory Path",
-    )
+    parser.add_argument("--out_dir", required=True, help="Output directory Path")
     parser.add_argument(
         "--parquet_glob",
         type=str,
@@ -136,7 +132,10 @@ def _period_date_strings(period_data: pl.DataFrame) -> tuple[str, str]:
     date strings derived from actual data times in a period."""
     start = period_data.select(pl.col("input_dh_start_time").min()).item()
     end = period_data.select(pl.col("input_dh_end_time").max()).item()
-    fmt = lambda dt: str(dt).split()[0]  # noqa: E731
+
+    def fmt(dt: object) -> str:
+        return str(dt).split()[0]
+
     return fmt(start), fmt(end)
 
 
@@ -171,7 +170,7 @@ def plot_basins(
     Returns:
         dict[str, str]: Map of basin name to elapsed processing time string.
 
-     Output:
+    Output:
         <out_dir>/<basin>/plots/<basin>_dhdt_period_{id}_{start}-{end}.png
     """
 

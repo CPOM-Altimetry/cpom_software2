@@ -97,7 +97,7 @@ def parse_arguments(args: list[str] | None) -> argparse.Namespace:
     # Correction settings
     parser.add_argument("--gia_model", type=str, help="GIA model name. Omit to skip correction.")
 
-    # Fall back if grid parameters are not provided in metadata
+    # Fall back if grid parameters are not provided in metadata.
     parser.add_argument(
         "--standard_epoch",
         type=str,

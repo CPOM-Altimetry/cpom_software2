@@ -598,7 +598,7 @@ def process_target(
     interpolated_df, status = process_timesteps(
         params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
     )
-    # # Mask out-of-range values in the output DataFrame as well, to be safe
+    # Mask out-of-range values in the output DataFrame as well, to be safe
     interpolated_df = get_data(grid_area=ga, logger=logger, lazyframe=interpolated_df)
     interpolated_df = (
         Mask(params.mask)

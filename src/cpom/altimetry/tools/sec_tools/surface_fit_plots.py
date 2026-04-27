@@ -2,15 +2,12 @@
 src.cpom.altimetry.tools.sec_tools.surface_fit_plots
 
 Purpose:
-    Generate plots from the output of surface fit.
-    Uses CPOM Area and Polarplot classes for plotting.
-    Can plot any area defined in CPOM areas.
-
-    Loads grid_data.parquet and grid metadata JSON to create plots of:
-    - Slope
-    - dh/dt
-    - RMS of linear fit
-    - Sigma (std of linear fit)
+    Generate plots from the output of surface fit model residuals.
+    Plots include:
+        - Slope
+        - dh/dt
+        - RMS of linear fit
+        - Sigma (std of linear fit)
 Output:
     - Point plots saved to <out_dir>/plots/ for each variable.
 """
@@ -35,65 +32,51 @@ from cpom.gridding.gridareas import GridArea
 
 
 def parse_arguments(args):
-    """
-    Parse command line arguments for surface fit plots
-
-    Return:
-        parser.parse_args(args)
-    """
+    """Parse command line arguments for surface fit plotting."""
 
     parser = argparse.ArgumentParser()
-    # Required arguments
-    parser.add_argument(
-        "--in_dir",
-        help="Path to the directory containing surface fit data files.",
-        required=True,
-    )
+    # I/O Arguments
     parser.add_argument(
         "--in_step",
-        help="Input algorithm step to source metadata from",
         type=str,
         required=False,
+        help="Input algorithm step to source metadata from",
     )
+    # Required arguments
+    parser.add_argument("--in_dir", required=True, help="Input data directory")
+    parser.add_argument("--out_dir", required=True, help="Output directory Path")
+
+    # Optional grid metadata overrides
     parser.add_argument(
-        "--out_dir",
-        help="Path to the output directory.",
-        required=True,
-    )
-    parser.add_argument(
-        "--area_name",
-        help="Name of the area to plot. If not provided, will be read from " "grid info JSON.",
-        required=False,
+        "--area",
         default=None,
+        help="Name of the area to plot.  Grid metadata fallback",
     )
     parser.add_argument(
         "--gridarea",
-        help="Grid area name. If not provided, will be read from grid info JSON.",
-        required=False,
         default=None,
+        help="Grid area name. Grid metadata fallback",
     )
     parser.add_argument(
         "--binsize",
         type=float,
-        help="Grid bin size. If not provided, will be read from grid info JSON.",
-        required=False,
         default=None,
+        help="Grid bin size. Grid metadata fallback",
     )
     return parser.parse_args(args)
 
 
 def get_objects(params: argparse.Namespace) -> tuple[Area, pl.DataFrame]:
     """
-    Load grid metadata and construct plotting objects.
-    grid_data.parquet into a Polars DataFrame and compute latitude/longitude columns.
-    Get GridArea and Area from grid metadata JSON or command line arguments.
+    Load grid metadata and construct Area object for plotting.
 
     params:
         params (argparse.namespace): Command Line Arguments
 
     Returns:
-        tuple[Area, pl.DataFrame]:
-            (Area object, grid data with latitude/longitude columns)
+        tuple:
+            - Area : CPOM Area object for the area being plotted
+            - pl.DataFrame : Grid data with added latitude and longitude columns
     """
     grid_data = pl.read_parquet(Path(params.in_dir) / "grid_data.parquet")
     grid_params = get_metadata_params(
@@ -121,17 +104,15 @@ def plot(
     plot_params: tuple[str, str, tuple[float, float]],
 ) -> None:
     """
-    Generate and save a point plot for a grid value column.
-
+    Generate ice-sheet-wide Polarplots of surface fit parameters.
     Filters the input data to the specified value range, then uses
     Polarplot(area.name).plot_points to create and save the plot.
 
-    params:
-        params (argparse.Namespace): Command line arguments,
+    Args:
+        params (argparse.Namespace): Command line arguments.
         data (pl.DataFrame): Surface fit grid data
         area (Area): CPOM Area object
-        plot_params:
-            (value_column, title, plot_range)
+        plot_params: (value_column, title, plot_range)
     """
     value_column, title, plot_range = plot_params
 
@@ -156,7 +137,7 @@ def plot(
 
 def surface_fit_plots(args):
     """
-    Main function to generate standard surface fit plots.
+    Main entry point for surface fit plotting.
     """
     start_time = time.time()
 

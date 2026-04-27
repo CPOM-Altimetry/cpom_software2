@@ -2,11 +2,9 @@
 cpom.altimetry.tools.sec_tools.metadata_helper
 
 Purpose:
-    Utilities for loading, resolving and writing metadata for SEC algorithms.
+    Utilities for loading, resolving, and writing SEC algorithm run metadata.
 
-    Metadata is stored as JSON entry stores, where each key identifies an algorithm run
-by name and UTC timestamp, and each value holds the parameters used for that run:
-
+    Metadata is stored as a JSON entry store keyed by algorithm name and UTC timestamp:
     {
         "algo1_20260414T1200": {"param1": val1, "param2": val2, ...},
         "algo2_20260414T1300": {"param1": val1, ...},
@@ -39,7 +37,7 @@ def elapsed(t0: float) -> str:
 # Track metadata sourced fields #
 # --------------------------------
 def _add_sourced_field(params: argparse.Namespace, field: str) -> None:
-    """Track fields sourced from upstream metadata."""
+    """Mark a field as sourced from upstream metadata."""
     sourced: set[str] = set(getattr(params, "_grid_sourced_fields", set()))
     setattr(params, "_grid_sourced_fields", sourced | {field})
 
@@ -54,8 +52,6 @@ def get_metadata_path(
 ) -> str | None:
     """
     Resolve the metadata file path from params.
-        For root data : <in_dir>/<in_step>_meta.json
-        For basin data : <in_dir>/<basin_name>/<in_step>_meta.json
 
     Args:
         params (argparse.Namespace): Command line parameters
@@ -66,6 +62,8 @@ def get_metadata_path(
 
     Returns:
         str | None: Resolved metadata path, or None.
+            For root data : <in_dir>/<in_step>_meta.json
+            For basin data : <in_dir>/<basin_name>/<in_step>_meta.json
     """
 
     in_dir = getattr(params, "in_dir", None)
@@ -106,10 +104,8 @@ def get_algo_name(script_path: str | Path) -> str:
 # ---------------
 def _entry_sort_key(entry_key: str) -> tuple[int, float | str]:
     """
-    Generate sort key for metadata entries.
-
-    Timestamped entries (algo_YYYYMMDDTHHMM) sort above untimestamped ones,
-    with most recent timestamps first.
+    Generate sort key for metadata entries.Timestamped entries (algo_YYYYMMDDTHHMM)
+    sort above untimestamped ones,with most recent timestamps first.
 
     Returns:
         tuple[int, float | str]: (1, -unix_timestamp) for timestamped entries,
@@ -215,9 +211,8 @@ def get_metadata_params(
     """
     Resolve parameter values from command-line arguments, falling back to metadata.
 
-    For each requested field, params attributes take precedence over metadata values.
-    Fields sourced from metadata are tracked via _add_sourced_field so they can be
-    excluded from output metadata.
+    Params attributes take precedence over metadata values. Fields sourced from
+    metadata are tracked via _add_sourced_field so they can be excluded from output metadata.
 
     Args:
         params: Algorithm command line parameters.
@@ -275,9 +270,9 @@ def write_metadata(
 ) -> None:
     """
     Write a timestamped metadata entry to <out_meta_path>/<algo_name>_meta.json.
-    If upstream metadata exists, it is merged into the output file.
-    Fields sourced from upstream metadata (tracked via _add_sourced_field) are excluded from the
-    new entry to avoid re-propagating inherited values.
+    Merges with any existing upstream metadata. Fields that were sourced from
+    upstream metadata (tracked via _add_sourced_field) are excluded from the new
+    entry to prevent re-propagating inherited values.
 
     Args:
         params: Algorithm command line parameters.

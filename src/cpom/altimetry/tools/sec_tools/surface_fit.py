@@ -20,19 +20,17 @@ Processing Workflow:
     get_surface_fit_objects() - Setup time bounds, chunks, status dictionary
             ↓
     fit_surface_fit_models_per_group() - Main surface fitting loop
-        - For each chunk (x_part, y_part):
-            - Load data with get_grid_data()
-            - For each grid cell:
+        For each chunk (x_part, y_part):
+            get_grid_data()
+            For each grid cell:
                 - fit_surface_model_per_group() - Fit surface model to elevation data
                 - fit_power_correction_per_group() - Apply power correction (optional)
                 - fit_linear_fit_per_group() - Estimate dH/dt from residuals
 
-            Per chunk output:
-                x_part=X/y_part=Y/dh_time_grid.parquet (time, dh, [weights])
-            Per data output:
-                grid_data.parquet (x_bin, y_bin, dhdt, slope, sigma, rms)
-            ↓
-    get_metadata_json() - Write metadata JSON with execution details
+            write_chunk_output() — x_part=X/y_part=Y/dh_time_grid.parquet
+
+    consolidate_grid_chunks()  — merge into grid_data.parquet
+    get_metadata_json()        — write metadata
 """
 
 import argparse
@@ -43,13 +41,12 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import duckdb
 import numpy as np
 import polars as pl
 import statsmodels.api as sm
-from scipy import stats
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
@@ -69,16 +66,10 @@ SECONDS_PER_YEAR = 31557600
 # SETUP FUNCTIONS - Initialize config, logging, time bounds, chunks
 # ---------------------------------------------------------------------------
 def parse_arguments(args):
-    """
-    Parse command line arguments for surface fitting.
-    Args:
-        args (list): List of command line arguments
-    Returns:
-        argparse.Namespace: Parsed command line arguments
-    """
+    """Parse command line arguments for surface fitting."""
 
     def auto_type(value: str) -> int | float | str:
-        """Try to convert to int or float, else keep as string."""
+        """Convert to int or float where possible, else keep as string."""
         try:
             return int(value)
         except ValueError:
@@ -95,48 +86,36 @@ def parse_arguments(args):
     )
     # I/O arguments
     parser.add_argument(
-        "--in_dir",
-        help=("Path of the grid dir containing parquet files"),
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
         "--in_step",
+        type=str,
         help="Input algorithm step to source metadata from",
-        type=str,
-        required=False,
     )
-    parser.add_argument(
-        "--out_dir",
-        help="Path of output directory for surface fit results",
-        type=str,
-        required=True,
-    )
+    parser.add_argument("--in_dir", required=True, help="Input data directory (gridded parquet's)")
+    parser.add_argument("--out_dir", required=True, help="Output directory Path")
     parser.add_argument(
         "--parquet_glob",
-        help="(optional) Glob pattern to match parquet files",
         type=str,
         default="**/*.parquet",
+        help="File glob pattern for gridded altimetry Parquet files, relative to --in_dir.",
     )
     # Surface fit parameters
     parser.add_argument(
         "--min_vals_in_cell",
         default=20,
         type=int,
-        help="Minimum measurements in cell to perform plane fit",
+        help="Minimum measurements per cell to perform plane fit",
     )
     parser.add_argument(
         "--min_percent_timespan_in_cell",
         default=70.0,
         type=float,
-        help="Minimum time-span in cell to perform plane fit as percent of (maxtime-mintime),"
-        " default is 70%%",
+        help="Minimum time-span per cell as %% of (maxtime - mintime)",
     )
     parser.add_argument(
         "--n_sigma",
         default=2.0,
         type=float,
-        help="Sigma to filter out measurements from plane fit",
+        help="Sigma threshold for surface fit outlier rejection",
     )
     parser.add_argument(
         "--max_surfacefit_iterations",
@@ -153,19 +132,17 @@ def parse_arguments(args):
     parser.add_argument(
         "--mintime",
         type=str,
-        help="(optional) start time for plane fit (DD/MM/YYYY or DD.MM.YYYY) \
-            | min time in the data if not provided.",
+        help="Surface fit start time (DD/MM/YYYY or DD.MM.YYYY); " "defaults to data minimum",
     )
     parser.add_argument(
         "--maxtime",
         type=str,
-        help="(optional) End time for plane fit (DD/MM/YYYY or DD.MM.YYYY) \
-            | max time in the grid if not provided.",
+        help="Surface fit end time (DD/MM/YYYY or DD.MM.YYYY); " "defaults to data maximum",
     )
     parser.add_argument(
         "--powercorrect",
-        help="Enable power (backscatter) correction",
         action="store_true",
+        help="Enable power (backscatter) correction",
     )
     parser.add_argument(
         "--mode_values",
@@ -177,68 +154,36 @@ def parse_arguments(args):
     parser.add_argument(
         "--pcmintime",
         type=str,
-        help="(optional) Start date of power correction (DD/MM/YYYY or DD.MM.YYYY) \
-        | mintime if not provided.",
+        help="Power correction start date (DD/MM/YYYY or DD.MM.YYYY); " "defaults to mintime",
     )
     parser.add_argument(
         "--pcmaxtime",
         type=str,
-        help="(optional) End date of power correction (DD/MM/YYYY or DD.MM.YYYY) \
-            | maxtime if not provided.",
+        help="Power correction end date (DD/MM/YYYY or DD.MM.YYYY); " "defaults to maxtime",
     )
     # Optional column name arguments
     parser.add_argument(
-        "--time_column",
-        type=str,
-        default="time",
-        help="Name of the time column in the parquet files",
+        "--time_column", type=str, default="time", help="Time column name in parquet files"
     )
     parser.add_argument(
-        "--x_column",
-        type=str,
-        default="x_cell_offset",
-        help="Name of the x coordinate column in the parquet files",
+        "--x_column", type=str, default="x_cell_offset", help="X coordinate column name"
     )
     parser.add_argument(
-        "--y_column",
-        type=str,
-        default="y_cell_offset",
-        help="Name of the y coordinate column in the parquet files",
+        "--y_column", type=str, default="y_cell_offset", help="Y coordinate column name"
     )
     parser.add_argument(
-        "--elevation_column",
-        type=str,
-        default="elevation",
-        help="Name of the elevation column in the parquet files",
+        "--elevation_column", type=str, default="elevation", help="Elevation column name"
     )
     parser.add_argument(
-        "--heading_column",
-        type=str,
-        default="ascending",
-        help="Name of the heading column in the parquet files",
+        "--heading_column", type=str, default="ascending", help="Heading column name"
     )
-    parser.add_argument(
-        "--power_column",
-        type=str,
-        default="power",
-        help="Name of the power column in the parquet files",
-    )
-    parser.add_argument(
-        "--mode_column",
-        type=str,
-        default="mode",
-        help="Name of the mode column in the parquet files",
-    )
+    parser.add_argument("--power_column", type=str, default="power", help="Power column name")
+    parser.add_argument("--mode_column", type=str, default="mode", help="Mode column name")
     # Is2 specific options
     parser.add_argument(
         "--weighted_surface_fit",
         action="store_true",
         help="Use weighted surface fit for is2 data",
-    )
-    parser.add_argument(
-        "--weighted_power_fit",
-        action="store_true",
-        help="Use weighted power fit for power correction",
     )
     parser.add_argument(
         "--weight_column",
@@ -272,20 +217,16 @@ def clean_directory(params: argparse.Namespace, confirm_regrid: bool = False):
     """
 
     # Full regrid => remove entire directory, then create fresh
-    if confirm_regrid:
-        if os.path.exists(params.out_dir):
-            response = (
-                input("Confirm removal of previous surface fit archive? (y/n): ").strip().lower()
-            )
-            if response == "y":
-                shutil.rmtree(params.out_dir)
-            else:
-                print("Exiting as user requested not to overwrite surface fit archive")
-                sys.exit(0)
+    if confirm_regrid and os.path.exists(params.out_dir):
+        response = input("Confirm removal of previous surface fit archive? (y/n): ").strip().lower()
+        if response == "y":
+            shutil.rmtree(params.out_dir)
+        else:
+            print("Exiting as user requested not to overwrite surface fit archive")
+            sys.exit(0)
 
     # Create output directory before setting up file logging
     os.makedirs(params.out_dir, exist_ok=True)
-
     logger = set_loggers(
         log_dir=params.out_dir,
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
@@ -304,25 +245,22 @@ def get_min_max_time(
 ) -> tuple[float, float, float, float]:
     """
     Return (mintime_timestamp, maxtime_timestamp, min_secs, max_secs).
-    Uses provided date strings if given, otherwise infers range from parquet data.
-    Accepts dates as DD/MM/YYYY or DD.MM.YYYY.
+    Uses provided date strings (DD/MM/YYYY or DD.MM.YYYY) if given,
+    otherwise infers range from parquet data.
 
     Args:
         epoch_time (datetime): Standard epoch time to calculate seconds from.
         parquet_glob (str): Path to the parquet files
-        mintime (str: Optional): Start time (DD/MM/YYYY or DD.MM.YYYY).
-        maxtime (str: Optional): End time (DD/MM/YYYY or DD.MM.YYYY).
+        mintime (str | None): Start time (DD/MM/YYYY or DD.MM.YYYY).
+        maxtime (str | None): End time (DD/MM/YYYY or DD.MM.YYYY).
         time_column (str): Name of the time column in the parquet files.
     Returns:
         tuple[float, float, float, float]:
           (mintime_timestamp, maxtime_timestamp, min_secs, max_secs)
     """
 
-    def get_date(epoch_time: datetime, timedt: str) -> Tuple[datetime, float]:
-        """
-        Convert a date string to a datetime object
-        and calculate the seconds from the epoch.
-        """
+    def get_date(epoch_time: datetime, timedt: str) -> tuple[datetime, float]:
+        """Parse a date string and return (datetime, seconds_since_epoch)."""
         if "/" in timedt:
             time_dt = datetime.strptime(timedt, "%d/%m/%Y")
         elif "." in timedt:
@@ -331,21 +269,22 @@ def get_min_max_time(
             raise ValueError(
                 f"Unrecognized date format: {timedt}, pass as DD/MM/YYYY or DD.MM.YYYY "
             )
-        seconds = (time_dt - epoch_time).total_seconds()
-
-        return time_dt, seconds
+        return time_dt, (time_dt - epoch_time).total_seconds()
 
     if mintime is not None and maxtime is not None:
         min_dt, min_secs = get_date(epoch_time, mintime)
         max_dt, max_secs = get_date(epoch_time, maxtime)
     else:
-        df = pl.scan_parquet(parquet_glob)
-        min_max = df.select(
-            [
-                pl.col(time_column).min().alias("min_time"),
-                pl.col(time_column).max().alias("max_time"),
-            ]
-        ).collect()
+        min_max = (
+            pl.scan_parquet(parquet_glob)
+            .select(
+                [
+                    pl.col(time_column).min().alias("min_time"),
+                    pl.col(time_column).max().alias("max_time"),
+                ]
+            )
+            .collect()
+        )
 
         min_secs = min_max["min_time"][0]
         max_secs = min_max["max_time"][0]
@@ -358,11 +297,8 @@ def get_min_timespan(
     params: argparse.Namespace, mintime: float, maxtime: float
 ) -> argparse.Namespace:
     """
-    Calculate minimum required time span in seconds for surface fit per grid cell.
-    Args:
-        params (argparse.Namespace): Command line parameters
-        mintime (float): Minimum time for surface fit (timestamp)
-        maxtime (float): Maximum time for surface fit (timestamp)
+    Set params.min_timespan_in_cell_in_secs from the configured percentage of the time window.
+
     Returns:
         argparse.Namespace: Updated command line parameters with
             min_timespan_in_cell_in_secs attribute set.
@@ -375,10 +311,11 @@ def get_min_timespan(
 
 def get_unique_chunks(params: argparse.Namespace) -> pl.DataFrame:
     """
-    Get all unique (x_part, y_part) chunks to process from input parquet files.#
+    Return all unique (x_part, y_part) chunks found in the input parquet files.
+
     Falls back to a single None-keyed row if no directory partitioning is found.
     Args:
-        params (argparse.Namespace): Command line parameters including in_dir
+        params (argparse.Namespace): Command line parameters (includes in_dir)
     Returns:
         pl.DataFrame: DataFrame of unique (x_part, y_part) chunks to process
     """
@@ -407,10 +344,8 @@ def get_surface_fit_objects(
     """
     Initialise all objects required for the surface fit pipeline:
 
-        1. Time boundaries for surface fit and optional power correction.(get_min_max_time)
-        2. Minimum required time span per grid cell. (get_min_timespan)
-        3. Unique spatial chunks (x_part, y_part) to process. (get_unique_chunks)
-        4. Initialize status counters for surface fit processing.
+    Computes time boundaries, minimum cell time span, unique spatial chunks,
+    and zeroed status counters.
 
     Args:
         params (argparse.Namespace): Command line parameters.
@@ -449,19 +384,21 @@ def get_surface_fit_objects(
             ]
         }
 
+    epoch_dt = datetime.fromisoformat(standard_epoch)
+
     # 1. Get the min/max time period for surface fit and power correction
     mintime, maxtime, min_secs, max_secs = get_min_max_time(
-        datetime.fromisoformat(standard_epoch),
+        epoch_dt,
         parquet_glob,
         params.mintime,
         params.maxtime,
         params.time_column,
     )
-    logger.info(f"Surface fit time range : {mintime} : {maxtime}")
+    logger.info("Surface fit time range %s: %s : %s", standard_epoch, mintime, maxtime)
 
     if params.powercorrect:
         _, _, pc_min_secs, pc_max_secs = get_min_max_time(
-            datetime.fromisoformat(standard_epoch),
+            epoch_dt,
             parquet_glob,
             params.pcmintime,
             params.pcmaxtime,
@@ -472,11 +409,10 @@ def get_surface_fit_objects(
 
     # 2. Get the minimum time span in a cell in seconds
     params = get_min_timespan(params, mintime, maxtime)
-    status = _init_status()
 
     # 3. Get unique chunks in the dataset
     part_df = get_unique_chunks(params)
-    logger.info(f"Found {len(part_df)} chunks to process")
+    logger.info("Found %d chunks to process", len(part_df))
 
     return {
         "standard_epoch": standard_epoch,
@@ -486,7 +422,7 @@ def get_surface_fit_objects(
         "max_secs": max_secs,
         "pc_min_secs": pc_min_secs,
         "pc_max_secs": pc_max_secs,
-        "status": status,
+        "status": _init_status(),
         "part_df": part_df,
     }
 
@@ -499,9 +435,9 @@ def get_surface_fit_objects(
 def filter_to_mode(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Filter each grid cell to its most common non-null mode.
     Args:
-        lf (pl.LazyFrame): LazyFrame containing gridded altimetry data with 'mode' column
+        lf (pl.LazyFrame): Gridded altimetry data (includes: 'mode')
     Returns:
-        pl.LazyFrame: Filtered LazyFrame with only the most common non-null mode per cell retained
+        pl.LazyFrame: Filtered data retaining the most common non-null mode per cell.
     """
 
     # Count observations per mode per cell (excluding null modes)
@@ -545,37 +481,33 @@ def get_grid_data(
     """
     Load and preprocess gridded altimetry data for a single chunk.
 
-        - Filters to the specified time range and valid elevations
-        - Filters each cell to its most common mode
-        - Adds computed columns (x, y, x2, y2, xy, height, heading, time_years)
+    Filters to the time range and valid elevations, filters each cell to its most
+    common mode, and adds computed columns (x, y, x2, y2, xy, height, heading, time_years).
 
     Args:
         parquet_glob (str): Path to the parquet files
-        params (argparse.Namespace): Configuration parameters
+        params (argparse.Namespace): Command line arguments.
         min_secs (int): Minimum time in seconds
         max_secs (int): Maximum time in seconds
-        mission (str): Mission identifier (e.g., 'cs2', 'ev', 'e1', 'e2')
     Returns:
-        tuple[pl.LazyFrame, dict[str, int]]:
-            Returns a LazyFrame of the required columns and a status dict with row/cell counts.
+        tuple:
+            pl.LazyFrame: Preprocessed data ready for surface fitting
+            dict[str, int]: Status dictionary with input row/cell counts
     """
     # Load gridding data
     lf = pl.scan_parquet(parquet_glob)
-
-    cells_before = (
-        lf.filter(pl.col(params.elevation_column).is_not_null())
-        .select(["x_bin", "y_bin"])
-        .unique()
-        .collect()
-        .height
-    )
-    total_measurements = lf.select(pl.len()).collect().item()
+    schema = lf.collect_schema()
 
     status = {
-        "n_cells_with_data_loaded": cells_before,
-        "n_measurements_loaded": total_measurements,
+        "n_cells_with_data_loaded": (
+            lf.filter(pl.col(params.elevation_column).is_not_null())
+            .select(["x_bin", "y_bin"])
+            .unique()
+            .collect()
+            .height
+        ),
+        "n_measurements_loaded": lf.select(pl.len()).collect().item(),
     }
-    schema = lf.collect_schema()
 
     # Filter to mode values if specified
     if params.mode_values is not None:
@@ -593,10 +525,11 @@ def get_grid_data(
     # Filter to cells with valid elevations in each grid cell
     # Join back to only keep cells with valid elevations
     # Add computed columns required for surface fitting
+    valid_cells = (
+        lf.filter(pl.col(params.elevation_column).is_not_null()).select(["x_bin", "y_bin"]).unique()
+    )
     lf = lf.join(
-        lf.filter(pl.col(params.elevation_column).is_not_null())
-        .select(["x_bin", "y_bin"])
-        .unique(),
+        valid_cells,
         on=["x_bin", "y_bin"],
         how="inner",
     ).with_columns(
@@ -627,12 +560,9 @@ def get_grid_data(
         "time",
         "time_years",
     ]
-    if params.power_column and params.power_column in schema:
-        columns.append(params.power_column)
-    if params.mode_column and params.mode_column in schema:
-        columns.append(params.mode_column)
-    if params.weight_column and params.weight_column in schema:
-        columns.append(params.weight_column)
+    for col in [params.power_column, params.mode_column, params.weight_column]:
+        if col and col in schema:
+            columns.append(col)
 
     return lf.select([pl.col(col) for col in columns]), status
 
@@ -646,6 +576,7 @@ def get_grid_data(
 def _apply_dh(group_np: dict[str, np.ndarray], fit_params: np.ndarray) -> dict[str, np.ndarray]:
     """
     Remove the modelled spatial surface component from elevation, leaving temporal change.
+
     dH = height - (a0 + a1*x + a2*y + a3*x² + a4*y² + a5*xy + a6*heading)
 
     Args:
@@ -710,8 +641,9 @@ def _get_fit_params(
     Solve the surface model for a single cell via WLS or ordinary least squares.
 
     Returns:
-        tuple[np.ndarray | None, str | None]: (fit_params, error_status)
-            Returns (fit_params, None) on success, or (None, error_key) on failure.
+        tuple:
+            np.ndarray | None: Surface fit parameters if successful, else None
+            str | None: None if successful, else error status string
     """
     iv = np.column_stack(
         (
@@ -749,7 +681,7 @@ def _get_fit_params(
 
         # pylint: disable=W0718
         except Exception as e:
-            logger.warning(f"WLS failed with: {e}")
+            logger.warning("WLS failed with: %s", e)
             return None, "n_cells_fit_failed"
         return res.params, None
     # ----------------------------------------------------
@@ -759,7 +691,7 @@ def _get_fit_params(
         fit_params, *_ = np.linalg.lstsq(iv, group_np["height"], rcond=None)
         return fit_params, None
     except np.linalg.LinAlgError as e:
-        logger.warning(f"lstsq failed with: {e}")
+        logger.warning("lstsq failed with: %s", e)
         return None, "n_cells_fit_failed"
 
 
@@ -777,21 +709,17 @@ def fit_surface_model_per_group(
     Model: z(x, y, t, h) = a0 + a1*x + a2*y + a3*x² + a4*y² + a5*xy + a6*heading + a7*t
 
     Args:
-        params (argparse.Namespace): Command Line Parameters.
-                Includes : n_sigma, max_surfacefit_iterations, weighted_surface_fit,weight_column,
-                min_vals_in_cell, min_timespan_in_cell_in_secs
-        group_np (dict[str,np.ndarray]): Cell data arrays.
-        Required keys: "height", "time", "time_years", "x", "y", "x2", "y2", "xy", "heading".
-                If weighted, also weight_column key.
-        min_seconds (float): Surface-fit window start. (Seconds since epoch)
-        max_seconds (float): Surface-fit window end. (Seconds since epoch)a
+        params (argparse.Namespace): Command line arguments.
+        group_np (dict[str,np.ndarray]): Cell data arrays.(includes:
+        "height", "time", "time_years", "x", "y", "x2", "y2", "xy", "heading")
+        min_seconds (float): Surface-fit window start in seconds since epoch.
+        max_seconds (float): Surface-fit window end in seconds since epoch.
         logger (logging.Logger): Logger Object.
 
     Returns:
-        tuple[np.ndarray, dict[str, np.ndarray]] | str:
-            On success, returns (fit_params, filtered_data_dict) where:
-                - fit_params: numpy array with [const, x, y, x2, y2, xy, heading, time]
-                - filtered_data_dict: dictionary with filtered arrays
+        tuple:
+            np.ndarray: Surface fit parameters [const, x, y, x2, y2, xy, heading, time]
+            dict[str, np.ndarray]: Filtered cell data arrays (excluding x, y, x2, y2, xy)
             On failure, returns error status string.
     """
     # --------------------------------------------------------------------------
@@ -801,6 +729,7 @@ def fit_surface_model_per_group(
     if np.ptp(group_np["time"]) < params.min_timespan_in_cell_in_secs:
         return "n_cells_with_timespan_too_short"
 
+    fit_params = None
     for _ in range(params.max_surfacefit_iterations):
         if group_np["height"].size < params.min_vals_in_cell:
             return "n_cells_with_too_few_measurements"
@@ -811,7 +740,6 @@ def fit_surface_model_per_group(
         fit_params, error_status = _get_fit_params(params, group_np, ref_time, logger)
         if error_status is not None:
             return error_status
-        assert fit_params is not None
 
         mask = _get_modelled_heights_and_sigma_filter(
             group_np, fit_params, ref_time, params.n_sigma
@@ -866,131 +794,89 @@ def fit_power_correction_per_group(
     time-dependent power change: dH = dH - (dH/dP) * dP.
 
     Args:
-        params (argparse.Namespace): Configuration parameters
-        group_np (dict[str, np.ndarray]): Grid cell containing:
-        "heading", "time", "time_years", "power", "dH"
-        time_params (dict[str, float]): Dictionary containing time parameters:
-            (pc_min_secs, pc_max_secs, mintime, maxtime)
+        params (argparse.Namespace): Command line arguments.
+        group_np (dict[str, np.ndarray]): Grid cell arrays (includes: heading, time, time_years,
+        power, dH)
+        time_params (dict[str, float]): Time parameters (includes: pc_min_secs, pc_max_secs,
+        mintime, maxtime)
         logger (logging.Logger): Logger object
     Returns:
-        dict[str, np.ndarray] | str: Dictionary with corrected data ("time", "time_years", "dH")
-                                    or error status string.
+        dict[str, np.ndarray] | str: Dict with corrected data keys (time, time_years, dH, heading,
+        [weight_column]),or an error status string.
     """
 
-    pc_timeok_indices = np.where(
-        (group_np["time"] >= time_params["pc_min_secs"])
-        & (group_np["time"] <= time_params["pc_max_secs"])
-    )[0]
-
-    if pc_timeok_indices.size >= params.min_vals_in_cell:
-        ref_time = group_np["time_years"] - (
-            (time_params["mintime"] + time_params["maxtime"]) / (2.0 * SECONDS_PER_YEAR)
-        )
-
-        # ----------------------------------------------------------------------------------------
-        # Fit a model to power as a function of time and heading, p = a + bt + ch
-        # ----------------------------------------------------------------------------------------
-        iv = np.column_stack((np.ones(ref_time.size), ref_time, group_np["heading"]))
-        # Check if weighted power fit is enabled and weight_column is available
-        if (
-            hasattr(params, "weighted_power_fit")
-            and params.weighted_power_fit
-            and params.weight_column
-            and params.weight_column in group_np
-        ):
-            weights = group_np[params.weight_column]
-            w = np.where(weights > 0, 1.0 / (weights**2), 0.0)
-            wt = w / np.nansum(w)
-            power_res = sm.WLS(group_np["power"], iv, weights=wt, missing="drop").fit()
-            if power_res.model.data.param_names != ["const", "x1", "x2"]:
-                return "n_cells_fit_failed"
-        else:
-            try:
-                power_res, *_ = np.linalg.lstsq(iv, group_np["power"], rcond=None)
-            except np.linalg.LinAlgError as e:
-                logger.warning(f"lstsq failed with: {e}")
-                return "n_cells_fit_failed"
-        # -----------------------------------------------------------------
-        # Get the time dependent component of power is: bt = p -(a  + ch)
-        # ------------------------------------------------------------------
-        dp = group_np["power"] - (power_res[0] + power_res[2] * group_np["heading"])
-        # --------------------------------------------------------------
-        # Remove component of dH due to correlated power change
-        # Find the gradient of dH/dP over time interval (pcmintime,pcmaxtime)
-        # --------------------------------------------------------------
-        m, _ = np.polyfit(dp[pc_timeok_indices], group_np["dH"][pc_timeok_indices], 1)  # m=dH/dP
-        group_np["dH"] -= m * dp
-
-        # Return appropriate keys based on whether weights are available
-        return_keys = ["time", "time_years", "dH", "heading"]
+    def _return_keys(group_np):
+        keys = ["time", "time_years", "dH", "heading"]
         if params.weight_column and params.weight_column in group_np:
-            return_keys.append(params.weight_column)
+            keys.append(params.weight_column)
+        return {k: v for k, v in group_np.items() if k in keys}
 
-        return {key: value for key, value in group_np.items() if key in return_keys}
+    pc_mask = (group_np["time"] >= time_params["pc_min_secs"]) & (
+        group_np["time"] <= time_params["pc_max_secs"]
+    )
+    pc_indices = np.where(pc_mask)[0]
 
     # Return uncorrected data if insufficient time points (matches old_sf.py behavior)
-    return_keys = ["time", "time_years", "dH", "heading"]
-    if params.weight_column and params.weight_column in group_np:
-        return_keys.append(params.weight_column)
-    return {key: value for key, value in group_np.items() if key in return_keys}
+    if pc_indices.size < params.min_vals_in_cell:
+        return _return_keys(group_np)
+
+    ref_time = group_np["time_years"] - (
+        (time_params["mintime"] + time_params["maxtime"]) / (2.0 * SECONDS_PER_YEAR)
+    )
+
+    # ----------------------------------------------------------------------------------------
+    # Fit a model to power as a function of time and heading, p = a + bt + ch
+    # ----------------------------------------------------------------------------------------
+    iv = np.column_stack((np.ones(ref_time.size), ref_time, group_np["heading"]))
+    try:
+        power_res, *_ = np.linalg.lstsq(iv, group_np["power"], rcond=None)
+    except np.linalg.LinAlgError as e:
+        logger.warning(f"lstsq failed with: {e}")
+        return "n_cells_fit_failed"
+    # -----------------------------------------------------------------
+    # Get the time dependent component of power is: bt = p -(a  + ch)
+    # ------------------------------------------------------------------
+    dp = group_np["power"] - (power_res[0] + power_res[2] * group_np["heading"])
+    # --------------------------------------------------------------
+    # Remove component of dH due to correlated power change
+    # Find the gradient of dH/dP over time interval (pc_min_secs, pc_max_secs)
+    # --------------------------------------------------------------
+    m, _ = np.polyfit(dp[pc_indices], group_np["dH"][pc_indices], 1)  # m=dH/dP
+    group_np["dH"] -= m * dp
+
+    return _return_keys(group_np)
 
 
 # ------------------------
 # Linear Fit
 # ------------------------
-
-
 def fit_linear_fit_per_group(
     params: argparse.Namespace, group_np: dict[str, np.ndarray]
 ) -> dict[str, Any] | str:
     """
     Estimate dH/dt via iterative linear regression: h = a + bt.
-    Iterate until the difference between the dH and modelled dH are
-    are within +/-2 * rms or the max_linearfit_iterations limit is reached.
+    Iterates until all residuals are within 2*RMS, or max_linearfit_iterations is reached.
 
     Args:
-        params (argparse.Namespace): Configuration parameters
-        group_np (dict[str, np.ndarray]): Grid cell data dictionary with keys:
-            "time_years", "dH" (elevation residuals after surface/power correction)
+        params (argparse.Namespace): Command line arguments
+        group_np (dict[str, np.ndarray]):Grid cell arrays (includes: time_years, dH)
 
-    Returns:
-        dict[str, Any] | str:
-            On success, returns dictionary with keys:
-                - "m": slope (float)
-                - "rms": root mean square error (float)
-                - "sigma": standard deviation (float)
-                - "mask": boolean array (np.ndarray)
-                - "group_np": filtered data dictionary (dict[str, np.ndarray])
-                - "std_err": standard error (float or None)
-            On failure, returns error status string.
+    Returns
+        dict[str, Any] | str: Dict with keys m, rms, sigma, mask, group_np, std_err on success,
+        or an error status string on failure.
     """
+    std_err = None
     for _ in range(params.max_linearfit_iterations):
-        if (
-            hasattr(params, "weighted_power_fit")
-            and params.weighted_power_fit
-            and params.weight_column
-            and params.weight_column in group_np
-        ):
-            if np.nanmax(group_np["time"]) == np.nanmin(group_np["time"]) or np.nanmax(
-                group_np["time_years"]
-            ) == np.nanmin(group_np["time_years"]):
-                return "n_cells_time_identical"
 
-            m, c, _, _, std_err = stats.linregress(group_np["time_years"], group_np["dH"])
-            modelled_dh = m * group_np["time_years"] + c
-        else:
-            m, c = np.polyfit(group_np["time_years"], group_np["dH"], 1)
-            poly1d_fn = np.poly1d((m, c))
-            modelled_dh = poly1d_fn(group_np["time_years"])
-            std_err = None
+        m, c = np.polyfit(group_np["time_years"], group_np["dH"], 1)
+        poly1d_fn = np.poly1d((m, c))
+        modelled_dh = poly1d_fn(group_np["time_years"])
 
         differences = group_np["dH"] - modelled_dh
         rms = np.sqrt(np.mean(differences**2))
         sigma = np.std(differences, ddof=1)
         mask = np.absolute(differences) <= rms * 2.0
 
-        if np.count_nonzero(mask) == 0:
-            break
         if np.count_nonzero(mask) <= 3:
             break
 
@@ -1028,24 +914,21 @@ def write_chunk_output(
     Grid metadata → temporary .grid_chunk_XXXXXX.parquet (consolidated later)
 
     Args:
-        params (argparse.Namespace): Command line parameters with out_dir.
+        params (argparse.Namespace): Command line arguments.
         timeseries_records (list[dict] | None): List of timeseries records to write.
         row (dict | None): Dictionary with x_part and y_part keys for directory partitioning.
                           If None, uses root output directory.
         grid_records (list[dict] | None): List of grid cell records for temporary chunk file.
         chunk_id (int): Unique chunk identifier for temporary file naming.
     """
-    if timeseries_records is None:
-        timeseries_records = []
-    if grid_records is None:
-        grid_records = []
+    timeseries_records = timeseries_records or []
+    grid_records = grid_records or []
 
-    if row is not None:
-        # Directory-partitioned case
-        chunk_outdir = Path(params.out_dir) / f"x_part={row['x_part']}" / f"y_part={row['y_part']}"
-    else:
-        # Column-partitioned case
-        chunk_outdir = Path(params.out_dir)
+    chunk_outdir = (
+        Path(params.out_dir) / f"x_part={row['x_part']}" / f"y_part={row['y_part']}"
+        if row is not None
+        else Path(params.out_dir)
+    )
 
     os.makedirs(chunk_outdir, exist_ok=True)
     if timeseries_records:
@@ -1055,38 +938,38 @@ def write_chunk_output(
 
     # Write to temporary chunk file
     if grid_records:
-        chunk_path = Path(params.out_dir) / f".grid_chunk_{chunk_id:06d}.parquet"
-        pl.DataFrame(grid_records).write_parquet(chunk_path, compression="zstd")
+        pl.DataFrame(grid_records).write_parquet(
+            Path(params.out_dir) / f".grid_chunk_{chunk_id:06d}.parquet", compression="zstd"
+        )
 
 
 def consolidate_grid_chunks(params: argparse.Namespace, logger: logging.Logger) -> None:
     """
-    Stream all temporary .grid_chunk_*.parquet files into a single grid_data.parquet,
-    then delete the temporary files.
+    Merge all temporary .grid_chunk_*.parquet files into grid_data.parquet, then delete them.
 
     Args:
-        params (argparse.Namespace): Command line parameters
+        params (argparse.Namespace): Command line arguments
         logger (logging.Logger): Logger object
     """
     output_path = Path(params.out_dir) / "grid_data.parquet"
-    chunk_pattern = str(Path(params.out_dir) / ".grid_chunk_*.parquet")
+    chunk_files = list(Path(params.out_dir).glob(".grid_chunk_*.parquet"))
 
     # Check if any chunk files exist
-    chunk_files = list(Path(params.out_dir).glob(".grid_chunk_*.parquet"))
     if not chunk_files:
         logger.warning("No grid chunk files found to consolidate")
         return
 
-    logger.info(f"Consolidating {len(chunk_files)} grid chunk files into {output_path}")
-
+    logger.info("Consolidating %s grid chunk files into %s", len(chunk_files), output_path)
     # Stream-concatenate all chunks without loading into memory
-    pl.scan_parquet(chunk_pattern).sink_parquet(output_path, compression="zstd")
+    pl.scan_parquet(str(Path(params.out_dir) / ".grid_chunk_*.parquet")).sink_parquet(
+        output_path, compression="zstd"
+    )
 
     # Clean up temporary chunk files
     for chunk_file in chunk_files:
         chunk_file.unlink()
 
-    logger.info(f"Consolidation complete, removed {len(chunk_files)} temporary files")
+    logger.info("Consolidation complete, removed %s temporary files", len(chunk_files))
 
 
 # ------------------------
@@ -1099,9 +982,9 @@ def get_metadata_json(
     logger: logging.Logger,
 ) -> None:
     """
-    Create and save surface fit metadata.json in the output directory.
+    Write surface fit run metadata to <out_dir>/surface_fit_meta.json.
     Args:
-        params (argparse.Namespace): Command line parameters
+        params (argparse.Namespace): Command line arguments
         status (dict): Processing status information
         start_time (float): Start time of the processing
         logger (logging.Logger): Logger object
@@ -1134,7 +1017,7 @@ def fit_surface_fit_models_per_group(
     params: argparse.Namespace, sf_objects: dict, logger: logging.Logger
 ) -> dict[str, int]:
     """
-    Perform surface fit on grid data per grid cell.
+    Run the surface fit pipeline over all chunks and grid cells.
 
     Steps:
         1. Loop though chunks
@@ -1150,7 +1033,7 @@ def fit_surface_fit_models_per_group(
             - A timeseries grid
 
     Args:
-        params (argparse.Namespace): Configuration parameters
+        params (argparse.Namespace): Command line arguments
         sf_objects (dict): Surface fit objects from 'get_surface_fit_objects'
         logger (logging.Logger): Logger Object
     Returns:
@@ -1162,14 +1045,12 @@ def fit_surface_fit_models_per_group(
     max_secs = sf_objects["max_secs"]
     pc_min_secs = sf_objects["pc_min_secs"]
     pc_max_secs = sf_objects["pc_max_secs"]
-    chunk_id = 0
 
     # 1. Loop through grid chunks
-    for row in sf_objects["part_df"].iter_rows(named=True):
+    for chunk_id, row in enumerate(sf_objects["part_df"].iter_rows(named=True), start=1):
         grid_records = []
         timeseries_records = []
-        chunk_id = chunk_id + 1
-        logger.info(f"Processing chunk : {chunk_id} / {len(sf_objects['part_df'])}")
+        logger.info("Processing chunk : %s / %s", chunk_id, len(sf_objects["part_df"]))
 
         # 2. Load gridded data for this chunk
         gridcell_lazy, chunk_status = get_grid_data(
