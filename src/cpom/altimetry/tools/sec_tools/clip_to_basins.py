@@ -174,7 +174,6 @@ def get_data(
     logger: logging.Logger,
     infile: str | None = None,
     lazyframe: pl.LazyFrame | None = None,
-    get_lat_lon: bool = True,
 ) -> pl.LazyFrame:
     """
     Load data and add latitude/longitude coordinates for each grid-cell centre.
@@ -200,29 +199,17 @@ def get_data(
 
     # Get unique cells
     unique_cells = epoch_data.select(["x_bin", "y_bin"]).unique().collect()
-    if get_lat_lon:
-        # Compute lat/lon
-        lats, lons = grid_area.get_cellcentre_lat_lon_from_col_row(
-            unique_cells.get_column("x_bin").to_numpy(),
-            unique_cells.get_column("y_bin").to_numpy(),
-        )
-        coords_df = unique_cells.with_columns(
-            [
-                pl.Series("lat", lats),
-                pl.Series("lon", lons),
-            ]
-        ).lazy()
-    else:
-        x, y = grid_area.get_cellcentre_x_y_from_col_row(
-            unique_cells.get_column("x_bin").to_numpy(),
-            unique_cells.get_column("y_bin").to_numpy(),
-        )
-        coords_df = unique_cells.with_columns(
-            [
-                pl.Series("x", x),
-                pl.Series("y", y),
-            ]
-        ).lazy()
+
+    x, y = grid_area.get_cellcentre_x_y_from_col_row(
+        unique_cells.get_column("x_bin").to_numpy(),
+        unique_cells.get_column("y_bin").to_numpy(),
+    )
+    coords_df = unique_cells.with_columns(
+        [
+            pl.Series("x", x),
+            pl.Series("y", y),
+        ]
+    ).lazy()
 
     # Join coordinates to data
     return epoch_data.join(
@@ -297,7 +284,7 @@ def process_single_basin(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     in_file = Path(params.in_dir) / params.parquet_glob
-    data = get_data(grid_area, logger, in_file, get_lat_lon=False)
+    data = get_data(grid_area, logger, in_file)
     clipped_data = clip_data_to_shape(mask, basin_number, data)
     stats_df = clipped_data.select(
         [

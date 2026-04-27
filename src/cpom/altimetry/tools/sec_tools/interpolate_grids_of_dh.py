@@ -599,9 +599,7 @@ def process_target(
         params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
     )
     # # Mask out-of-range values in the output DataFrame as well, to be safe
-    interpolated_df = get_data(
-        grid_area=ga, logger=logger, lazyframe=interpolated_df, get_lat_lon=False
-    )
+    interpolated_df = get_data(grid_area=ga, logger=logger, lazyframe=interpolated_df)
     interpolated_df = (
         Mask(params.mask)
         .points_inside_polars(interpolated_df.lazy(), basin_numbers=params.mask_values)
