@@ -606,6 +606,8 @@ def process_target(
         .drop(["x", "y"])
     )
 
+    if isinstance(masked_lf, pl.DataFrame):
+        masked_lf = masked_lf.lazy()
     masked_lf.sink_parquet(output_path, compression="zstd")
 
     try:

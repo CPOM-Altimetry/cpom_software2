@@ -301,7 +301,8 @@ def get_processing_objects(
         new_dtype = np.dtype(file_and_dates.dtype.descr + [("beam", "U10")])
         expanded = np.empty(n * nb, dtype=new_dtype)
 
-        for name in file_and_dates.dtype.names:
+        field_names = file_and_dates.dtype.names or ()
+        for name in field_names:
             expanded[name] = np.repeat(file_and_dates[name], nb)
         expanded["beam"] = np.tile(dataset.beams, n)
 
