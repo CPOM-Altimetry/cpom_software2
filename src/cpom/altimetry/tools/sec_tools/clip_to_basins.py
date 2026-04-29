@@ -189,7 +189,7 @@ def get_data(
     Returns:
         pl.LazyFrame: Input data with 'lat' and 'lon' columns appended.
     """
-    if lazyframe is not None and not lazyframe.is_empty():
+    if lazyframe is not None:
         epoch_data = lazyframe
     else:
         if infile is None:
@@ -245,6 +245,8 @@ def clip_data_to_shape(
         result = mask.points_inside_polars(data).drop(["x", "y"])
     finally:
         mask.basin_numbers = prev_basin_numbers
+    if isinstance(result, pl.DataFrame):
+        return result.lazy()
     return result
 
 

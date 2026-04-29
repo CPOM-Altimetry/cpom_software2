@@ -740,6 +740,8 @@ def fit_surface_model_per_group(
         fit_params, error_status = _get_fit_params(params, group_np, ref_time, logger)
         if error_status is not None:
             return error_status
+        if fit_params is None:
+            return "n_cells_fit_failed"
 
         mask = _get_modelled_heights_and_sigma_filter(
             group_np, fit_params, ref_time, params.n_sigma

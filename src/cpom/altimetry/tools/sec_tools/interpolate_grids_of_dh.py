@@ -599,13 +599,14 @@ def process_target(
         params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
     )
     # Mask out-of-range values in the output DataFrame as well, to be safe
-    interpolated_df = get_data(grid_area=ga, logger=logger, lazyframe=interpolated_df)
-    interpolated_df = (
+    interpolated_lf = get_data(grid_area=ga, logger=logger, lazyframe=interpolated_df.lazy())
+    masked_lf = (
         Mask(params.mask)
-        .points_inside_polars(interpolated_df.lazy(), basin_numbers=params.mask_values)
+        .points_inside_polars(interpolated_lf, basin_numbers=params.mask_values)
         .drop(["x", "y"])
     )
-    interpolated_df.write_parquet(output_path, compression="zstd")
+
+    masked_lf.sink_parquet(output_path, compression="zstd")
 
     try:
         write_metadata(

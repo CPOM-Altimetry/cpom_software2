@@ -252,7 +252,7 @@ def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_
 
 def get_processing_objects(
     params: argparse.Namespace, dataset: DatasetHelper
-) -> tuple[dict, Any, GridArea, logging.Logger]:
+) -> tuple[np.ndarray, Any, GridArea, logging.Logger]:
     """
     Set up objects needed to process altimetry files.
 
@@ -291,6 +291,9 @@ def get_processing_objects(
     )
 
     logger.info("Found %s files", len(file_and_dates))
+    if len(file_and_dates) == 0:
+        logger.warning("No files found matching criteria. Exiting.")
+        sys.exit(0)
 
     # For multi-beam missions (IS2), expand to one task per (file, beam)
     if dataset.beams:
