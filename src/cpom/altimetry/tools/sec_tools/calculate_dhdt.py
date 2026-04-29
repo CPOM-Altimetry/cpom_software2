@@ -176,7 +176,7 @@ def resolve_input_parquet_path(
         return str(requested_path), parquet_glob
 
     is_partitioned = False
-    # Preferred path: read from upstream SEC metadata entry-store.
+    # Resolve from upstream SEC metadata entry-store.
     if params is not None and getattr(params, "in_step", None):
         try:
             in_step = str(params.in_step)

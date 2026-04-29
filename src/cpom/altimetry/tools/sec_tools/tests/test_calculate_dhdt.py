@@ -1,6 +1,6 @@
 """Regression tests for SEC dh/dt calculation helpers."""
 
-import json
+import argparse
 import logging
 from datetime import datetime
 
@@ -14,19 +14,38 @@ from cpom.altimetry.tools.sec_tools.calculate_dhdt import (
 
 
 def test_resolve_input_parquet_path_uses_recursive_scan_for_partitioned_epoch_average(
+    monkeypatch,
     tmp_path,
 ) -> None:
-    """Use partition metadata to expand a root parquet path into a recursive scan."""
+    """Use upstream metadata to expand a root parquet path into a recursive scan."""
 
-    metadata_file = tmp_path / "epoch_avg_meta.json"
-    metadata_file.write_text(json.dumps({"partitioned": True}), encoding="utf-8")
+    monkeypatch.setattr(
+        "cpom.altimetry.tools.sec_tools.calculate_dhdt.get_metadata_params",
+        lambda **_: {"partitioned": True},
+    )
+
+    params = argparse.Namespace(in_step="epoch_average")
+
+    resolved, effective_glob = resolve_input_parquet_path(
+        tmp_path,
+        "epoch_average.parquet",
+        logging.getLogger("test"),
+        params=params,
+    )
+
+    assert resolved == str(tmp_path / "**" / "epoch_average.parquet")
+    assert effective_glob == "**/epoch_average.parquet"
+
+
+def test_resolve_input_parquet_path_without_params_returns_requested_path(tmp_path) -> None:
+    """Without in_step metadata context, keep the requested parquet path unchanged."""
 
     resolved, effective_glob = resolve_input_parquet_path(
         tmp_path, "epoch_average.parquet", logging.getLogger("test")
     )
 
-    assert resolved == str(tmp_path / "**" / "epoch_average.parquet")
-    assert effective_glob == "**/epoch_average.parquet"
+    assert resolved == str(tmp_path / "epoch_average.parquet")
+    assert effective_glob == "epoch_average.parquet"
 
 
 def test_get_start_end_dates_for_calculation_raises_for_empty_input() -> None:
