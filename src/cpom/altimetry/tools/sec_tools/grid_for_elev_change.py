@@ -292,6 +292,19 @@ def get_processing_objects(
 
     logger.info("Found %s files", len(file_and_dates))
 
+    # For multi-beam missions (IS2), expand to one task per (file, beam)
+    if dataset.beams:
+        n, nb = len(file_and_dates), len(dataset.beams)
+        new_dtype = np.dtype(file_and_dates.dtype.descr + [("beam", "U10")])
+        expanded = np.empty(n * nb, dtype=new_dtype)
+
+        for name in file_and_dates.dtype.names:
+            expanded[name] = np.repeat(file_and_dates[name], nb)
+        expanded["beam"] = np.tile(dataset.beams, n)
+
+        file_and_dates = expanded
+        logger.info("Expanded to %s per-beam tasks (%s beams)", len(file_and_dates), nb)
+
     # Get the number of seconds between the epoch to be used in the grid and the dataset epoch
     offset = dataset.get_unified_time_epoch_offset(params.standard_epoch, dataset.dataset_epoch)
 
@@ -596,7 +609,7 @@ def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
 
 # pylint: disable= R0911, R0912, R0913, R0914, R0915,R0917
 def process_file(
-    file_and_date: dict,
+    file_and_date: dict | np.void,
     dataset: DatasetHelper,
     offset: float,
     this_grid: GridArea,
@@ -630,6 +643,21 @@ def process_file(
         In debug mode returns a tuple of (frame or None, stats dict).
     """
     # Get filetype from search pattern
+
+    # For multi-beam missions expanded to per-beam tasks, restrict dataset to the
+    # single beam for this task.
+    beam_value: str | None = None
+    if isinstance(file_and_date, np.void):
+        field_names = file_and_date.dtype.names or ()
+        if "beam" in field_names and file_and_date["beam"]:
+            beam_value = str(file_and_date["beam"])
+    elif isinstance(file_and_date, dict):
+        beam = file_and_date.get("beam")
+        if beam:
+            beam_value = str(beam)
+
+    if beam_value is not None:
+        dataset.beams = [beam_value]
 
     stats: dict | None = None
     if params.debug:
@@ -905,7 +933,7 @@ def get_data_and_status_multiprocessed(
         dict: Processing status dictionary, containing information about the files processed.
     """
 
-    status: dict[str, Any] = {
+    status: dict = {
         "empty_periods": [],
         "years_ingested": [],
         "years_files_ingested": [],
@@ -929,12 +957,11 @@ def get_data_and_status_multiprocessed(
                 try:
                     for result in executor.map(worker, files_in_period, chunksize=chunksize):
 
-                        frame: pl.LazyFrame | None
-                        file_stats: dict[str, Any] | None
-                        if isinstance(result, tuple) and len(result) == 2:
-                            frame, file_stats = result
-                        else:
-                            frame, file_stats = result, None
+                        frame, file_stats = (
+                            result
+                            if isinstance(result, tuple) and len(result) == 2
+                            else (result, None)
+                        )
 
                         if params.debug and file_stats and isinstance(file_stats, dict):
                             _log_file_stats(logger, file_stats)
