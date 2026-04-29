@@ -46,7 +46,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-import duckdb
 import numpy as np
 import polars as pl
 import statsmodels.api as sm
@@ -341,7 +340,8 @@ def get_min_max_time(
         min_dt, min_secs = get_date(epoch_time, mintime)
         max_dt, max_secs = get_date(epoch_time, maxtime)
     else:
-        df = pl.scan_parquet(parquet_glob)
+        valid_files = pl.scan_parquet(parquet_glob)
+        df = pl.scan_parquet(valid_files)
         min_max = df.select(
             [
                 pl.col(time_column).min().alias("min_time"),
@@ -383,15 +383,13 @@ def get_unique_chunks(params: argparse.Namespace) -> pl.DataFrame:
     Returns:
         pl.DataFrame: DataFrame of unique (x_part, y_part) chunks to process
     """
-    conn = duckdb.connect()
-
-    # Try to read with hive partitioning (directory structure)
-    part_df = conn.execute(f"""
-        SELECT DISTINCT x_part, y_part
-        FROM read_parquet('{params.in_dir}/**/x_part=*/y_part=*/*.parquet',
-        hive_partitioning=1);
-        """).pl()
-    conn.close()
+    pattern = f"{params.in_dir}/**/x_part=*/y_part=*/*.parquet"
+    part_df = (
+        pl.scan_parquet(pattern, hive_partitioning=True)
+        .select(["x_part", "y_part"])
+        .unique()
+        .collect()
+    )
 
     # Sort
     part_df = part_df.sort(["x_part", "y_part"])
@@ -1034,7 +1032,7 @@ def fit_linear_fit_per_group(
             group_np[key] = group_np[key][mask]
 
     if group_np["time"].size <= 3:
-        return "n_too_few_values_in_linear_fit"
+        return "n_cells_too_few_values_in_linear_fit"
 
     return {
         "m": m,
