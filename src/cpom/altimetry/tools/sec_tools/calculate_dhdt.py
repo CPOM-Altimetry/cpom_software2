@@ -37,6 +37,7 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
     elapsed,
     get_algo_name,
+    get_metadata_params,
     write_metadata,
 )
 from cpom.logging_funcs.logging import set_loggers
@@ -161,6 +162,55 @@ def _has_glob_magic(path_pattern: str) -> bool:
     return any(char in path_pattern for char in "*?[]")
 
 
+def resolve_input_parquet_path(
+    in_path: Path,
+    parquet_glob: str,
+    logger: logging.Logger,
+    params: argparse.Namespace | None = None,
+    basin: str | None = None,
+) -> tuple[str, str]:
+    """Resolve input parquet pattern and return (resolved_path, effective_parquet_glob)."""
+
+    requested_path = in_path / parquet_glob
+    if _has_glob_magic(parquet_glob):
+        return str(requested_path), parquet_glob
+
+    is_partitioned = False
+    # Preferred path: read from upstream SEC metadata entry-store.
+    if params is not None and getattr(params, "in_step", None):
+        try:
+            in_step = str(params.in_step)
+            metadata_values = get_metadata_params(
+                params=params,
+                fields=["partitioned"],
+                algo_name=in_step,
+                basin_name=basin,
+                logger=logger,
+            )
+            is_partitioned = bool(metadata_values.get("partitioned") is True)
+        except ValueError:
+            is_partitioned = False
+
+    if is_partitioned:
+        effective_glob = f"**/{parquet_glob}"
+        resolved_path = in_path / effective_glob
+        logger.info(
+            "Input metadata indicates partitioned epoch-average output; scanning %s",
+            resolved_path,
+        )
+        return str(resolved_path), effective_glob
+
+    if not requested_path.exists():
+        logger.warning(
+            "Input path '%s' does not exist. If epoch_average was partitioned, "
+            "set --parquet_glob to '**/%s'.",
+            requested_path,
+            parquet_glob,
+        )
+
+    return str(requested_path), parquet_glob
+
+
 def resolve_paths(
     params: argparse.Namespace,
     logger: logging.Logger,
@@ -178,7 +228,12 @@ def resolve_paths(
         tuple[str, Path]: (input glob pattern string, output directory Path)
     """
     in_base = Path(params.in_dir) / basin if basin else Path(params.in_dir)
-    in_path = in_base / params.parquet_glob
+    input_path, effective_parquet_glob = resolve_input_parquet_path(
+        in_base, params.parquet_glob, logger, params=params, basin=basin
+    )
+
+    if effective_parquet_glob != params.parquet_glob:
+        params.parquet_glob = effective_parquet_glob
 
     out_path = Path(params.out_dir) / basin if basin is not None else Path(params.out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -188,9 +243,9 @@ def resolve_paths(
             "Using glob pattern '%s' to select input files in %s", params.parquet_glob, in_base
         )
     else:
-        logger.info("Using input file path '%s'", in_path)
+        logger.info("Using input file path '%s'", input_path)
 
-    return str(in_path), out_path
+    return input_path, out_path
 
 
 def get_start_end_dates_for_calculation(
@@ -280,7 +335,7 @@ def get_period_limits_df(
             WITH periods AS (
                 SELECT 
                     period_lo, 
-                    period_lo + INTERVAL '{_parse_period_string(dhdt_period, True)}' AS period_hi,
+                    period_lo + INTERVAL {_parse_period_string(dhdt_period, True)} AS period_hi,
                     ROW_NUMBER() OVER (ORDER BY period_lo) AS period_id
                 FROM 
                 generate_series(DATE '{dhdt_start.strftime("%Y-%m-%d")}',
@@ -485,7 +540,10 @@ def get_metadata_json(
     logger,
 ) -> None:
     """
-    Write processing metadata to JSON using the shared SEC entry-store format.
+    Write processing metadata to a JSON file.
+
+    Single-mission output uses the shared write_metadata helper.
+    Multi-mission output writes a central dhdt_metadata.json to --out_dir.
 
     Args:
         params (argparse.Namespace): Command line parameters.

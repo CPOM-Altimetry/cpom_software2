@@ -98,7 +98,7 @@ def get_set_up_objects(params):
     grid_meta = get_metadata_params(params, "all", "grid_for_elev_change")
 
     for key, value in grid_meta.items():
-        params.__setattr__(key, value)
+        setattr(params, key, value)
 
     # Construct dataset object
     dataset = DatasetHelper(

@@ -21,11 +21,12 @@ def test_resolve_input_parquet_path_uses_recursive_scan_for_partitioned_epoch_av
     metadata_file = tmp_path / "epoch_avg_meta.json"
     metadata_file.write_text(json.dumps({"partitioned": True}), encoding="utf-8")
 
-    resolved = resolve_input_parquet_path(
+    resolved, effective_glob = resolve_input_parquet_path(
         tmp_path, "epoch_average.parquet", logging.getLogger("test")
     )
 
     assert resolved == str(tmp_path / "**" / "epoch_average.parquet")
+    assert effective_glob == "**/epoch_average.parquet"
 
 
 def test_get_start_end_dates_for_calculation_raises_for_empty_input() -> None:

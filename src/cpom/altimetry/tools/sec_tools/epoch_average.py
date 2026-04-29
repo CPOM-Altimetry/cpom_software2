@@ -350,6 +350,24 @@ def get_gia_correction_lf(
 # ----------------------- #
 # Data processing functions #
 # ----------------------- #
+
+
+def infer_epoch_origin_dt(epoch_lf: pl.LazyFrame, epoch_length_days: int) -> datetime:
+    """Infer the datetime used for epoch number zero from a filtered epoch table."""
+
+    epoch_bounds = epoch_lf.select(
+        pl.col("epoch_lo_dt").min().alias("first_epoch_lo_dt"),
+        pl.col("epoch_number").min().alias("first_epoch_number"),
+    ).collect()
+
+    first_epoch_lo_dt = epoch_bounds["first_epoch_lo_dt"][0]
+    first_epoch_number = epoch_bounds["first_epoch_number"][0]
+    if first_epoch_lo_dt is None or first_epoch_number is None:
+        raise ValueError("Cannot infer epoch origin from an empty epoch table.")
+
+    return first_epoch_lo_dt - timedelta(days=first_epoch_number * epoch_length_days)
+
+
 def assign_epochs_lf(
     surface_fit_lf: pl.LazyFrame,
     epoch_lf: pl.LazyFrame,
@@ -366,16 +384,7 @@ def assign_epochs_lf(
         pl.LazyFrame: Surface fit data with epoch_number and time_delta_years columns added.
     """
 
-    # Get the datetime of the first epoch
-    epoch_bounds = epoch_lf.select(
-        pl.col("epoch_lo_dt").min().alias("first_epoch_lo_dt"),
-        pl.col("epoch_number").min().alias("first_epoch_number"),
-    ).collect()
-
-    epoch_origin_dt = epoch_bounds["first_epoch_lo_dt"][0] - timedelta(
-        days=int(epoch_bounds["first_epoch_number"][0]) * epoch_length_days
-    )
-
+    epoch_origin_dt = infer_epoch_origin_dt(epoch_lf, epoch_length_days)
     epoch_length_seconds = epoch_length_days * 86400
 
     # Assign each observation an epoch number
