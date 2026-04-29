@@ -26,6 +26,10 @@ from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
     get_data_and_status_multiprocessed,
     process_file,
 )
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    get_metadata_params,
+    get_metadata_path,
+)
 from cpom.areas.areas import Area
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -35,17 +39,23 @@ log = logging.getLogger(__name__)
 
 
 def parse_arguments(args):
-    """
-    Parse command line arguments for updating an altimetry grid.
-
-    Return:
-        parser.parse_args(args)
-    """
+    """Parse command line arguments for updating an altimetry grid."""
     parser = argparse.ArgumentParser(
         description=("Update a single year of gridded elevation change data ")
     )
+    # I/O Arguments
     parser.add_argument(
-        "--grid_info_json", type=str, required=True, help="Path to the grid metadata JSON file."
+        "--in_step",
+        type=str,
+        required=False,
+        default="grid_for_elev_change",
+        help="Input algorithm step to source metadata from",
+    )
+    parser.add_argument(
+        "--in_dir",
+        type=str,
+        required=True,
+        help="Input data directory (grid_for_elev_change output directory)",
     )
     parser.add_argument(
         "--update_year",
@@ -54,59 +64,41 @@ def parse_arguments(args):
         help="Year to update in the dataset (e.g., 2020)",
     )
     parser.add_argument(
-        "--correction_function",
-        type=str,
-        default="default_corrections",
-        help="Correction function name from grid_for_elev_change_corrections.py.",
-    )
-    parser.add_argument(
         "--max_workers",
         type=int,
         default=max(1, os.cpu_count() or 1),
         help="Maximum worker processes for multiprocessing.",
     )
     parser.add_argument(
-        "--flush_every",
-        type=int,
-        default=60,
-        help="Number of files to process before writing to disk",
-    )
-    parser.add_argument(
-        "--add_vars",
-        type=json.loads,
-        default="{}",
-        help="Optional extra variables as JSON dict, "
-        'e.g. {"tide_ocean":"land_ice_segments/geophysical/tide_ocean"}',
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable DEBUG level logging and collect per-file processing stats",
+        help="Enable DEBUG level logging",
     )
     return parser.parse_args(args)
 
 
-def get_set_up_objects(args):
+def get_set_up_objects(params):
     """
-    Reconstruct command line argumets from grid metadata JSON file.
-    Reconstruct DatasetHelper, GridArea, Area and Mask objects.
-    Validates if the output directory exists.
+    Reconstruct processing objects from an existing grid metadata file.
+
+    Reads grid metadata, merges stored parameters into arguments and constructs
+    DatasetHelper, GridArea, Area and Mask objects.
 
     Args:
-        args (Argparse.Namespace): Parsed command line arguments.
-        logger (logging.Logger): Logger object for logging.
+        params (argparse.Namespace): Command line parameters.
 
     Returns:
-        tuple: Contains the dataset, grid, area, mask and grid metadata.
+        tuple:
+            - dataset (DatasetHelper): Dataset helper for the mission.
+            - thisgrid (GridArea): Grid definition for the target area.
+            - thisarea (Area): Area definition for spatial filtering.
+            - thismask (Mask): Mask used during gridding.
+            - grid_meta (dict): Metadata dictionary loaded from grid_meta.json.
     """
-    # Load json metadata
-    with open(args.grid_info_json, "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
+    grid_meta = get_metadata_params(params, "all", "grid_for_elev_change")
 
-    args.out_dir = grid_meta["out_dir"]
-    args.partition_columns = grid_meta["partition_columns"]
-    args.partition_xy_chunking = grid_meta["partition_xy_chunking"]
-    args.fill_missing_poca = grid_meta["fill_missing_poca"]
+    for key, value in grid_meta.items():
+        setattr(params, key, value)
 
     # Construct dataset object
     dataset = DatasetHelper(
@@ -131,23 +123,28 @@ def get_set_up_objects(args):
     return dataset, thisgrid, thisarea, thismask, grid_meta
 
 
-def update_metadata_json(grid_meta, args, status, logger):
+def update_metadata_json(params, grid_meta, status, logger):
     """
-    Update the metadata JSON file with the new status information.
-    for the year that has been reprocessed.
+    Update grid metadata with ingestion counts for the reprocessed year.
+    Append the year if new, or replaces counts for a reprocessed year.
 
     Args:
-        grid_meta (dict): The original grid metadata.
-        status (dict): The new status information to update.
+        params (argparse.Namespace): Command line parameters.
+        grid_meta (dict): Metadata dictionary from get_set_up_objects, modified in place.
+        status (dict): Ingestion counts.
+        logger (logging.Logger): Logger for logging messages.
     """
 
     new_year_file_ingested = status["years_files_ingested"][0]
     new_year_file_rejected = status["years_files_rejected"][0]
     new_year_rows_ingested = status["years_rows_ingested"][0]
 
-    if args.update_year not in grid_meta["years_ingested"]:
+    year_label = str(params.update_year)
+    existing_year_labels = [str(y) for y in grid_meta["years_ingested"]]
+
+    if year_label not in existing_year_labels:
         # Add new year to the metadata
-        grid_meta["years_ingested"].append(args.update_year)
+        grid_meta["years_ingested"].append(year_label)
         grid_meta["years_files_ingested"].append(new_year_file_ingested)
         grid_meta["years_files_rejected"].append(new_year_file_rejected)
         grid_meta["years_rows_ingested"].append(new_year_rows_ingested)
@@ -161,7 +158,7 @@ def update_metadata_json(grid_meta, args, status, logger):
 
     else:
         # Update existing year in the metadata
-        idx = grid_meta["years_ingested"].index(args.update_year)
+        idx = existing_year_labels.index(year_label)
 
         old_year_file_ingested = grid_meta["years_files_ingested"][idx]
         old_year_file_rejected = grid_meta["years_files_rejected"][idx]
@@ -180,53 +177,73 @@ def update_metadata_json(grid_meta, args, status, logger):
         grid_meta["total_rows_ingested"] = grid_meta["total_rows_ingested"] + (
             new_year_rows_ingested - old_year_rows_ingested
         )
+    metadata_path = get_metadata_path(params, basin_name=None, logger=logger)
+    if metadata_path is None:
+        raise ValueError("Could not resolve metadata path for updating grid metadata.")
+
+    metadata_file = Path(metadata_path)
 
     try:
-        with open(args.grid_info_json, "w", encoding="utf-8") as f_meta:
-            json.dump(grid_meta, f_meta, indent=2)
-        logger.info("Wrote data_set metadata to %s", args.grid_info_json)
+        with open(metadata_file, "r", encoding="utf-8") as handle:
+            entry_store = json.load(handle)
+    except OSError as exc:
+        logger.error("Failed to read metadata.json: %s", exc)
+        raise
+
+    matching_keys = [key for key in entry_store if key.startswith("grid_for_elev_change_")]
+    if not matching_keys:
+        raise ValueError(f"No grid_for_elev_change entry found in {metadata_file}")
+
+    latest_key = max(matching_keys)
+    entry_store[latest_key] = grid_meta
+
+    try:
+        with open(metadata_file, "w", encoding="utf-8") as handle:
+            json.dump(entry_store, handle, indent=2)
+            handle.write("\n")
+        logger.info("Updated grid metadata counts in %s", metadata_file)
     except OSError as exc:
         logger.error("Failed to write metadata.json: %s", exc)
+        raise
 
 
 # ---------------#
 # Main Function #
 # ---------------#
-def grid_for_elev_change_update_year(args):
+def grid_for_elev_change_update_year(
+    args,
+):
     """
-    Main function to parse arguments and initiate the year update process.
-        1. Parse command line arguments.
-        2. Set up logging.
-        3. Get dataset, area and grid objects
-        4. Get files/ dates from the filename in the year to update
-        5. Get offset from the dataset
-        6. Process year of data and write to Parquet files
-        7. Update the metadata JSON file with the new year data
+    Main entry point for updating a year of gridded elevation change data.
+
+    Reconstruct grid_for_elev_change processing object using metadata, reprocess files for a
+    specified year, overwrite parquet partitions for that year and update metadata counts.
+
+    Args:
+        args (list): Command line arguments.
     """
-    params = parse_arguments(args)
+    args = parse_arguments(args)
 
     # --------------------------------------------------------#
     # 1. Get dataset, area and grid objects #
     # --------------------------------------------------------#
-    dataset, thisgrid, thisarea, thismask, grid_meta = get_set_up_objects(params)
+    dataset, thisgrid, thisarea, thismask, grid_meta = get_set_up_objects(args)
     # -----------------------------------------------------------#
     # 2. Get files/ dates from the filename in the year to update#
     #  3. Get offset from the dataset                            #
     # -----------------------------------------------------------#
-    min_date = f"{params.update_year}0101"
-    max_date = f"{params.update_year}1231"
+    min_date = f"{args.update_year}0101"
+    max_date = f"{args.update_year}1231"
     files_and_dates = dataset.get_files_and_dates(min_dt_time=min_date, max_dt_time=max_date)
 
-    log_path = Path(grid_meta["out_dir"]) / f"update_{params.update_year}_logs"
-    log_path.mkdir(parents=True, exist_ok=True)
     logger = set_loggers(
-        log_dir=str(log_path),
-        default_log_level=logging.DEBUG if params.debug else logging.INFO,
+        log_dir=grid_meta["out_dir"],
+        default_log_level=logging.DEBUG if args.debug else logging.INFO,
     )
-    logger.info("output_dir=%s", params.out_dir)
 
+    logger.info("Found %d files for year %s", len(files_and_dates), args.update_year)
     if len(files_and_dates) == 0:
-        logger.error("No files found for year %s", params.update_year)
+        logger.error("No files found for year %s", args.update_year)
         return
 
     offset = dataset.get_unified_time_epoch_offset(
@@ -239,13 +256,13 @@ def grid_for_elev_change_update_year(args):
         this_grid=thisgrid,
         this_area=thisarea,
         this_mask=thismask,
-        params=params,
+        params=args,
     )
     # --------------------------------------------------------#
     # 4. Process  year of data and write to Parquet files #
     # --------------------------------------------------------#
     status = get_data_and_status_multiprocessed(
-        params=params,
+        params=args,
         file_and_dates=files_and_dates,
         worker=worker,
         logger=logger,
@@ -253,8 +270,10 @@ def grid_for_elev_change_update_year(args):
     # -----------------------------------------------------------------------
     # 5. Update the metadata JSON file with the new year data
     # -----------------------------------------------------------------------
-    update_metadata_json(grid_meta, params, status, logger)
+    update_metadata_json(args, grid_meta, status, logger)
 
+
+log = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     grid_for_elev_change_update_year(sys.argv[1:])

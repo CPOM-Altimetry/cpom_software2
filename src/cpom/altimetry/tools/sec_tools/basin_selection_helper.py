@@ -3,11 +3,9 @@ cpom.altimetry.tools.sec_tools.basin_selection_helper
 
 Module with cental utilities for basin/region selection in SEC tools.
 
-Includes :
-    1. add_basin_selection_arguments() to add standard CLI args for basin selection
-        - basin_structure: bool flag for root vs basin mode
-        - region_selector: list of basin names to include
-    2. get_basins_to_process()
+Functions:
+    add_basin_selection_arguments: Add standard CLI args for basin/region selection.
+    get_basins_to_process: Resolve which basins/regions to process given CLI params.
 
 """
 
@@ -19,17 +17,14 @@ from pathlib import Path
 def add_basin_selection_arguments(parser: argparse.ArgumentParser) -> None:
     """
     Add standard basin/region selection arguments to an ArgumentParser.
+    Extends the given parser with two shared SEC arguments:
 
-    Adds two arguments:
-    - basin_structure (bool): When False, process root-level only; when True,
-      treat immediate subdirectories of`in_dir` as basins to process.
-    - region_selector (list[str]): Names of basins/regions to include. Use `all`
-      to include every available basin when `basin_structure` is True.
+    --basin_structure: When set, treats immediate subdirectories
+      of in_dir as basins to process. When omitted, processes root-level data only.
+    - --region_selector: Basin/region names to include. Defaults to
+      ["all"], which selects every available basin when basin_structure is set.
 
-    Args:
-        parser (argparse.ArgumentParser): Parser to extend with shared SEC options.
-
-    Example:
+    Usage:
         parser = argparse.ArgumentParser()
         add_basin_selection_arguments(parser)
         params = parser.parse_args()
@@ -59,19 +54,16 @@ def get_basins_to_process(
     Determine which basins/regions should be processed.
 
     Modes:
-    - Root mode (`basin_structure=False`): Returns `["None"]` indicating root-level processing.
-    - Basin mode (`basin_structure=True`): Basin/region names are determined from subdirectories
-        of `directory`.
-    If `region_selector` is `["all"]`, includes all basins; otherwise filters by names provided.
-
+    - Root mode (basin_structure=False): Returns ["None"] indicating root-level processing.
+    - Basin mode (basin_structure=True): Basin/region names are determined from subdirectories
+        of directory. Filtered based on params.regions_selector.
     Args:
-        params (argparse.Namespace): Command Line Arguments :
-            - Includes basin_structure and region_selector.
-        directory (str | Path): Base directory to scan for basins.
-        logger (logging.Logger): Logger for progress messages.
-
+        params (argparse.Namespace): Command Line Arguments. Includes
+            (basin_structure and region_selector)
+        directory (str | Path): Base directory to scan for basin subdirectories.
+        logger (logging.Logger): Logger Object
     Returns:
-        list[str]: Basin directory names to process. In root mode, returns [`None`].
+        list[str]: Sorted basin names to process, or ``["None"]`` in root mode.
     """
     directory = Path(directory)
 
