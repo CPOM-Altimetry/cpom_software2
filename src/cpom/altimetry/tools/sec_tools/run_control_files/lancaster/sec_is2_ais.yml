@@ -1,0 +1,124 @@
+#-------------------------------------------------------------------------------------#
+# Run Control file to produce single mission Greenland Ice Sheet wide and selected
+# basins dh/dt estimates and plots for ICESat-2 ATL06 data.
+
+# This covers just a subset of optional steps and parameters available. 
+# See the documentation for full details of command line arguments and 
+# algorithms available. 
+#
+# USAGE:
+#  Process all configured missions (sequential):
+#     ./run_chain.py --config sec_is2_greenland.yml
+#
+#  Process a specific subset (override missions_to_run on the command line):
+#     ./run_chain.py --config sec_is2_greenland.yml
+#-------------------------------------------------------------------------------------#
+
+# Define which mission(s) to process
+# Comment out missions you do not want to run
+missions_to_run: 
+  - is2
+
+is2:
+  algorithm_list : 
+    - grid_for_elev_change
+    - surface_fit
+    - epoch_average
+    - clip_to_basins
+    - epoch_average_plots
+    - calculate_dhdt
+    - dhdt_plots
+  base_folder: "ais_is2_5km"
+
+base_out : "/home/willisc3/luna/CPOM/willisc3/SEC/"
+########################
+# SEC Processing Steps # 
+########################
+grid_for_elev_change:
+  out_folder_name: gridded_altimetry
+  data_input_dir: "${CPDATA_DIR}/SATS/LASER/ICESAT-2/ATL-06/versions/006/"
+  dataset: "${CPOM_SOFTWARE_DIR}/src/cpom/altimetry/datasets/definitions/is2_atl06.yml"
+  partition_columns: ["year", "month", "x_part", "y_part"]
+  area: 'antarctica'
+  gridarea: "antarctica"
+  binsize: 5000
+  mask_name: 'antarctic_grounded_and_floating_2km_grid_mask'
+  standard_epoch: "1991-01-01T00:00:00"
+  partition_xy_chunking: 50  # Number of grid cells in each partition
+  # Increase to speed up. (Will use more memory)
+  max_workers: 10
+  flush_every: 10
+
+surface_fit:  
+  in_step: "grid_for_elev_change"
+  out_folder_name: "surface_fit"
+  min_vals_in_cell: 60
+  min_percent_timespan_in_cell: 70.0
+  n_sigma: 3.0 
+  max_surfacefit_iterations: 5
+  max_linearfit_iterations: 3
+  weighted_surface_fit: true
+  weight_column: "uncertainty"
+  powercorrect : false
+  
+epoch_average:
+  in_step: "surface_fit"
+  out_folder_name: "epoch_average_90"
+  epoch_length: 90
+  gia_model: "ice5g"
+  partitioned: false
+  abs_dhdt_limit: 20
+  rms_limit: 10
+  slope_limit : 5
+  partitioned : true
+
+clip_to_basins:
+  in_step: "epoch_average"
+  out_folder_name: "epoch_average_90_basins"
+  region_selector: ['HUMBOLDT_GLETSCHER',
+                    'STEENSBY_GLETSCHER',
+                    'RYDER_GLETSCHER',
+                    'HUMBOLDT_GLETSCHER',
+                    'PETERMANN_GLETSCHER',
+                    'NEWMAN_BUGT',
+                    'PETERMANN_GLETSCHER_N']
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+
+
+calculate_dhdt: 
+  in_step: clip_to_basins
+  out_folder_name: single_mission_dhdt_90_days
+  min_pts_in_period: 10
+  min_period_coverage: 50 
+  max_allowed_dhdt: 30 
+  # dhdt_start: "2015/01/01"
+  # dhdt_end: "2020/12/31"
+  dh_avg_varname: "dh_ave"
+  dh_stddev_varname: "dh_stddev"
+  dh_time_varname: "epoch_midpoint_dt"
+  dh_time_fractional_varname: "epoch_midpoint_fractional_yr"
+  parquet_glob: "data.parquet"
+  basin_structure: true 
+  region_selector: [
+                    'HUMBOLDT_GLETSCHER',
+                    'STEENSBY_GLETSCHER',
+                    'RYDER_GLETSCHER',
+                    'HUMBOLDT_GLETSCHER',
+                    'PETERMANN_GLETSCHER',
+                    'NEWMAN_BUGT',
+                    'PETERMANN_GLETSCHER_N'
+                    ]
+
+dhdt_plots: 
+  in_step: "calculate_dhdt"
+  out_folder_name: dhdt_plots
+  basin_structure: 
+  region_selector: ['HUMBOLDT_GLETSCHER',
+                    'STEENSBY_GLETSCHER',
+                    'RYDER_GLETSCHER',
+                    'HUMBOLDT_GLETSCHER',
+                    'PETERMANN_GLETSCHER',
+                    'NEWMAN_BUGT',
+                    'PETERMANN_GLETSCHER_N']
+  mask : 'greenland_icesheet_2km_grid_mask_mouginot2019_glaciers'
+  parquet_glob: "dhdt.parquet"
