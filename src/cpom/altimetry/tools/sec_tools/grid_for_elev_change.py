@@ -9,8 +9,8 @@ Purpose:
     partition_xy_chunking parameter.
 
 Output:
-    - Partitioned Parquet files in out_dir, with ragged layout.
-    - Each partition stored in a single Parquet file:
+    - Partitioned Parget_fdr4alt_qual_maskuet files in out_dir, with ragged layout.
+    - Each partition stored in a single Parget_fdr4alt_qual_maskuet file:
         <out_dir>/year=YYYY/x_part=XX/y_part=YY/data.parquet
         or
         <out_dir>/year=YYYY/month=MM/x_part=XX/y_part=YY/data.parquet
@@ -451,6 +451,10 @@ def get_coordinates_from_file(
     if fill_missing_poca:
         lats, lons = _fill_missing_poca_with_nadir_fdr4alt(dataset, nc, lats, lons)
 
+    #hard code grid area to covert xy to lat lon for EOLIS 
+    #area = Area('arctic')
+    #lats, lons = area.xy_to_latlon(lons, lats)
+
     return {"latitude": lats, "longitude": lons, "beams": beams}
 
 
@@ -579,7 +583,8 @@ def get_variables_and_mask(
         **(params.add_vars if params.add_vars is not None else {}),
     }.items():
         if param is not None:
-            var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
+            var_data = dataset.get_variable(nc, param, replace_fill=False, raise_if_missing=params.debug)
+
             if var_data.size > 0:
                 variable_dict[var] = var_data[area_mask][bool_mask]
 

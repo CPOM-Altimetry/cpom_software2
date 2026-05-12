@@ -45,6 +45,8 @@ mask_list = [
     "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers",
     # Greenland ice sheet grounded ice
     # + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
+    "austfonna_xylimits_mask", 
+    # Austfonna, Svalbard bounding box.
 ]
 
 # pylint: disable=too-many-instance-attributes
@@ -154,6 +156,15 @@ class Mask:
             ]  # [miny, maxy] in m, in current  coordinate system
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
 
+        elif mask_name == "austfonna_xylimits_mask":
+            # Rectangular bounding box mask for Austfonna ice cap, Svalbard
+
+            self.mask_type = "xylimits"
+
+            self.xlimits = [984212, 1104825]   # [minx, maxx] in m, +/-10km buffer
+            self.ylimits = [-482786, -323176]  # [miny, maxy] in m, +/-10km buffer
+            self.crs_bng = CRS("epsg:3413")    # Polar Stereo - North
+            self.mask_long_name = "Austfonna RGI ice cap, Svalbard"
         # -----------------------------------------------------------------------------
 
         elif mask_name == "antarctica_bedmachine_v2_grid_mask":

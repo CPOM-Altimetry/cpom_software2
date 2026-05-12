@@ -1,0 +1,12 @@
+mission : cs2
+long_name : "Cryosat-2 Level 2"
+file_backend: "netcdf4"
+dataset_epoch : "2000-01-01T00:00:00"
+search_pattern : "**/CS*001.nc"
+yyyymm_str_fname_indices: [-39, -31]
+latitude_param: "lat_poca_20_ku"
+longitude_param: "lon_poca_20_ku"
+elevation_param: "height_1_20_ku"
+power_param: "sig0_1_20_ku"
+time_param: "time_20_ku"
+default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_cs2_l2_qual_mask

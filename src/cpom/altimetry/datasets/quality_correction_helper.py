@@ -7,9 +7,32 @@ Default quality masks for altimetry datasets.
 import numpy as np
 
 # ----------------------------
-# FDR4ALT Corrections
+# CS2 L2 product Corrections
 # ----------------------------
 
+def get_cs2_l2_qual_mask(dataset, nc, input_mask, strict_missing) -> np.ndarray:
+    """
+    Return CS2 quality mask using flag_quality_20_ku flag.
+    """
+    # Apply quality mask - mask out where bit 4096 is set (indicates error)
+    qual_mask = (
+        np.bitwise_and(
+            dataset.get_variable(
+                nc,
+                "flag_quality_20_ku",
+                replace_fill=False,
+                raise_if_missing=strict_missing,
+            )[input_mask],
+            4096,
+        )
+        == 0
+    )
+
+    return qual_mask
+
+# ----------------------------
+# FDR4ALT Corrections
+# ----------------------------
 
 def get_fdr4alt_qual_mask(dataset, nc, input_mask, strict_missing) -> np.ndarray:
     """
@@ -27,7 +50,6 @@ def get_fdr4alt_qual_mask(dataset, nc, input_mask, strict_missing) -> np.ndarray
     )
 
     return retracking_ice1_qual_mask
-
 
 # ----------------------------
 # IS2 Corrections

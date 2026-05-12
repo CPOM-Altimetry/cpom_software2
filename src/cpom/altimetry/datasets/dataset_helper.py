@@ -186,11 +186,12 @@ class DatasetHelper(DatasetConfig):
 
         if self.yyyymm_str_fname_indices is not None:
             date_obj = datetime.strptime(
-                fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
+               fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
+               #fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y_%m"
             )
             return date_obj
 
-        date_formats = ["%Y.%m.%d", "%Y/%m/%d", "%Y%m%d"]
+        date_formats = ["%Y.%m.%d", "%Y/%m/%d", "%Y%m%d", "%Y_%m"]
         for part in reversed(filename.parts):
             for fmt in date_formats:
                 try:
@@ -290,7 +291,7 @@ class DatasetHelper(DatasetConfig):
         )
 
         log.info("search_dir %s", search_dir)
-
+        #log.info("looking for files %s", list(Path("/home/maddalen/luna/CPOM/archive/SATS/RA/CRY/CRYO-TEMPO-EOLIS/TEMPO_SWATH_POINT/**/**/SVALBARD").rglob("**/CS*.nc")))
         if self.search_pattern is None:
             raise ValueError("search_pattern must be set")
 
