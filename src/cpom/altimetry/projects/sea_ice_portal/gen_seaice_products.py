@@ -438,8 +438,9 @@ def process_ntc_monthly(year, month, output_dir, max_cog_dist, process_arco, pro
 
         # Create NetCDF
         with Dataset(out_path, "w", format="NETCDF4") as nc:
+            hemi_name = "Antarctic" if hemisphere_name == "anto" else "Arctic"
             nc.Title = (
-                f"Non-Time Critical (NTC) {hemisphere_name} Sea Ice Thickness Product"
+                f"Non-Time Critical (NTC) {hemi_name} Sea Ice Thickness Product"
                 f" from CryoSat-2 at 5km sparse grid resolution for {date_str}"
             )
             nc.Conventions = "CF-1.11"

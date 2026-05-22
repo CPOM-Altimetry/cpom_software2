@@ -160,8 +160,8 @@ area_definition = {
     #       Lat/lon grid lines to show in main area
     #           - use empty lists to not include
     # ------------------------------------------------------
-    "longitude_gridlines": [230, 240, 250, 260, 270, 280, 290, 300],  # deg E
-    "latitude_gridlines": [-70, -72, -74, -76, -78],  # deg N
+    "longitude_gridlines": [230, 235, 240, 245, 250, 260, 270, 280, 290, 300],  # deg E
+    "latitude_gridlines": [-70, -72, -73, -74, -75, -76, -77, -78],  # deg N
     "gridline_color": "darkgrey",  # color to use for lat/lon grid lines
     "gridlabel_color": "darkgrey",  # color of grid labels
     "gridlabel_size": 8,  # size of grid labels
