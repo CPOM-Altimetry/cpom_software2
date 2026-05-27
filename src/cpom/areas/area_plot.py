@@ -162,6 +162,7 @@ class Polarplot:
         use_cmap_in_hist: bool = True,
         figure_width: int = 0,
         figure_height: int = 0,
+        facecolor: str | None = None,
     ):
         """
         Plot one or more (lat, lon, val) datasets on polar maps.
@@ -299,7 +300,10 @@ class Polarplot:
         # Setup plot page
         # ------------------------------------------------------------------------------------------
 
-        fig = plt.figure(figsize=(plot_params["fig_width"], plot_params["fig_height"]))
+        fig = plt.figure(
+            figsize=(plot_params["fig_width"], plot_params["fig_height"]),
+            facecolor=facecolor,
+        )
         # width, height in inches
 
         # ------------------------------------------------------------------------------------------
@@ -910,7 +914,14 @@ class Polarplot:
             if image_format == "avif":
                 # Save to an in-memory PNG
                 buf = io.BytesIO()
-                fig.savefig(buf, format="png", dpi=dpi, transparent=transparent_background)
+                fig.savefig(
+                    buf,
+                    format="png",
+                    dpi=dpi,
+                    transparent=transparent_background,
+                    facecolor=fig.get_facecolor(),
+                    edgecolor="none",
+                )
                 buf.seek(0)
 
                 # Open with Pillow and convert to AVIF
@@ -924,6 +935,8 @@ class Polarplot:
                     dpi=dpi,
                     transparent=transparent_background,
                     format="webp",
+                    facecolor=fig.get_facecolor(),
+                    edgecolor="none",
                     pil_kwargs={
                         "quality": webp_settings[0],
                         "method": webp_settings[1],
@@ -933,7 +946,13 @@ class Polarplot:
                 )
 
             elif image_format == "png":  # png
-                plt.savefig(plot_filename, dpi=dpi, transparent=transparent_background)
+                plt.savefig(
+                    plot_filename,
+                    dpi=dpi,
+                    transparent=transparent_background,
+                    facecolor=fig.get_facecolor(),
+                    edgecolor="none",
+                )
             else:
                 raise ValueError(f"image_format {image_format} not supported")
         else:
