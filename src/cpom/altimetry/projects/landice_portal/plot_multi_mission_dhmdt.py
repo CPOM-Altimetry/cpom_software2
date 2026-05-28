@@ -95,6 +95,10 @@ def main():
         else:
             out_file = f"{output_dir}/{clean_name}-{args.parameter}"
 
+        # check if output directory exists, if not create it
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
         if args.parameter == "dMdt":
             param_long_name = "Ice Sheet Mass Change Rate"
         elif args.parameter == "sec":
@@ -190,14 +194,30 @@ def main():
 
             if args.basin:
                 dataset["plot_size_scale_factor"] = 2.0
-                dataset["min_plot_range"] = -2000.0
-                dataset["max_plot_range"] = 2000.0
+                basin_plot_range = {
+                    "1": 500.0,
+                    "2": 1000.0,
+                    "3": 100.0,
+                    "4": 100.0,
+                    "5": 500.0,
+                    "6": 100.0,
+                    "7": 100.0,
+                    "8": 100.0,
+                    "10": 100.0,
+                    "11": 100.0,
+                    "12": 100.0,
+                    "13": 100.0,
+                    "14": 200.0,
+                    "15": 200.0,
+                    "16": 300.0,
+                    "17": 400.0,
+                    "18": 400.0,
+                }.get(args.basin, 2000.0)
+                dataset["min_plot_range"] = -basin_plot_range
+                dataset["max_plot_range"] = basin_plot_range
                 map_only = False
                 figure_width = 12
                 figure_height = 10
-                if args.basin == "5":
-                    dataset["min_plot_range"] = -400.0
-                    dataset["max_plot_range"] = 400.0
 
             if args.parameter == "surface_type":
                 dataset = {
@@ -463,6 +483,8 @@ def main():
             if args.basin:
                 thisarea = f"rignot_basin_{args.basin}"
 
+            area_overrides["show_polygon_mask"] = True  # show mask polygon
+
             Polarplot(thisarea, area_overrides).plot_points(
                 dataset,
                 map_only=map_only,
@@ -483,6 +505,7 @@ def main():
             # -----------------------------------------------------------------------
 
             area_overrides["apply_hillshade_to_vals"] = True
+            area_overrides["show_polygon_mask"] = True  # show mask polygon
 
             Polarplot(thisarea, area_overrides).plot_points(
                 dataset,

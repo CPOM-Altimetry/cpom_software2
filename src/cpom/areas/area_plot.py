@@ -1402,7 +1402,7 @@ class Polarplot:
             )
 
         print(f"self.thisarea.masktype {self.thisarea.masktype} ")
-        if self.thisarea.masktype in ("polygon", "xylimits"):
+        if self.thisarea.masktype in ("polygon", "xylimits") and self.thisarea.mask is not None:
             self.draw_area_polygon_mask(
                 ax_minimap,
                 override_mask_display=True,
@@ -1412,6 +1412,46 @@ class Polarplot:
                 linestyle="-",
                 linewidth=1,
             )
+        else:
+            if (
+                self.thisarea.specify_by_centre
+                or self.thisarea.specify_plot_area_by_lowerleft_corner
+            ):
+                if self.thisarea.specify_by_centre:
+                    cx, cy = self.thisarea.latlon_to_xy(
+                        self.thisarea.centre_lat, self.thisarea.centre_lon
+                    )
+                    xmin = cx - (self.thisarea.width_km * 1000) / 2.0
+                    xmax = cx + (self.thisarea.width_km * 1000) / 2.0
+                    ymin = cy - (self.thisarea.height_km * 1000) / 2.0
+                    ymax = cy + (self.thisarea.height_km * 1000) / 2.0
+                else:  # self.thisarea.specify_plot_area_by_lowerleft_corner is True
+                    llx, lly = self.thisarea.latlon_to_xy(
+                        self.thisarea.llcorner_lat, self.thisarea.llcorner_lon
+                    )
+                    xmin = llx
+                    xmax = llx + self.thisarea.width_km * 1000
+                    ymin = lly
+                    ymax = lly + self.thisarea.height_km * 1000
+
+                x_corners = [xmin, xmax, xmax, xmin, xmin]
+                y_corners = [ymax, ymax, ymin, ymin, ymax]
+                poly_corners = np.zeros((len(x_corners), 2), np.float64)
+                poly_corners[:, 0] = x_corners
+                poly_corners[:, 1] = y_corners
+
+                poly = mpatches.Polygon(
+                    poly_corners,
+                    closed=True,
+                    edgecolor="red",
+                    fill=True,
+                    facecolor="red",
+                    lw=1,
+                    ls="-",
+                    transform=dataprj_minimap,
+                    alpha=0.5,
+                )
+                ax_minimap.add_patch(poly)
 
     def draw_latitude_vs_vals_plot(
         self, fig: Figure, vals: np.ndarray, lats: np.ndarray, varname: str, units: str
@@ -2196,7 +2236,6 @@ class Polarplot:
         dataprj,
         fill=False,
         linestyle="-",
-        linecolor="red",
         linewidth=2,
     ):
         """if area has a data mask defined by one or more polygons, draw these on map
@@ -2210,7 +2249,6 @@ class Polarplot:
             dataprj (_type_): crs returned by self.setup_projection_and_extent()
             fill (bool, optional): fill polygon if True. Defaults to False.
             linestyle (str, optional): line style to use for polygon edges. Defaults to "-".
-            linecolor (str, optional): line color to use for polygon edges. Defaults to "red".
             linewidth (int, optional): line width to use for polygon edges. Defaults to 2.
         """
 
@@ -2262,13 +2300,14 @@ class Polarplot:
             poly = mpatches.Polygon(
                 poly_corners,
                 closed=True,
-                edgecolor=linecolor,
+                edgecolor=polygon_color,
                 fill=fill,
                 facecolor=polygon_color,
                 lw=1,
                 ls="-",
                 transform=dataprj,
                 alpha=0.5,
+                zorder=30,
             )
 
             ax.add_patch(poly)
@@ -2301,12 +2340,13 @@ class Polarplot:
             poly = mpatches.Polygon(
                 poly_corners,
                 closed=True,
-                edgecolor=linecolor,
+                edgecolor=polygon_color,
                 fill=fill,
                 facecolor=polygon_color,
                 lw=linewidth,
                 ls=linestyle,
                 transform=dataprj,
+                zorder=30,
             )
 
             ax.add_patch(poly)
@@ -2335,12 +2375,13 @@ class Polarplot:
                     poly = mpatches.Polygon(
                         poly_corners,
                         closed=True,
-                        edgecolor=linecolor,
+                        edgecolor=polygon_color,
                         fill=fill,
                         facecolor=polygon_color,
                         lw=linewidth,
                         ls=linestyle,
                         transform=dataprj,
+                        zorder=30,
                     )
 
                     ax.add_patch(poly)
@@ -2362,12 +2403,13 @@ class Polarplot:
                         poly = mpatches.Polygon(
                             poly_corners,
                             closed=True,
-                            edgecolor=linecolor,
+                            edgecolor=polygon_color,
                             fill=fill,
                             facecolor=polygon_color,
                             lw=linewidth,
                             ls=linestyle,
                             transform=dataprj,
+                            zorder=30,
                         )
                         ax.add_patch(poly)
 
@@ -2390,12 +2432,13 @@ class Polarplot:
                     poly = mpatches.Polygon(
                         poly_corners,
                         closed=True,
-                        edgecolor=linecolor,
+                        edgecolor=polygon_color,
                         fill=fill,
                         facecolor=polygon_color,
                         lw=linewidth,
                         ls=linestyle,
                         transform=dataprj,
+                        zorder=30,
                     )
                     ax.add_patch(poly)
 
@@ -2414,12 +2457,13 @@ class Polarplot:
                         poly = mpatches.Polygon(
                             poly_corners,
                             closed=True,
-                            edgecolor=linecolor,
+                            edgecolor=polygon_color,
                             fill=fill,
                             facecolor=polygon_color,
                             lw=linewidth,
                             ls=linestyle,
                             transform=dataprj,
+                            zorder=30,
                         )
                         ax.add_patch(poly)
 

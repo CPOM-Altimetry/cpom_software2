@@ -3,8 +3,8 @@
 # pylint: disable=R0801 # warning for similar lines
 
 area_definition = {
-    "long_name": "Rignot Basin 5",
-    "area_summary": "Rignot Basin 5",
+    "long_name": "Rignot Basin 18",
+    "area_summary": "Rignot Basin 18",
     # --------------------------------------------
     # Area definition
     # --------------------------------------------
@@ -16,8 +16,8 @@ area_definition = {
     "bounding_lat": None,  # limiting latitude for round areas or None
     #   --------
     "specify_by_centre": True,  # specify plot area by centre lat/lon, width, height (km)
-    "centre_lon": 118.0,  # degrees E
-    "centre_lat": -69.0,  # degrees N
+    "centre_lon": -133.5,  # degrees E
+    "centre_lat": -81.0,  # degrees N
     #   --------
     "specify_plot_area_by_lowerleft_corner": False,  # specify by lower left corner, w,h
     "llcorner_lat": None,  # lower left corner latitude
@@ -25,8 +25,8 @@ area_definition = {
     #   --------
     "lon_0": None,  # None or projection y-axis longitude (used for mercator)
     #   --------
-    "width_km": 1000,  # width in km of plot area (x direction)
-    "height_km": 1000,  # height in km of plot area (y direction)
+    "width_km": 1400,  # width in km of plot area (x direction)
+    "height_km": 1400,  # height in km of plot area (y direction)
     # --------------------------------------------
     # Area characteristics
     # --------------------------------------------
@@ -36,15 +36,15 @@ area_definition = {
     # Data filtering using lat/lon extent (used as a quick data pre-filter before masking)
     # --------------------------------------------
     #   Area min/max lat/lon for initial data filtering
-    "minlon": 80.0,  # minimum longitude to initially filter records for area (0..360E)
-    "maxlon": 140.0,  # maximum longitude to initially filter records for area (0..360E)
-    "minlat": -87.0,  # minimum latitude to initially filter records for area
-    "maxlat": -65.0,  # maximum latitude to initially filter records for area
+    "minlon": 180.0,  # minimum longitude to initially filter records for area (0..360E)
+    "maxlon": 280.0,  # maximum longitude to initially filter records for area (0..360E)
+    "minlat": -89.0,  # minimum latitude to initially filter records for area
+    "maxlat": -74.0,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from clev2er.utils.masks.Mask
     # --------------------------------------------
     "apply_area_mask_to_data": True,  # filter data using areas clev2er.utils.masks.Mask
-    "maskname": "rignot_2016_basin_5_polygon_mask",  # from  clev2er.utils.masks.Mask
+    "maskname": "rignot_2016_basin_18_polygon_mask",  # from  clev2er.utils.masks.Mask
     "masktype": "polygon",
     "basin_numbers": [],  # [n1,n2,..] if mask allows basin numbers
     # for bedmachine v2, 2=grounded ice, 3=floating, 4=vostok
@@ -162,8 +162,22 @@ area_definition = {
     #       Lat/lon grid lines to show in main area
     #           - use empty lists to not include
     # ------------------------------------------------------
-    "longitude_gridlines": [100, 110, 120, 130, 140],  # deg E
-    "latitude_gridlines": [-66, -68, -70],  # deg N
+    "longitude_gridlines": [
+        180,
+        190,
+        200,
+        210,
+        220,
+        230,
+        240,
+        250,
+        260,
+        270,
+        280,
+        290,
+        300,
+    ],  # deg E
+    "latitude_gridlines": [-71, -73, -75, -77, -79, -81, -83, -85, -87],  # deg N
     "gridline_color": "darkgrey",  # color to use for lat/lon grid lines
     "gridlabel_color": "darkgrey",  # color of grid labels
     "gridlabel_size": 8,  # size of grid labels
@@ -180,13 +194,13 @@ area_definition = {
     # ------------------------------------------------------
     "show_scalebar": True,
     "mapscale": [
-        123,  # longitude to position scale bar
-        -64.8,  # latitide to position scale bar
-        118.0,  # longitude of true scale (ie centre of area)
-        -69.0,  # latitude of true scale (ie centre of area)
+        -136.0,  # longitude to position scale bar
+        -73.8,  # latitide to position scale bar
+        -133.0,  # longitude of true scale (ie centre of area)
+        -81.0,  # latitude of true scale (ie centre of area)
         200,  # width of scale bar (km)
         "black",  # color of scale bar
-        12,  # size of scale bar
+        18,  # size of scale bar
     ],
     # --------------------------------------------------------
     # Histograms
