@@ -3,20 +3,21 @@
 # pylint: disable=R0801 # warning for similar lines
 
 area_definition = {
-    "long_name": "Antarctica",
+    "long_name": "Ronne Filchner",
+    "area_summary": "Ronne Filchner ice shelves",
     # --------------------------------------------
     # Area definition
     # --------------------------------------------
     "hemisphere": "south",  # area is in  'south' or 'north' or 'both'
     "epsg_number": 3031,  # EPSG number for area's projection
     #   --------
-    "round": True,  # False=rectangular, True = round map area
-    "specify_by_bounding_lat": True,  # for round hemisphere views
-    "bounding_lat": -63.15,  # limiting latitude for round areas or None
+    "round": False,  # False=rectangular, True = round map area
+    "specify_by_bounding_lat": False,  # for round hemisphere views
+    "bounding_lat": None,  # limiting latitude for round areas or None
     #   --------
-    "specify_by_centre": False,  # specify plot area by centre lat/lon, width, height (km)
-    "centre_lon": 0.0,  # degrees E
-    "centre_lat": -90.0,  # degrees N
+    "specify_by_centre": True,  # specify plot area by centre lat/lon, width, height (km)
+    "centre_lon": 120.0,  # degrees E
+    "centre_lat": -69.0,  # degrees N
     #   --------
     "specify_plot_area_by_lowerleft_corner": False,  # specify by lower left corner, w,h
     "llcorner_lat": None,  # lower left corner latitude
@@ -24,26 +25,27 @@ area_definition = {
     #   --------
     "lon_0": None,  # None or projection y-axis longitude (used for mercator)
     #   --------
-    "width_km": 6600,  # width in km of plot area (x direction)
-    "height_km": 6100,  # height in km of plot area (y direction)
+    "width_km": 1000,  # width in km of plot area (x direction)
+    "height_km": 1000,  # height in km of plot area (y direction)
     # --------------------------------------------
     # Area characteristics
     # --------------------------------------------
     "min_elevation": -50,  # minimum expected elevation in area (m)
-    "max_elevation": 4200,  # maximum expected elevation in area (m)
+    "max_elevation": 2000,  # maximum expected elevation in area (m)
     # --------------------------------------------
     # Data filtering using lat/lon extent (used as a quick data pre-filter before masking)
     # --------------------------------------------
     #   Area min/max lat/lon for initial data filtering
-    "minlon": 0.0,  # minimum longitude to initially filter records for area (0..360E)
-    "maxlon": 360.0,  # maximum longitude to initially filter records for area (0..360E)
-    "minlat": -90.0,  # minimum latitude to initially filter records for area
-    "maxlat": -62.0,  # maximum latitude to initially filter records for area
+    "minlon": 80.0,  # minimum longitude to initially filter records for area (0..360E)
+    "maxlon": 140.0,  # maximum longitude to initially filter records for area (0..360E)
+    "minlat": -87.0,  # minimum latitude to initially filter records for area
+    "maxlat": -65.0,  # maximum latitude to initially filter records for area
     # --------------------------------------------
-    #    mask from cpom.masks.Mask
+    #    mask from clev2er.utils.masks.Mask
     # --------------------------------------------
-    "apply_area_mask_to_data": False,  # filter data using areas cpom.masks.Mask
-    "maskname": "",  # from  cpom.masks.Mask
+    "apply_area_mask_to_data": False,  # filter data using areas clev2er.utils.masks.Mask
+    "maskname": "ronne_filchner_xylimits_mask",  # from  clev2er.utils.masks.Mask
+    "masktype": "xylimits",
     "basin_numbers": [],  # [n1,n2,..] if mask allows basin numbers
     # for bedmachine v2, 2=grounded ice, 3=floating, 4=vostok
     "show_polygon_mask": False,  # show mask polygon
@@ -52,34 +54,23 @@ area_definition = {
     # Plot parameters for this area
     # --------------------------------------------
     "axes": [  # define plot axis position
-        -0.02,  # left
-        0.1,  # bottom
-        0.74,  # width (axes fraction)
-        0.74,  # height (axes fraction)
+        -0.025,  # left
+        0.125,  # bottom
+        0.75,  # width (axes fraction)
+        0.75,  # height (axes fraction)
     ],
     "simple_axes": [  # define plot axis position in the map_only plot
-        0.081,  # left
-        0.1,  # bottom
-        0.83,  # width (axes fraction)
-        0.83,  # height (axes fraction)
+        0.09,  # left
+        0.12,  # bottom
+        0.79,  # width (axes fraction)
+        0.79,  # height (axes fraction)
     ],
-    "background_image": [
-        "basic_land_white",
-        "hillshade",
-    ],
-    "background_image_alpha": [0.14, 0.18],
-    "background_color": "white",
     "draw_axis_frame": True,
-    # "background_color": None,  # background color of map
-    # "background_image": "basic_land_white",  # background image. see cpom.backgrounds
-    # "background_image_alpha": 1.0,  # 0..1.0, default is 1.0, image transparency
+    "background_color": None,  # background color of map
+    "background_image": "basic_land",  # background image. see clev2er.utils.backgrounds
+    "background_image_alpha": 1.0,  # 0..1.0, default is 1.0, image transparency
     "background_image_resolution": "low",  # None, 'low','medium', 'high'
-    "hillshade_params": {
-        "azimuth": 235.0,
-        "pitch": 45.0,
-        "dem": "awi_ant_1km",
-        "alpha": 0.15,
-    },  # hill shade parameter dict or None
+    "hillshade_params": None,  # hill shade parameter dict or None
     "show_polygon_overlay_in_main_map": True,  # Overlay the area polygon outline in the main map
     "grid_polygon_overlay_mask": None,
     "apply_hillshade_to_vals": False,  # Apply a hillshade to plotted vals (True or False)
@@ -88,34 +79,34 @@ area_definition = {
     "use_antarctica_medium_coastline": True,  # True,False: Antarctic coastline including iceshelves
     "use_cartopy_coastline": "no",  # 'no', 'low','medium', 'high' resolution
     "show_gridlines": True,  # True|False, display lat/lon grid lines
-    "area_long_name_position": (0.31, 0.88),  # for default annotation position of area long name
+    "area_long_name_position": (0.20, 0.86),  # for default annotation position of area long name
     "area_long_name_fontsize": 16,  # font size of area.long_name
     "area_long_name_position_simple": (
-        0.43,
-        0.97,
+        0.4,
+        0.96,
     ),  # for default annot. pos of area name (map_only)
-    "mask_long_name_position": (0.26, 0.86),  # for default annotation position of area long name
+    "mask_long_name_position": (0.20, 0.84),  # for default annotation position of area long name
     "mask_long_name_position_simple": (
-        0.36,
-        0.95,
+        0.4,
+        0.94,
     ),  # for default annotation position of area long name
     "mask_long_name_fontsize": 9,  # font size of area.long_name
     # ------------------------------------------------------
     # Default Annotation
     # ------------------------------------------------------
     "varname_annotation_position_xy": (
-        0.04,
-        0.9,
+        0.20,
+        0.92,
     ),  # normalized position of default varname annotation in plot
     "varname_annotation_position_xy_simple": (
         0.04,
-        0.9,
+        0.94,
     ),  # normalized position of default varname annotation in map_only plot
     "show_stats": False,  # whether to show stats info on the plot
     "stats_position_x_offset": 0,  # x offset to stats position
-    "stats_position_y_offset": 0,  # y offset to stats position
-    "stats_position_x_offset_simple": -0.13,  # x offset to stats when plotting map_only
-    "stats_position_y_offset_simple": 0,  # y offset to stats when plotting map_only
+    "stats_position_y_offset": 0.77,  # y offset to stats position
+    "stats_position_x_offset_simple": -0.2,  # x offset to stats when plotting map_only
+    "stats_position_y_offset_simple": -0.08,  # y offset to stats when plotting map_only
     # ------------------------------------------------------
     # Flag plot settings
     # ------------------------------------------------------
@@ -162,7 +153,7 @@ area_definition = {
         0.02,
     ],  # [ left, bottom, width, height (fractions of axes)]
     "horizontal_colorbar_axes_simple": [
-        0.22,
+        0.28,
         0.05,
         0.55,
         0.02,
@@ -171,31 +162,31 @@ area_definition = {
     #       Lat/lon grid lines to show in main area
     #           - use empty lists to not include
     # ------------------------------------------------------
-    "longitude_gridlines": range(0, 360 + 20, 20),  # deg E
-    "latitude_gridlines": list(range(-82, -66 + 4, 4)) + [-88],  # deg N
-    "gridline_color": "lightgrey",  # color to use for lat/lon grid lines
+    "longitude_gridlines": [100, 110, 120, 130, 140],  # deg E
+    "latitude_gridlines": [-71, -73, -75, -77, -79, -81, -83, -85, -87],  # deg N
+    "gridline_color": "darkgrey",  # color to use for lat/lon grid lines
     "gridlabel_color": "darkgrey",  # color of grid labels
     "gridlabel_size": 8,  # size of grid labels
     "draw_gridlabels": True,  # whether to draw the grid labels
     "inner_gridlabel_color": "white",  # color of grid labels
     "inner_gridlabel_size": 8,  # size of grid labels
     "latitude_of_radial_labels": -58.3,  # latitude for radial grid line labels for circular plots
-    "labels_at_top": False,  # allow lat or lon labels at top of plot
-    "labels_at_bottom": False,  # allow lat or lon labels at bottom of plot
-    "labels_at_left": False,  # allow lat or lon labels at left of plot
-    "labels_at_right": False,  # allow lat or lon labels at right of plot
+    "labels_at_top": True,  # allow lat or lon labels at top of plot
+    "labels_at_bottom": True,  # allow lat or lon labels at bottom of plot
+    "labels_at_left": True,  # allow lat or lon labels at left of plot
+    "labels_at_right": True,  # allow lat or lon labels at right of plot
     # ------------------------------------------------------
     #       Show a scale bar in km
     # ------------------------------------------------------
     "show_scalebar": True,
     "mapscale": [
-        -179.9,  # longitude to position scale bar
-        -65.0,  # latitide to position scale bar
-        0.0,  # longitude of true scale (ie centre of area)
-        -90.0,  # latitude of true scale (ie centre of area)
-        1000,  # width of scale bar (km)
+        -85.0,  # longitude to position scale bar
+        -84.0,  # latitide to position scale bar
+        -65.0,  # longitude of true scale (ie centre of area)
+        -80.0,  # latitude of true scale (ie centre of area)
+        200,  # width of scale bar (km)
         "black",  # color of scale bar
-        70,  # size of scale bar
+        20,  # size of scale bar
     ],
     # --------------------------------------------------------
     # Histograms
@@ -203,13 +194,13 @@ area_definition = {
     "show_histograms": True,  # Whether to show the histogram plots
     "histogram_plotrange_axes": [
         0.735,  # left
-        0.45,  # bottom
+        0.3,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
     "histogram_fullrange_axes": [
         0.89,  # left
-        0.45,  # bottom
+        0.3,  # bottom
         0.08,  # width (axes fraction)
         0.35,  # height (axes fraction)
     ],  # axis location of plot range histogram for Polarplot.plot_points()
@@ -219,7 +210,7 @@ area_definition = {
     "show_latitude_scatter": True,  # Whether to show the latitude scatter plot
     "latvals_axes": [
         0.77,  # left
-        0.2,  # bottom
+        0.05,  # bottom
         0.17,  # width (axes fraction)
         0.2,  # height (axes fraction)
     ],  # axis location of latitude vs values scatter plot
@@ -229,10 +220,10 @@ area_definition = {
     # --------------------------------------------------------
     "show_bad_data_map": True,
     "bad_data_minimap_axes": [  # define minimap axis position
-        0.64,  # left
-        0.67,  # bottom
-        0.29,  # width (axes fraction)
-        0.29,  # height (axes fraction)
+        0.65,  # left
+        0.69,  # bottom
+        0.26,  # width (axes fraction)
+        0.26,  # height (axes fraction)
     ],
     "bad_data_minimap_bounding_lat": None,  # None or bounding latitude if used for mini-map
     # uses 40N for northern hemisphere or 50N for southern.
@@ -240,29 +231,31 @@ area_definition = {
     "bad_data_minimap_circle": None,  # None or [lat,lon,circle_radius_m,color_str]
     "bad_data_minimap_draw_gridlines": True,
     "bad_data_minimap_gridlines_color": "lightgrey",  # color of gridlines drawn in bad data minimap
-    "bad_data_latitude_lines": [-50, -70],  # latitude lines to draw in bad data minimap
+    "bad_data_latitude_lines": [-85, -81, -77, -73],  # latitude lines to draw in bad data minimap
     "bad_data_longitude_lines": [
-        0,
-        60,
-        120,
-        180,
-        -120,
+        -30,
+        -40,
+        -50,
         -60,
+        -70,
+        -80,
+        -90,
+        -100,
     ],  # longitude lines to draw in bad data minimap
-    "bad_data_minimap_val_scalefactor": 0.01,  # scale factor for plotting bad values on minimap
-    "bad_data_minimap_legend_pos": (1.38, 1.1),  # position of minimap legend (upper right)
+    "bad_data_minimap_val_scalefactor": 1.0,  # scale factor for plotting bad values on minimap
+    "bad_data_minimap_legend_pos": (1.5, 1.0),  # position of minimap legend (upper right)
     # relative to bad_data_minimap axis
     "bad_data_minimap_coastline_resolution": "medium",  # low, medium, high resolution coastline
     # ------------------------------------------------------------------
     # Mini-map (with box showing actual area) - purpose to show where a
     # smaller area is on a larger map.
     # -------------------------------------------------------------------
-    "show_minimap": False,  # show the overview minmap
+    "show_minimap": True,  # show the overview minmap
     "minimap_axes": [  # define minimap axis position
-        0.64,  # left
-        0.67,  # bottom
-        0.29,  # width (axes fraction)
-        0.29,  # height (axes fraction)
+        0.7,  # left
+        0.7,  # bottom
+        0.25,  # width (axes fraction)
+        0.25,  # height (axes fraction)
     ],
     "minimap_bounding_lat": None,  # None or bounding latitude if used for mini-map
     # uses 40N for northern hemisphere or 50N for southern.

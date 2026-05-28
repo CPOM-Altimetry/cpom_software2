@@ -1001,6 +1001,9 @@ class Polarplot:
             vals (np.ndarray): values array (after Nan filtering) used to calculate and draw stats
                                info
         """
+
+        if self.thisarea.show_stats is False:
+            return
         # Step 1: Get the colorbar's bounding box in figure coordinates
         bbox = cbar.ax.get_window_extent().transformed(plt.gcf().transFigure.inverted())
 

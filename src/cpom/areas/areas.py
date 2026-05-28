@@ -287,6 +287,8 @@ class Area:
         self.stats_position_y_offset_simple = area_definition.get(
             "stats_position_y_offset_simple", 0
         )
+        self.show_stats = area_definition.get("show_stats", True)
+
         self.position_stats_manually = area_definition.get("position_stats_manually", False)
         self.nvals_position = area_definition.get("nvals_position", (0.0, 0.0))
         self.stdev_position = area_definition.get("stdev_position", (0.0, 0.0))
@@ -646,16 +648,16 @@ class Area:
         bool_mask = np.full_like(lats, False, dtype=bool)
 
         if self.specify_by_bounding_lat:
-            (lats_inside, lons_inside, indices_inside_orig, n_inside) = self.inside_latlon_bounds(
+            lats_inside, lons_inside, indices_inside_orig, n_inside = self.inside_latlon_bounds(
                 lats, lons
             )
             x_inside, y_inside = self.latlon_to_xy(lats_inside, lons_inside)
         else:
-            (lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside) = (
+            lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside = (
                 self.inside_xy_extent(lats, lons)
             )
         if n_inside > 0:
-            (indices_inside_mask, n_inside) = self.inside_mask(x_inside, y_inside)
+            indices_inside_mask, n_inside = self.inside_mask(x_inside, y_inside)
             if n_inside > 0:
                 indice_inside_orig = indices_inside_orig[indices_inside_mask]
                 bool_mask[indice_inside_orig] = True
