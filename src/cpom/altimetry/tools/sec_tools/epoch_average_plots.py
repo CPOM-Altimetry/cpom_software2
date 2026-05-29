@@ -180,7 +180,7 @@ def get_data(
 
         # Apply plot range
         epoch_data = epoch_data.filter(
-            pl.col(params.dh_column).is_between(params.plot_range[0], params.plot_range[1])
+            pl.col(params.plotting_column).is_between(params.plot_range[0], params.plot_range[1])
         )
 
         # Convert grid coordinates to x/y
@@ -261,7 +261,7 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
 
     Args:
         params (argparse.Namespace): Command line arguments.
-        data (pl.DataFrame): Input data with `epoch_midpoint_dt` and `dh_column`.
+        data (pl.DataFrame): Input data with `epoch_midpoint_dt` and plotting column.
         out_path (Path): Output path for saving the plot.
 
     """
@@ -269,14 +269,16 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
 
     # Aggregate stats
     data_ts = (
-        data.filter(pl.col(params.dh_column).is_between(params.plot_range[0], params.plot_range[1]))
+        data.filter(
+            pl.col(params.plotting_column).is_between(params.plot_range[0], params.plot_range[1])
+        )
         .group_by("epoch_midpoint_dt")
         .agg(
             [
-                pl.col(params.dh_column).mean().alias("mean_dh"),
-                pl.col(params.dh_column).median().alias("median_dh"),
-                pl.col(params.dh_column).std(ddof=1).alias("dh_std"),
-                pl.col(params.dh_column).count().alias("count"),
+                pl.col(params.plotting_column).mean().alias("mean_dh"),
+                pl.col(params.plotting_column).median().alias("median_dh"),
+                pl.col(params.plotting_column).std(ddof=1).alias("dh_std"),
+                pl.col(params.plotting_column).count().alias("count"),
             ]
         )
         .with_columns(
@@ -300,21 +302,26 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     )
     _, ax = plt.subplots(figsize=(12, 6))
     times = data_ts["epoch_midpoint_dt"].to_list()
+    shifted_mean = data_ts["shifted_mean"].cast(pl.Float64).fill_null(float("nan")).to_list()
+    shifted_median = data_ts["shifted_median"].cast(pl.Float64).fill_null(float("nan")).to_list()
+    se_dh = data_ts["se_dh"].cast(pl.Float64).fill_null(float("nan")).to_list()
+    lower = [m - s for m, s in zip(shifted_mean, se_dh)]
+    upper = [m + s for m, s in zip(shifted_mean, se_dh)]
 
     # Mean and rolling mean
     ax.plot(
         times,
-        data_ts["shifted_mean"].to_list(),
+        shifted_mean,
         alpha=0.8,
         linewidth=2,
         color="blue",
-        label=f"Mean {params.dh_column} (m)",
+        label=f"Mean {params.plotting_column} (m)",
     )
 
     ax.plot(
         times,
-        data_ts["shifted_median"].to_list(),
-        label=f"Median {params.dh_column} (m)",
+        shifted_median,
+        label=f"Median {params.plotting_column} (m)",
         color="red",
         linestyle="--",
         alpha=0.7,
@@ -322,8 +329,8 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
 
     ax.fill_between(
         times,
-        (data_ts["shifted_mean"] - data_ts["se_dh"]).to_list(),
-        (data_ts["shifted_mean"] + data_ts["se_dh"]).to_list(),
+        lower,
+        upper,
         alpha=0.3,
         color="blue",
         label="Standard Error",
@@ -333,7 +340,7 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     ax.set_ylabel("Height change (m)")
 
     ax.set_title(
-        f"Epoch-averaged {params.dh_column} time series",
+        f"Epoch-averaged {params.plotting_column} time series",
         fontsize=14,
     )
 
@@ -389,7 +396,7 @@ def plot_basins(
             clipped_data,
             out_path=Path(params.out_dir)
             / sub_basin
-            / f"{sub_basin}_{params.dh_column}_epoch_average_timeseries.png",
+            / f"{sub_basin}_{params.plotting_column}_epoch_average_timeseries.png",
         )
 
         # Loop through and plot for each Epoch
@@ -402,7 +409,7 @@ def plot_basins(
             scatter = ax.scatter(
                 epoch_data["x"].to_numpy(),
                 epoch_data["y"].to_numpy(),
-                c=epoch_data[params.dh_column].to_numpy(),
+                c=epoch_data[params.plotting_column].to_numpy(),
                 cmap="coolwarm",
                 vmin=params.plot_range[0],
                 vmax=params.plot_range[1],
@@ -425,7 +432,7 @@ def plot_basins(
             plot_path = (
                 Path(params.out_dir)
                 / sub_basin
-                / f"{params.dh_column}_{sub_basin}_epoch_{epoch}_{min_date}_to_{max_date}.png"
+                / f"{params.plotting_column}_{sub_basin}_epoch_{epoch}_{min_date}_to_{max_date}.png"
             )
             plot_path.parent.mkdir(parents=True, exist_ok=True)
             plt.savefig(plot_path, dpi=300)
@@ -461,7 +468,7 @@ def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
     plot_timeseries(
         params,
         data,
-        Path(params.out_dir) / f"icesheet_{params.dh_column}_epoch_average_timeseries.png",
+        Path(params.out_dir) / f"icesheet_{params.plotting_column}_epoch_average_timeseries.png",
     )
 
     area_name = Area(str(grid_params["area"])).name
@@ -478,13 +485,13 @@ def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
                 "name": f"dh_{epoch_id}",
                 "lats": epoch_data["latitude"],
                 "lons": epoch_data["longitude"],
-                "vals": epoch_data[params.dh_column],
+                "vals": epoch_data[params.plotting_column],
                 "valid_range": tuple(params.plot_range),
                 "units": "m",
                 "cmap_name": "coolwarm",
             },
             output_dir=str(params.out_dir),
-            output_file=f"{params.dh_column}_epoch_{epoch_id}_{min_date}-{max_date}.png",
+            output_file=(f"{params.plotting_column}_{epoch_id}_{min_date}-{max_date}.png"),
         )
 
 

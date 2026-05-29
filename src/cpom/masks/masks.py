@@ -45,6 +45,7 @@ mask_list = [
     "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers",
     # Greenland ice sheet grounded ice
     # + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
+    "austfonna_xylimits_mask",
 ]
 
 # pylint: disable=too-many-instance-attributes
@@ -69,8 +70,8 @@ class Mask:
 
         Args:
             mask_name (str): mask name, must be in global mask_list
-            basin_numbers (list[int], optional): list of grid values to select from grid masks
-                                                 def=None
+            basin_numbers (list[int], optional): list of grid values to select from grid masks.
+            Can use grid value names instead of numbers. If None, all grid values in mask are used.
             mask_path (str, optional): override default path of mask data file
             store_in_shared_memory (bool, optional): stores/access mask array in SharedMemory
             thislog (logging.Logger|None, optional): attach to a different log instance
@@ -153,6 +154,17 @@ class Mask:
                 1246856,
             ]  # [miny, maxy] in m, in current  coordinate system
             self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
+
+        elif mask_name == "austfonna_xylimits_mask":
+            # Rectangular bounding box mask for Austfonna ice cap, Svalbard
+
+            self.mask_type = "xylimits"
+
+            self.xlimits = [984212, 1104825]  # [minx, maxx] in m, +/-10km buffer
+            self.ylimits = [-482786, -323176]  # [miny, maxy] in m, +/-10km buffer
+            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North
+            self.mask_long_name = "Austfonna RGI ice cap, Svalbard"
+        # -----------------------------------------------------------------------------
 
         # -----------------------------------------------------------------------------
 
@@ -648,7 +660,7 @@ class Mask:
 
             self.grid_value_names = glacier_names
 
-            self.mask_grid_possible_values = list(range(len(self.grid_value_names)))
+            self.mask_grid_possible_values = list(range(0, len(self.grid_value_names)))
             self.shapefile_path = (
                 f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
                 "Mouginot/mouginot_subbasins/"
@@ -790,7 +802,8 @@ class Mask:
         Args:
             lats (np.ndarray|list[float]): list of latitude points
             lons (np.ndarray|list[float]): list of longitude points
-            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
+            basin_numbers (list[int,], optional): list of basin numbers or grid value names.
+                                                    Defaults to None.
             inputs_are_xy (bool, optional): lats, lons are already transformed to x,y.
                                             Defaults to False.
 
@@ -823,6 +836,10 @@ class Mask:
         if self.basin_numbers:
             if not basin_numbers:
                 basin_numbers = self.basin_numbers
+
+        # basin numbers are strings convert
+        if basin_numbers and isinstance(basin_numbers[0], str):
+            basin_numbers = self.get_grid_value_from_grid_value_names(basin_numbers)
 
         if inputs_are_xy:
             x, y = lats, lons
@@ -871,6 +888,18 @@ class Mask:
             return inmask, 0
 
         return inmask, n_inside
+
+    def get_grid_value_names_from_grid_value(self, basin_numbers):
+        """Get grid value names from grid values"""
+        return [
+            self.grid_value_names[self.mask_grid_possible_values.index(v)] for v in basin_numbers
+        ]
+
+    def get_grid_value_from_grid_value_names(self, grid_value_names):
+        """Get grid values from grid value names"""
+        return [
+            self.mask_grid_possible_values[self.grid_value_names.index(n)] for n in grid_value_names
+        ]
 
     def grid_mask_values(
         self,
@@ -988,7 +1017,8 @@ class Mask:
             df (pl.LazyFrame|pl.DataFrame): polars LazyFrame or DataFrame with x,y columns
             x_col (str): name of column in df containing x values
             y_col (str): name of column in column in df containing y values
-            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
+            basin_numbers (list[int,], optional): list of basin numbers or grid value names.
+                                                    Defaults to None.
             return_pl_dataframe (bool, optional): return a polars DataFrame instead of LazyFrame
                                                   Defaults to False.
         Returns:
@@ -999,10 +1029,12 @@ class Mask:
             df = df.lazy()
 
         # Basin numbers assignment
-        if basin_numbers and not isinstance(basin_numbers, (list, np.ndarray)):
-            basin_numbers = [basin_numbers]
-        if self.basin_numbers and not basin_numbers:
-            basin_numbers = self.basin_numbers
+        if basin_numbers:
+            self.basin_numbers = basin_numbers
+
+        # basin numbers are strings convert
+        if self.basin_numbers and isinstance(self.basin_numbers[0], str):
+            self.basin_numbers = self.get_grid_value_from_grid_value_names(self.basin_numbers)
 
         # Filter by mask type
         if self.mask_type == "xylimits":
@@ -1024,32 +1056,26 @@ class Mask:
                     .cast(pl.Int64)
                     .alias("jj"),
                 ]
-            )
-            df = (
-                df.with_columns(
-                    [
-                        (
-                            (pl.col("ii") >= 0)
-                            & (pl.col("ii") < self.num_x)
-                            & (pl.col("jj") >= 0)
-                            & (pl.col("jj") < self.num_y)
-                        ).alias("in_bounds")
-                    ]
-                )
-                .filter(pl.col("in_bounds"))
-                .drop("in_bounds")
-            )
-            jj = df.select("jj").collect().to_numpy().flatten()
-            ii = df.select("ii").collect().to_numpy().flatten()
+            ).filter(
+                (pl.col("ii") >= 0)
+                & (pl.col("ii") < self.num_x)
+                & (pl.col("jj") >= 0)
+                & (pl.col("jj") < self.num_y)
+            )  # Filter out grid-cells out of bounds
 
-            # Get mask values from grid
-            mask_values = self.mask_grid[jj, ii]
-            df = df.with_columns([pl.Series("mask_value", mask_values)])
+        if self.basin_numbers:
+            rows, cols = np.indices(self.mask_grid.shape)
 
-            if self.basin_numbers:
-                df = df.filter(pl.col("mask_value").is_in(self.basin_numbers))
-            else:
-                df = df.filter(pl.col("mask_value") > 0)
-            df = df.drop(["ii", "jj", "mask_value"])
+            mask_grid_df = pl.LazyFrame(
+                {
+                    "jj": rows.reshape(-1),
+                    "ii": cols.reshape(-1),
+                    "mask_value": self.mask_grid.reshape(-1),
+                }
+            ).filter(pl.col("mask_value").is_in(self.basin_numbers))
+
+            df = df.join(mask_grid_df, on=["ii", "jj"], how="inner").drop(
+                ["ii", "jj", "mask_value"]
+            )
 
         return df.collect() if return_pl_dataframe else df

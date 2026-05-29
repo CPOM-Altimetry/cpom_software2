@@ -31,7 +31,6 @@ from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
 )
-from cpom.altimetry.tools.sec_tools.clip_to_basins import get_data
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
     elapsed,
     get_algo_name,
@@ -168,6 +167,51 @@ def get_grid_and_flags(
     populated_idx = (row_idx, col_idx)
 
     return grid, grid_flags, populated_idx, x_bins, y_bins
+
+
+def get_data_with_xy(
+    data: pl.DataFrame | pl.LazyFrame,
+    grid_area: GridArea,
+    logger: logging.Logger,
+) -> pl.LazyFrame:
+    """
+    Load data and add projected x/y coordinates for each grid-cell centre.
+
+    Unique (x_bin, y_bin) pairs are converted to lat/lon using the GridArea
+    definition and appended as new columns.
+
+    Args:
+        data (pl.DataFrame | pl.LazyFrame): Input data.
+        grid_area (GridArea): CPOM GridArea object for coordinate conversion.
+        logger (logging.Logger): Logger Object.
+
+    Returns:
+        pl.LazyFrame: Input data with 'x' and 'y' columns joined to each row.
+    """
+    lf = data.lazy() if isinstance(data, pl.DataFrame) else data
+    column_names = lf.collect_schema().names()
+
+    if "x" in column_names and "y" in column_names:
+        logger.info(
+            "Input data already contains 'x' and 'y' columns, skipping coordinate conversion."
+        )
+        return lf
+
+    # Get unique cells
+    unique_cells = lf.select(["x_bin", "y_bin"]).unique().collect()
+
+    x, y = grid_area.get_cellcentre_x_y_from_col_row(
+        unique_cells.get_column("x_bin").to_numpy(),
+        unique_cells.get_column("y_bin").to_numpy(),
+    )
+
+    unique_cells = unique_cells.with_columns(
+        [
+            pl.Series("x", x),
+            pl.Series("y", y),
+        ]
+    )
+    return lf.join(unique_cells.lazy(), on=["x_bin", "y_bin"], how="left")
 
 
 def triangulate_points(
@@ -598,13 +642,15 @@ def process_target(
     interpolated_df, status = process_timesteps(
         params, pl.read_parquet(in_dir / params.parquet_glob), nrows, ncols, logger
     )
-    # Mask out-of-range values in the output DataFrame as well, to be safe
-    interpolated_lf = get_data(grid_area=ga, logger=logger, lazyframe=interpolated_df.lazy())
-    masked_lf = (
-        Mask(params.mask)
-        .points_inside_polars(interpolated_lf, basin_numbers=params.mask_values)
-        .drop(["x", "y"])
-    )
+    interpolated_lf = get_data_with_xy(interpolated_df.lazy(), ga, logger)
+
+    if params.mask:
+        mask_values = [int(v) for v in params.mask_values] if params.mask_values else None
+        masked_lf = Mask(params.mask, basin_numbers=mask_values).points_inside_polars(
+            interpolated_lf.collect()
+        )
+    else:
+        masked_lf = interpolated_lf
 
     if isinstance(masked_lf, pl.DataFrame):
         masked_lf = masked_lf.lazy()
