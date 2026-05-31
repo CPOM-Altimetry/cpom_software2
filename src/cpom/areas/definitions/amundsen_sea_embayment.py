@@ -37,7 +37,7 @@ area_definition = {
     #   Area min/max lat/lon for initial data filtering
     "minlon": 0,  # minimum longitude to initially filter records for area (0..360E)
     "maxlon": 360,  # maximum longitude to initially filter records for area (0..360E)
-    "minlat": -80,  # minimum latitude to initially filter records for area
+    "minlat": -82,  # minimum latitude to initially filter records for area
     "maxlat": -71,  # maximum latitude to initially filter records for area
     # --------------------------------------------
     #    mask from clev2er.utils.masks.Mask

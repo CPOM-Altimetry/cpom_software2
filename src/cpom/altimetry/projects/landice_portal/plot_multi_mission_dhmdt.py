@@ -65,6 +65,16 @@ def main():
         default=None,
     )
 
+    parser.add_argument(
+        "--uncertainty",
+        "-unc",
+        action="store_true",
+        help=(
+            "Plot the uncertainty parameter (e.g., dMdt_uncertainty, sec_uncertainty)"
+            " instead of the main variable."
+        ),
+    )
+
     if len(sys.argv) == 1:
         print("no args provided")
         parser.print_help()
@@ -74,6 +84,12 @@ def main():
 
     if "DHDT" in args.prod_filename:
         args.parameter = "sec"
+
+    if args.uncertainty:
+        if args.parameter == "dMdt":
+            args.parameter = "dMdt_uncertainty"
+        elif args.parameter == "sec":
+            args.parameter = "sec_uncertainty"
 
     input_files = [args.prod_filename]
 
@@ -88,7 +104,13 @@ def main():
 
         # Strip dates YYYYMM-YYYYMM and version suffix like -fv1
         clean_name = re.sub(r"-\d{6}-\d{6}(-fv\d+)?", "", prod_name.replace(".nc", ""))
-        if args.parameter in ("dMdt", "sec"):
+
+        if args.uncertainty:
+            clean_name = clean_name.replace("-DMDT-", "-DMDT-UNCERT-").replace(
+                "-DHDT-", "-DHDT-UNCERT-"
+            )
+
+        if args.parameter in ("dMdt", "sec", "dMdt_uncertainty", "sec_uncertainty"):
             out_file = f"{output_dir}/{clean_name}"
             if args.basin:
                 out_file += f"-basin{args.basin}"
@@ -101,8 +123,12 @@ def main():
 
         if args.parameter == "dMdt":
             param_long_name = "Ice Sheet Mass Change Rate"
+        elif args.parameter == "dMdt_uncertainty":
+            param_long_name = "dM/dt Uncertainty"
         elif args.parameter == "sec":
-            param_long_name = "Ice Sheet Surface Elevation Change Rate"
+            param_long_name = "Rate of Surface Elevation Change"
+        elif args.parameter == "sec_uncertainty":
+            param_long_name = "dH/dt Uncertainty"
         elif args.parameter == "basin_id":
             param_long_name = "Glaciological Basin ID (Rignot 2016)"
         elif args.parameter == "surface_type":
@@ -184,15 +210,27 @@ def main():
                 "cmap_extend": "both",  # Optional: Extend colormap
             }
 
+            if "uncertainty" in args.parameter:
+                dataset["cmap_name"] = "Reds"
+                dataset.pop("cmap_under_color", None)
+                dataset.pop("cmap_over_color", None)
+                dataset["cmap_extend"] = "max"
+
             if args.parameter == "dMdt":
                 dataset["min_plot_range"] = -500.0
                 dataset["max_plot_range"] = 500.0
+            elif args.parameter == "dMdt_uncertainty":
+                dataset["min_plot_range"] = 0.0
+                dataset["max_plot_range"] = 40.0
 
             if args.parameter == "sec":
                 dataset["min_plot_range"] = -1.0
                 dataset["max_plot_range"] = 1.0
+            elif args.parameter == "sec_uncertainty":
+                dataset["min_plot_range"] = 0.0
+                dataset["max_plot_range"] = 0.3
 
-            if args.basin:
+            if args.basin and args.parameter == "dMdt":
                 dataset["plot_size_scale_factor"] = 2.0
                 basin_plot_range = {
                     "1": 500.0,
@@ -214,6 +252,56 @@ def main():
                     "18": 400.0,
                 }.get(args.basin, 2000.0)
                 dataset["min_plot_range"] = -basin_plot_range
+                dataset["max_plot_range"] = basin_plot_range
+
+                map_only = False
+                figure_width = 12
+                figure_height = 10
+
+            if args.basin and args.parameter == "dMdt_uncertainty":
+                dataset["plot_size_scale_factor"] = 2.0
+                basin_plot_range = {
+                    "9": 100.0,
+                }.get(args.basin, 40.0)
+                dataset["min_plot_range"] = 0.0
+                dataset["max_plot_range"] = basin_plot_range
+                map_only = False
+                figure_width = 12
+                figure_height = 10
+
+            if args.basin and args.parameter == "sec":
+                dataset["plot_size_scale_factor"] = 2.0
+                basin_plot_range = {
+                    "1": 1.0,
+                    "2": 1.0,
+                    "3": 1.0,
+                    "4": 1.0,
+                    "5": 1.0,
+                    "6": 1.0,
+                    "7": 1.0,
+                    "8": 1.0,
+                    "9": 2.0,
+                    "10": 1.0,
+                    "11": 1.0,
+                    "12": 1.0,
+                    "13": 1.0,
+                    "14": 1.0,
+                    "15": 1.0,
+                    "16": 1.0,
+                    "17": 1.0,
+                    "18": 1.0,
+                }.get(args.basin, 1.0)
+                dataset["min_plot_range"] = -basin_plot_range
+                dataset["max_plot_range"] = basin_plot_range
+                map_only = False
+                figure_width = 12
+                figure_height = 10
+            if args.basin and args.parameter == "sec_uncertainty":
+                dataset["plot_size_scale_factor"] = 2.0
+                basin_plot_range = {
+                    "1": 0.2,
+                }.get(args.basin, 0.2)
+                dataset["min_plot_range"] = 0.0
                 dataset["max_plot_range"] = basin_plot_range
                 map_only = False
                 figure_width = 12
@@ -492,7 +580,7 @@ def main():
                 use_default_annotation=False,
                 annotation_list=annotation_list,
                 image_format="webp",
-                use_cmap_in_hist=(args.parameter != "dMdt"),
+                use_cmap_in_hist=(args.parameter not in ("dMdt", "dMdt_uncertainty")),
                 dpi=150,
                 webp_settings=(95, 6),
                 figure_width=figure_width,
@@ -514,7 +602,7 @@ def main():
                 use_default_annotation=False,
                 annotation_list=annotation_list,
                 image_format="webp",
-                use_cmap_in_hist=(args.parameter != "dMdt"),
+                use_cmap_in_hist=(args.parameter not in ("dMdt", "dMdt_uncertainty")),
                 dpi=150,
                 webp_settings=(95, 6),
                 figure_width=figure_width,
