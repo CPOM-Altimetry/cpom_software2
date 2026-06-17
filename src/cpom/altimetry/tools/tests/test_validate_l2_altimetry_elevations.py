@@ -18,6 +18,8 @@ from cpom.altimetry.tools.validate_l2_altimetry_elevations import (
     get_elev_differences,
     get_files_in_dir,
     get_variable,
+    mask_to_nan,
+    variable_exists,
 )
 
 # import h5py
@@ -79,6 +81,62 @@ def test_get_variable_exceptions(netcdf_file):
             get_variable(nc, "missing_var")
         with pytest.raises(IndexError, match="NetCDF parameter or group wrong not found"):
             get_variable(nc, "wrong/group/var")
+
+
+# --------------------#
+# Test variable_exists #
+# --------------------#
+@pytest.mark.parametrize(
+    "variable_path, expected",
+    [
+        ("elev", True),  # top-level variable
+        ("group1/elevation", True),  # grouped variable
+        ("missing", False),  # missing top-level variable
+        ("group1/missing", False),  # missing variable in existing group
+        ("nogroup/elevation", False),  # missing group
+    ],
+)
+def test_variable_exists(netcdf_file, variable_path, expected):
+    """Test variable_exists: walks groups and reports presence of (grouped) variables"""
+    with Dataset(netcdf_file, "r") as nc:
+        assert variable_exists(nc, variable_path) is expected
+
+
+# -----------------#
+# Test mask_to_nan #
+# -----------------#
+def test_mask_to_nan_fills_masked_with_nan():
+    """Test mask_to_nan: masked cells become NaN, dtype becomes float"""
+    masked = np.ma.array([1.0, 2.0, 3.0], mask=[False, True, False])
+    result = mask_to_nan(masked)
+    assert not np.ma.isMaskedArray(result)
+    assert np.allclose(result, [1.0, np.nan, 3.0], equal_nan=True)
+
+
+def test_mask_to_nan_passes_plain_array_unchanged():
+    """Test mask_to_nan: a plain (unmasked) array is returned unchanged"""
+    plain = np.array([1, 2, 3])
+    result = mask_to_nan(plain)
+    assert result is plain
+
+
+# -----------------------#
+# Test _resolve_altim_var #
+# -----------------------#
+@pytest.mark.parametrize(
+    "var, band, is_cristal, expected",
+    [
+        ("sig0", "ku", True, "data/ku/poca/sig0"),  # CRISTAL bare name -> poca group
+        ("coherence", "ka", True, "data/ka/poca/coherence"),  # band substituted
+        ("data/{band}/penetration_depth", "ku", True, "data/ku/penetration_depth"),  # {band}
+        ("data/ku/poca/sig0", "ku", True, "data/ku/poca/sig0"),  # explicit path passthrough
+        ("uncertainty", "ku", False, "uncertainty"),  # non-CRISTAL bare name unchanged
+    ],
+)
+def test_resolve_altim_var(var, band, is_cristal, expected):
+    """Test _resolve_altim_var: band substitution and CRISTAL poca-group resolution"""
+    # pylint: disable=protected-access
+    assert ProcessData._resolve_altim_var(var, band, is_cristal) == expected
 
 
 # -----------------------#
@@ -158,6 +216,17 @@ def test_get_files_in_dir(test_directory):
                 "lat": "expert/latitude",
                 "lon": "expert/longitude",
                 "elev": "expert/ice_sheet_elevation_ice1_roemer",
+            },
+        ),
+        (
+            "/some_path/CRA_IR_GR_HR__SIC_20200101T005337_20200101T005516_"
+            "20250908T083901_0098_011_05100_______MSSL_LIG_NT____.NC",
+            {
+                "lat_nadir": "data/{band}/lat",
+                "lon_nadir": "data/{band}/lon",
+                "lat": "data/{band}/poca/lat_surf",
+                "lon": "data/{band}/poca/lon_surf",
+                "elev": "data/{band}/poca/land_ice_elevation",
             },
         ),
     ],
@@ -599,6 +668,53 @@ def test_get_altimetry_data_array_happy_path(mock_process_data, mock_config):
     assert np.all(result["y"] == np.array([100, 110, 120, 130]) * 10)
     assert np.all(result["h"] == np.array([500, 600, 700, 800]))
     assert np.all(result["extra_var"] == np.array([1, 2, 3, 4]))
+
+
+@pytest.fixture(name="cristal_grouped_file")
+def cristal_grouped_file_fixture():
+    """Minimal CRISTAL-like grouped NetCDF: data/<band>/{lat,lon} nadir and
+    data/<band>/poca/{lat_surf,lon_surf,land_ice_elevation,sig0}. The POCA
+    lat/lon of record index 2 is masked, to exercise the nadir fill."""
+    temp_file = tempfile.NamedTemporaryFile(  # pylint: disable=R1732
+        delete=False, prefix="CRA_IR_GR_HR__SIC_", suffix=".nc"
+    )
+    with Dataset(temp_file.name, "w", format="NETCDF4") as nc:
+        nc.createDimension("time", 4)
+        ku = nc.createGroup("data").createGroup("ku")
+        ku.createVariable("lat", "f8", ("time",))[:] = [-70.0, -71.0, -72.0, -73.0]
+        ku.createVariable("lon", "f8", ("time",))[:] = [100.0, 101.0, 102.0, 103.0]
+        poca = ku.createGroup("poca")
+        lat_surf = poca.createVariable("lat_surf", "f8", ("time",), fill_value=-9999.0)
+        lat_surf[:] = np.ma.array([-70.5, -71.5, -72.5, -73.5], mask=[False, False, True, False])
+        lon_surf = poca.createVariable("lon_surf", "f8", ("time",), fill_value=-9999.0)
+        lon_surf[:] = np.ma.array([100.5, 101.5, 102.5, 103.5], mask=[False, False, True, False])
+        elev = poca.createVariable("land_ice_elevation", "f8", ("time",))
+        elev[:] = [1000.0, 1100.0, 1200.0, 1300.0]
+        poca.createVariable("sig0", "f8", ("time",))[:] = [1.0, 2.0, 3.0, 4.0]
+    yield temp_file.name
+
+
+def test_get_altimetry_data_array_cristal_grouped(mock_process_data, cristal_grouped_file):
+    """Test get_altimetry_data_array on a CRISTAL grouped file: band selection, POCA
+    elevation/lat/lon read from the band's poca group, bare add_vars resolved within
+    that group (sig0), masked POCA lat/lon filled from nadir, missing covariate dropped."""
+    mock_process_data.args.band = "ku"
+    mock_process_data.args.add_vars = ["sig0", "coherence"]
+
+    result = mock_process_data.get_altimetry_data_array(Path(cristal_grouped_file))
+
+    assert result.dtype.names == ("x", "y", "h", "sig0")
+    assert result.size == 4
+    # DummyArea.latlon_to_xy returns lat*10, lon*10; the masked POCA cell (index 2)
+    # is filled from nadir (lat=-72, lon=102) before projection.
+    assert np.allclose(result["x"], np.array([-70.5, -71.5, -72.0, -73.5]) * 10)
+    assert np.allclose(result["y"], np.array([100.5, 101.5, 102.0, 103.5]) * 10)
+    assert np.allclose(result["h"], [1000.0, 1100.0, 1200.0, 1300.0])
+    assert np.allclose(result["sig0"], [1.0, 2.0, 3.0, 4.0])
+    # coherence is not present in the product and is dropped with an info log
+    mock_process_data.log.info.assert_called_with(
+        "Variable(s) %s missing from netcdf", {"coherence"}
+    )
 
 
 # ---------------------------#

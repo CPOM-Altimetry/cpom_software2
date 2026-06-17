@@ -6,7 +6,8 @@ It also allows comparing a reference mission to itself.
 
 ### **Supported Missions**
 
-- **Altimetry Missions**: CS2 (Native L2 and CryoTempo), S3A, S3B, ENVISAT, ERS1, ERS2
+- **Altimetry Missions**: CS2 (Native L2 and CryoTempo), CRISTAL (CLEV2ER landice L2 POCA),
+                        S3A, S3B, ENVISAT, ERS1, ERS2
 - **Reference Missions**: ICESat-2 (ATL06), IceBridge (ILATM2, ILUTP2),
                         Pre-IceBridge (BRMCR2, BLATM2), ICESat1 (GLAH12)
 
@@ -20,6 +21,16 @@ max_diff argument for your usecase, or provide a DEM to correct reference locati
 to align with altimetry measurements.
 
 When running for Cryotempo, the Cryotempo_Modes argument must be set.
+
+When running for CRISTAL (CLEV2ER landice L2 POCA files, e.g. ``CRA_IR_GR_*MSSL_LIG*.NC``)
+the data are stored in per-band NetCDF groups (``data/ku/...`` and ``data/ka/...``). Use
+``--band`` to select ``ku`` or ``ka`` (run once per band). The POCA elevation/lat/lon are
+read from the selected band's ``poca`` group automatically. ``--add_vars`` names without a
+``/`` are resolved within that band's ``poca`` group, so to also extract backscatter and
+coherence (the POCA uncertainty-LUT covariates) pass ``--add_vars sig0 coherence``; use
+``{band}`` in a full path for variables elsewhere in the tree (e.g.
+``--add_vars data/{band}/penetration_depth``). This produces the ``dh``/``lats``/``lons``
+(+ covariate) ``.npz`` consumed by ``clev2er.utils.uncertainty`` LUT pre-processing.
 
 ### **Command Line Options**
 **Required**
@@ -136,6 +147,13 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="[optional] IS2 beams to use. Space separated list: gt1l gt1r gt2l gt2r gt3l gt3r",
     )
+    parser.add_argument(
+        "--band",
+        choices={"ku", "ka"},
+        default="ku",
+        help="[optional, default=ku] altimeter band for grouped products (CRISTAL L2). "
+        "Selects the data/<band>/ NetCDF group. Run once per band.",
+    )
     parser.add_argument("--dem", help="[optional] DEM, used in 'correct_elevation_using_slope'")
     parser.add_argument("--radius", type=float, default=20.0, help="[optional] search radius in m")
     parser.add_argument(
@@ -219,6 +237,49 @@ def get_variable(nc: Dataset | h5py.File, nc_var_path: str) -> np.ndarray:
         raise IndexError(f"NetCDF parameter or group {err} not found") from err
 
 
+def variable_exists(nc: Dataset | h5py.File, nc_var_path: str) -> bool:
+    """Return True if a (possibly grouped) variable path exists in the file.
+
+    Unlike ``var in nc.variables`` this walks NetCDF groups, so grouped paths
+    such as ``data/ku/poca/sig0`` are handled. A bare name (no ``/``) keeps the
+    original membership-test semantics against the top-level ``variables``.
+
+    Args:
+        nc (Dataset | h5py.File): The open dataset object.
+        nc_var_path (str): Variable path, groups separated by '/'.
+
+    Returns:
+        bool: True if the variable exists, otherwise False.
+    """
+    parts = nc_var_path.split("/")
+    node = nc
+    for part in parts[:-1]:
+        try:
+            node = node.groups[part]
+        except (KeyError, AttributeError):
+            return False
+    return parts[-1] in getattr(node, "variables", {})
+
+
+def mask_to_nan(array: np.ndarray) -> np.ndarray:
+    """Convert a masked array to a plain float array with NaN in masked cells.
+
+    Scaled-integer NetCDF variables (used throughout the CRISTAL L2 products)
+    are returned by netCDF4 as masked float arrays; downstream code here relies
+    on ``np.isnan`` to detect missing values, so fill the mask with NaN. Plain
+    (unmasked) arrays are returned unchanged.
+
+    Args:
+        array (np.ndarray): Array as returned by ``get_variable``.
+
+    Returns:
+        np.ndarray: NaN-filled float array, or the input unchanged if not masked.
+    """
+    if np.ma.isMaskedArray(array):
+        return np.ma.filled(array.astype("float64"), np.nan)
+    return array
+
+
 def get_default_variables(file: Path) -> dict:
     """
     Return default variable names based on file naming patterns.
@@ -263,6 +324,13 @@ def get_default_variables(file: Path) -> dict:
             "lat": "latitude",
             "lon": "longitude",
             "elev": "elevation",
+        },
+        "CRA_IR_GR": {  # CRISTAL L2 land ice POCA (CLEV2ER landice chain), per-band groups
+            "lat_nadir": "data/{band}/lat",
+            "lon_nadir": "data/{band}/lon",
+            "lat": "data/{band}/poca/lat_surf",
+            "lon": "data/{band}/poca/lon_surf",
+            "elev": "data/{band}/poca/land_ice_elevation",
         },
         # FDR4ALT Products
         "ER1": {
@@ -406,11 +474,33 @@ class ProcessData:
         """
         bad_indices = np.isnan(lon)  # np.flatnonzero(lon.mask)  # Find empty longitude values
         if bad_indices.size > 0:
-            lat_nadir = get_variable(nc, config["lat_nadir"])
-            lon_nadir = get_variable(nc, config["lon_nadir"])
+            lat_nadir = mask_to_nan(get_variable(nc, config["lat_nadir"]))
+            lon_nadir = mask_to_nan(get_variable(nc, config["lon_nadir"]))
             lat[bad_indices] = lat_nadir[bad_indices]
             lon[bad_indices] = np.mod(lon_nadir[bad_indices], 360)
         return lat, lon
+
+    @staticmethod
+    def _resolve_altim_var(var: str, band: str, is_cristal: bool) -> str:
+        """Resolve an ``--add_vars`` entry to a full NetCDF variable path.
+
+        A ``{band}`` placeholder is substituted with the selected band. For
+        CRISTAL L2 files a bare name (no '/') is resolved within the band's
+        ``poca`` group, so ``sig0`` -> ``data/<band>/poca/sig0``.
+
+        Args:
+            var (str): The user-supplied ``--add_vars`` entry.
+            band (str): Selected band ('ku' or 'ka').
+            is_cristal (bool): True if the file is a CRISTAL grouped product.
+
+        Returns:
+            str: The resolved variable path (may still not exist in the file).
+        """
+        if "{band}" in var:
+            return var.format(band=band)
+        if is_cristal and "/" not in var:
+            return f"data/{band}/poca/{var}"
+        return var
 
     def get_altimetry_data_array(self, filename: Path) -> Optional[np.ndarray]:
         """Extract and filter data from an altimetry data file.
@@ -424,28 +514,40 @@ class ProcessData:
         try:
             with Dataset(filename) as nc:
                 config = get_default_variables(filename)
-                if config is None:
+                if not config:
                     self.log.error("Unsupported file basename %s for file", filename)
                     return None
 
+                # Per-band grouped products (CRISTAL L2) carry a {band} placeholder
+                # in their variable paths; resolve it from --band.
+                band = getattr(self.args, "band", "ku")
+                is_cristal = any("{band}" in path for path in config.values())
+                if is_cristal:
+                    config = {
+                        key: (path.format(band=band) if "{band}" in path else path)
+                        for key, path in config.items()
+                    }
+
                 lats, lons, elev = (
-                    get_variable(nc, config["lat"]),
-                    np.mod(get_variable(nc, config["lon"]), 360),
-                    get_variable(nc, config["elev"]),
+                    mask_to_nan(get_variable(nc, config["lat"])),
+                    np.mod(mask_to_nan(get_variable(nc, config["lon"])), 360),
+                    mask_to_nan(get_variable(nc, config["elev"])),
                 )
 
                 try:
                     add_vars = self.args.add_vars or []
-                    additional_data = {
-                        var.rsplit("/", 1)[-1]: get_variable(nc, var)
-                        for var in add_vars
-                        if var in nc.variables
-                    }
-                    if list(additional_data.keys()) != add_vars:
-                        self.log.info(
-                            "Variable(s) %s missing from netcdf",
-                            set(add_vars) - set(additional_data.keys()),
-                        )
+                    additional_data = {}
+                    missing = []
+                    for var in add_vars:
+                        resolved = self._resolve_altim_var(var, band, is_cristal)
+                        if variable_exists(nc, resolved):
+                            additional_data[resolved.rsplit("/", 1)[-1]] = mask_to_nan(
+                                get_variable(nc, resolved)
+                            )
+                        else:
+                            missing.append(var)
+                    if missing:
+                        self.log.info("Variable(s) %s missing from netcdf", set(missing))
                 except Exception as err:
                     raise ValueError("Failed to load additional data") from err
 
@@ -478,7 +580,7 @@ class ProcessData:
 
             # Structured NumPy array containing x, y, elevation, and any additional variables
             return np.array(
-                list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
+                list(zip(x, y, elev, *additional_data.values())),
                 dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
                 + [(var, str(data.dtype)) for var, data in additional_data.items()],
             )
