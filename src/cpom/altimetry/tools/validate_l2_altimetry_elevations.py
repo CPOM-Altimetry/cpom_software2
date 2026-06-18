@@ -1117,14 +1117,13 @@ if __name__ == "__main__":
     logger.info("  output_dir    : %s", month_outdir)
     logger.info("=" * 72)
 
-    # Load reference data #
+    # Discover input files first (cheap) so a month with no L2 inputs exits fast,
+    # BEFORE the expensive reference-data load.
     reference_path = Path(params.reference_dir) / f"{DATE_YEAR}/{DATE_MONTH}"
     reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
-    processor = ProcessData(params, AREA_OBJ, logger)
     reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "h5")  # is1 & is2
     if reference_files == []:  # icebridge/pre-icebridge
         reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
-
     if not reference_files:
         logger.error(
             "No reference files found in %s for %s-%s", reference_dir, DATE_YEAR, DATE_MONTH
@@ -1132,6 +1131,28 @@ if __name__ == "__main__":
         sys.exit(1)
     logger.info("Found %d reference files in %s", len(reference_files), reference_dir)
 
+    altimetry_files: list[Path] = []
+    if params.compare_to_self:
+        PREFIX = "neighbour_"
+    else:
+        PREFIX = ""
+        for basepath in params.altim_dir:
+            alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
+            altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
+            found = get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc")
+            logger.info("Found %d altimetry files in %s", len(found), altimetry_dir)
+            altimetry_files.extend(found)
+        if not altimetry_files:
+            logger.error(
+                "No altimetry (L2) files for %s-%s - skipping month (reference not loaded)",
+                DATE_YEAR,
+                DATE_MONTH,
+            )
+            sys.exit(1)
+
+    processor = ProcessData(params, AREA_OBJ, logger)
+
+    # Load reference data (expensive) #
     t_ref = time.perf_counter()
     chunksize = max(1, len(reference_files) // (params.max_workers * 4))
     logger.info(
@@ -1164,20 +1185,8 @@ if __name__ == "__main__":
     # Load altimetry data #
     if params.compare_to_self:
         logger.info("Performing reference self-comparison (altimetry = reference)")
-        PREFIX = "neighbour_"
         altimetry_points = reference_points  # Compare is2 to itself
     else:
-        PREFIX = ""
-        altimetry_files = []
-        for basepath in params.altim_dir:
-            alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
-            altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
-            found = get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc")
-            logger.info("Found %d altimetry files in %s", len(found), altimetry_dir)
-            altimetry_files.extend(found)
-        if not altimetry_files:
-            logger.error("No altimetry files found for %s-%s", DATE_YEAR, DATE_MONTH)
-            sys.exit(1)
 
         t_alt = time.perf_counter()
         chunksize = max(1, len(altimetry_files) // (params.max_workers * 4))
