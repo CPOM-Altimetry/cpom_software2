@@ -492,6 +492,42 @@ def collect_with_progress(results_iter, total: int, log: logging.Logger, label: 
     return collected
 
 
+def concat_altimetry_results(arrays: list) -> np.ndarray:
+    """Concatenate per-file altimetry arrays that may carry different add_vars.
+
+    Files of different mode/band can legitimately contain different optional
+    ``--add_vars`` (e.g. HR Ku has ``coherence`` but LR Ku and Ka do not). A plain
+    ``np.concatenate`` would fail on the mismatched dtypes, so this takes the union
+    of the extra columns and fills a file's absent columns with NaN. The base
+    ``x``/``y``/``h`` fields are always present. Extra columns are stored as float64
+    so the NaN fill is representable.
+
+    Args:
+        arrays: Non-empty list of structured arrays, each with at least x, y, h.
+
+    Returns:
+        np.ndarray: One structured array with x, y, h + the union of extra fields.
+    """
+    base = ("x", "y", "h")
+    extra_names: list[str] = []
+    for arr in arrays:
+        for name in arr.dtype.names or ():
+            if name not in base and name not in extra_names:
+                extra_names.append(name)
+    out_dtype = [(name, "float64") for name in (*base, *extra_names)]
+    total = sum(int(arr.size) for arr in arrays)
+    out = np.empty(total, dtype=out_dtype)
+    pos = 0
+    for arr in arrays:
+        n = int(arr.size)
+        for name in base:
+            out[name][pos : pos + n] = arr[name]
+        for name in extra_names:
+            out[name][pos : pos + n] = arr[name] if name in arr.dtype.names else np.nan
+        pos += n
+    return out
+
+
 class ProcessData:
     """Class to process laser and altimetry data files by extracting and filtering
     elevation data. To be run by a multiproccessor.
@@ -1161,7 +1197,23 @@ if __name__ == "__main__":
                 len(altimetry_files),
             )
             sys.exit(1)
-        altimetry_points = np.concatenate(valid_altim_results)
+        # Different mode/band files can carry different optional add_vars (e.g. HR Ku has
+        # coherence, LR Ku and Ka do not), so concatenate on the union of columns.
+        if len({r.dtype for r in valid_altim_results}) == 1:
+            altimetry_points = np.concatenate(valid_altim_results)
+        else:
+            altimetry_points = concat_altimetry_results(valid_altim_results)
+        # Missing in *some* files is normal; warn only if a requested add_var was found
+        # in NO file at all, which usually means a typo or the wrong band/product.
+        if params.add_vars:
+            present = set(altimetry_points.dtype.names or ())
+            absent = [v for v in params.add_vars if v.rsplit("/", 1)[-1] not in present]
+            if absent:
+                logger.warning(
+                    "Requested --add_vars found in NO altimetry file: %s "
+                    "(check spelling, --band, or product type)",
+                    ", ".join(absent),
+                )
         logger.info("Loaded %d altimetry points; de-duplicating...", len(altimetry_points))
         unique_indices = np.unique(altimetry_points[["x", "y", "h"]], return_index=True)[1]
         altimetry_points = altimetry_points[unique_indices]

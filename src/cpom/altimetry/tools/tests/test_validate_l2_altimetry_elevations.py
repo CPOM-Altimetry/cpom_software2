@@ -13,6 +13,7 @@ from netCDF4 import Dataset  # pylint: disable=E0611
 # from cpom.dems.dems import Dem
 from cpom.altimetry.tools.validate_l2_altimetry_elevations import (
     ProcessData,
+    concat_altimetry_results,
     correct_elevation_using_slope,
     get_default_variables,
     get_elev_differences,
@@ -137,6 +138,38 @@ def test_resolve_altim_var(var, band, is_cristal, expected):
     """Test _resolve_altim_var: band substitution and CRISTAL poca-group resolution"""
     # pylint: disable=protected-access
     assert ProcessData._resolve_altim_var(var, band, is_cristal) == expected
+
+
+# ------------------------------#
+# Test concat_altimetry_results #
+# ------------------------------#
+def test_concat_altimetry_results_homogeneous():
+    """Same columns in every file: union equals a simple concatenation."""
+    dt = [("x", "f8"), ("y", "f8"), ("h", "f8"), ("sig0", "f8")]
+    a = np.array([(1.0, 2.0, 3.0, 0.5)], dtype=dt)
+    b = np.array([(4.0, 5.0, 6.0, 0.7)], dtype=dt)
+    out = concat_altimetry_results([a, b])
+    assert out.dtype.names == ("x", "y", "h", "sig0")
+    assert np.allclose(out["x"], [1.0, 4.0])
+    assert np.allclose(out["sig0"], [0.5, 0.7])
+
+
+def test_concat_altimetry_results_heterogeneous_nan_fill():
+    """Files with different add_vars: union of columns, NaN where a file lacks one."""
+    with_coh = np.array(
+        [(1.0, 2.0, 3.0, 0.5, 0.9)],
+        dtype=[("x", "f8"), ("y", "f8"), ("h", "f8"), ("sig0", "f8"), ("coherence", "f8")],
+    )
+    without_coh = np.array(
+        [(4.0, 5.0, 6.0, 0.7)],
+        dtype=[("x", "f8"), ("y", "f8"), ("h", "f8"), ("sig0", "f8")],
+    )
+    out = concat_altimetry_results([with_coh, without_coh])
+    assert out.dtype.names == ("x", "y", "h", "sig0", "coherence")
+    assert np.allclose(out["sig0"], [0.5, 0.7])
+    # coherence present for the HR-like file, NaN for the file that lacked it
+    assert out["coherence"][0] == 0.9
+    assert np.isnan(out["coherence"][1])
 
 
 # -----------------------#
