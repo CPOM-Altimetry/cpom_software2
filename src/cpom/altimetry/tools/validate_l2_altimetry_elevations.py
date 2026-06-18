@@ -75,6 +75,7 @@ import logging
 import os
 import re
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -97,20 +98,45 @@ def setup_logging(
     log_name="",
     log_file_info="file.log",
     log_file_error="file.err",
+    console_level=logging.INFO,
 ):
-    """Setup logger"""
-    log = logging.getLogger(log_name)
-    log.setLevel(logging.INFO)
+    """Set up logging to two files (info + error) and to the console (stdout).
 
-    log_format = logging.Formatter(
+    A console (stdout) handler is added so the user sees progress in the
+    terminal as the tool runs, in addition to the persistent log files.
+
+    Args:
+        log_name (str): Logger name ("" selects the root logger).
+        log_file_info (str | Path): Path of the INFO-level log file.
+        log_file_error (str | Path): Path of the ERROR-level log file.
+        console_level (int): Logging level for the console handler.
+
+    Returns:
+        logging.Logger: The configured logger.
+    """
+    log = logging.getLogger(log_name)
+    # let handlers decide what to emit; logger must pass the lowest level through
+    log.setLevel(min(logging.INFO, console_level))
+    log.handlers.clear()  # idempotent: avoid duplicate handlers if called again
+
+    file_format = logging.Formatter(
         "%(levelname)s : %(asctime)s : %(message)s", datefmt="%d/%m/%Y %H:%M:%S"
     )
-
     for log_file, level in [(log_file_info, logging.INFO), (log_file_error, logging.ERROR)]:
         file_handler = logging.FileHandler(log_file, mode="w")
-        file_handler.setFormatter(log_format)
+        file_handler.setFormatter(file_format)
         file_handler.setLevel(level)
         log.addHandler(file_handler)
+
+    # Console handler: concise format (time + message) for readable progress
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
+    console.setLevel(console_level)
+    log.addHandler(console)
+
+    # Quieten third-party libraries that would otherwise flood the console at INFO
+    for noisy in ("matplotlib", "PIL", "numexpr", "fiona", "rasterio", "cartopy"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     return log
 
@@ -182,6 +208,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="[optional, default=10] number of worker processes to use",
+    )
+    parser.add_argument(
+        "--log_level",
+        choices={"debug", "info", "warning"},
+        default="info",
+        help="[optional, default=info] console logging verbosity",
     )
     parser.add_argument(  # Default is False, becomes True if provided
         "--compare_to_historical_reference",
@@ -428,6 +460,36 @@ def get_files_in_dir(
         return valid_files
 
     return []
+
+
+def collect_with_progress(results_iter, total: int, log: logging.Logger, label: str) -> list:
+    """Drain a (lazy) results iterator into a list, logging progress as it goes.
+
+    The parallel file loaders can run for a long time with no output; this
+    reports progress roughly every 5% so the user can see the run advancing.
+
+    Args:
+        results_iter: Iterator yielding per-file results (e.g. from executor.map).
+        total (int): Total number of items expected (used for the percentage).
+        log (logging.Logger): Logger to report progress to.
+        label (str): Short stage label, e.g. "reference" or "altimetry".
+
+    Returns:
+        list: All collected results, in iteration order.
+    """
+    every = max(1, total // 20)  # ~20 progress lines over the whole stage
+    collected = []
+    for count, result in enumerate(results_iter, start=1):
+        collected.append(result)
+        if count % every == 0 or count == total:
+            log.info(
+                "  %s files processed: %d/%d (%.0f%%)",
+                label,
+                count,
+                total,
+                100.0 * count / total,
+            )
+    return collected
 
 
 class ProcessData:
@@ -989,8 +1051,29 @@ if __name__ == "__main__":
     logger = setup_logging(
         log_file_info=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.info.log",
         log_file_error=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.errors.log",
+        console_level=getattr(logging, params.log_level.upper()),
     )
-    logger.info("Start processing with arguments %s", params)
+    t_start = time.perf_counter()
+    logger.info("=" * 72)
+    logger.info("validate_l2_altimetry_elevations : %s %s-%s", params.area, DATE_YEAR, DATE_MONTH)
+    logger.info("  reference_dir : %s", params.reference_dir)
+    if params.compare_to_self:
+        logger.info("  mode          : reference self-comparison")
+    else:
+        logger.info("  altim_dir     : %s", ", ".join(params.altim_dir))
+        logger.info("  band          : %s", getattr(params, "band", "ku"))
+    if params.add_vars:
+        logger.info("  add_vars      : %s", " ".join(params.add_vars))
+    if params.beams:
+        logger.info("  beams         : %s", " ".join(params.beams))
+    logger.info(
+        "  radius=%.1fm  maxdiff=%.1fm  workers=%d",
+        params.radius,
+        params.maxdiff,
+        params.max_workers,
+    )
+    logger.info("  output_dir    : %s", month_outdir)
+    logger.info("=" * 72)
 
     # Load reference data #
     reference_path = Path(params.reference_dir) / f"{DATE_YEAR}/{DATE_MONTH}"
@@ -1000,56 +1083,117 @@ if __name__ == "__main__":
     if reference_files == []:  # icebridge/pre-icebridge
         reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
 
-    logger.info("Loaded %d reference data files", len(reference_files))
-
-    chunksize = max(1, len(reference_files) // (params.max_workers * 4))
-    logger.info("Chunksize %d", chunksize)
-    with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-        ref_results = list(
-            executor.map(processor.process_reference_file, reference_files, chunksize=chunksize)
+    if not reference_files:
+        logger.error(
+            "No reference files found in %s for %s-%s", reference_dir, DATE_YEAR, DATE_MONTH
         )
-    valid_results = [result for result in ref_results if result is not None]
+        sys.exit(1)
+    logger.info("Found %d reference files in %s", len(reference_files), reference_dir)
+
+    t_ref = time.perf_counter()
+    chunksize = max(1, len(reference_files) // (params.max_workers * 4))
+    logger.info(
+        "Loading reference data (%d workers, chunksize %d)...", params.max_workers, chunksize
+    )
+    with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
+        ref_results = collect_with_progress(
+            executor.map(processor.process_reference_file, reference_files, chunksize=chunksize),
+            len(reference_files),
+            logger,
+            "reference",
+        )
+    valid_results = [result for result in ref_results if result is not None and result.size > 0]
+    if not valid_results:
+        logger.error(
+            "No valid reference points loaded from %d files (none in area/hemisphere?)",
+            len(reference_files),
+        )
+        sys.exit(1)
     reference_points = np.concatenate(valid_results)
+    logger.info("Loaded %d reference points; de-duplicating...", len(reference_points))
     unique_indices = np.unique(reference_points[["x", "y", "h"]], return_index=True)[1]
     reference_points = reference_points[unique_indices]
-    logger.info("Loaded reference data points, len : %d", len(reference_points))
+    logger.info(
+        "  %d unique reference points (%.1fs)",
+        len(reference_points),
+        time.perf_counter() - t_ref,
+    )
 
     # Load altimetry data #
     if params.compare_to_self:
-        logger.info("Performing reference self-comparison")
+        logger.info("Performing reference self-comparison (altimetry = reference)")
         PREFIX = "neighbour_"
         altimetry_points = reference_points  # Compare is2 to itself
     else:
-        logger.info("Comparing reference to altimetry")
         PREFIX = ""
         altimetry_files = []
         for basepath in params.altim_dir:
             alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
             altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
+            found = get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc")
+            logger.info("Found %d altimetry files in %s", len(found), altimetry_dir)
+            altimetry_files.extend(found)
+        if not altimetry_files:
+            logger.error("No altimetry files found for %s-%s", DATE_YEAR, DATE_MONTH)
+            sys.exit(1)
 
-            altimetry_files.extend(get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc"))
-        logger.info("Loaded %d altimetry data files", len(altimetry_files))
-
+        t_alt = time.perf_counter()
         chunksize = max(1, len(altimetry_files) // (params.max_workers * 4))
-        logger.info("Chunksize %d", chunksize)
+        logger.info(
+            "Loading altimetry data (band=%s, %d workers, chunksize %d)...",
+            getattr(params, "band", "ku"),
+            params.max_workers,
+            chunksize,
+        )
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-            altim_results = list(
+            altim_results = collect_with_progress(
                 executor.map(
                     processor.get_altimetry_data_array, altimetry_files, chunksize=chunksize
-                )
+                ),
+                len(altimetry_files),
+                logger,
+                "altimetry",
             )
-        valid_altim_results = [result for result in altim_results if result is not None]
+        valid_altim_results = [r for r in altim_results if r is not None and r.size > 0]
+        if not valid_altim_results:
+            logger.error(
+                "No valid altimetry points loaded from %d files (none in area/hemisphere?)",
+                len(altimetry_files),
+            )
+            sys.exit(1)
         altimetry_points = np.concatenate(valid_altim_results)
+        logger.info("Loaded %d altimetry points; de-duplicating...", len(altimetry_points))
         unique_indices = np.unique(altimetry_points[["x", "y", "h"]], return_index=True)[1]
         altimetry_points = altimetry_points[unique_indices]
-        logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
+        logger.info(
+            "  %d unique altimetry points (%.1fs)",
+            len(altimetry_points),
+            time.perf_counter() - t_alt,
+        )
 
     outfile = month_outdir / f"p2p_diffs_{params.area}"
 
     # Get elevation differences #
+    t_match = time.perf_counter()
+    logger.info(
+        "Matching %d altimetry to %d reference points (radius=%.1fm, maxdiff=%.1fm)...",
+        len(altimetry_points),
+        len(reference_points),
+        params.radius,
+        params.maxdiff,
+    )
     elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
+    logger.info(
+        "Found %d matched pairs in %.1fs",
+        len(elev_differences["dh"]),
+        time.perf_counter() - t_match,
+    )
     if params.dem:
+        logger.info("Applying DEM slope correction using %s", params.dem)
         elev_differences = correct_elevation_using_slope(elev_differences, params, logger, PREFIX)
+    if len(elev_differences["dh"]) == 0:
+        logger.error("No matched pairs within radius/maxdiff - nothing to save; exiting")
+        sys.exit(1)
 
     # Convert to lat/lon #
     alt_lats, alt_lons = AREA_OBJ.xy_to_latlon(
@@ -1082,9 +1226,17 @@ if __name__ == "__main__":
             save_data[variable] = elev_differences[variable]
 
     np.savez(f"{outfile}.npz", **save_data)
+    logger.info(
+        "Wrote %s.npz (%d points, vars: %s)",
+        outfile,
+        len(save_data["dh"]),
+        ", ".join(save_data.keys()),
+    )
 
     compute_elevation_stats(save_data, prefix=PREFIX, output_file=f"{outfile}_elevation_stats.csv")
+    logger.info("Wrote %s_elevation_stats.csv", outfile)
 
+    logger.info("Generating plots...")
     Polarplot(params.area).plot_points(
         {
             "name": "Difference_in_height_(dh)",
@@ -1096,3 +1248,18 @@ if __name__ == "__main__":
     )
     elev_dh_histograms(save_data["dh"], f"{outfile}_dh_histogram.png", bins=params.bins)
     elevation_dh_cumulative_dist(save_data["dh"], f"{outfile}_dh_cumulative_distribution.png")
+
+    # Concise result summary so the key numbers are visible on the console
+    dh_arr = np.asarray(save_data["dh"], dtype=float)
+    logger.info("-" * 72)
+    logger.info(
+        "Done in %.1fs | %d matched points | dh mean=%.3f median=%.3f std=%.3f RMS=%.3f m",
+        time.perf_counter() - t_start,
+        dh_arr.size,
+        float(np.mean(dh_arr)),
+        float(np.median(dh_arr)),
+        float(np.std(dh_arr)),
+        float(np.sqrt(np.mean(dh_arr**2))),
+    )
+    logger.info("Results in %s", month_outdir)
+    logger.info("-" * 72)
