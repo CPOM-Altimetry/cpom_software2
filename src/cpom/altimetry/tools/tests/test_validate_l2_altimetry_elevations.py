@@ -331,6 +331,24 @@ def test_get_elev_differences(mock_args):
     assert result == expected_result
 
 
+def test_get_elev_differences_nearest_only(mock_args):
+    """nearest_only matches each altimetry point to only its single nearest reference
+    point within the radius, whereas the default matches every reference within radius."""
+    dtype = [("x", "f8"), ("y", "f8"), ("h", "f8")]
+    # Two reference points, both within mock_args.radius (20m) of the altimetry point
+    laser_points = np.array([(0.0, 0.0, 100.0), (5.0, 0.0, 110.0)], dtype=dtype)
+    altimeter_points = np.array([(1.0, 0.0, 105.0)], dtype=dtype)  # nearest ref is (0, 0)
+
+    nearest = get_elev_differences(mock_args, laser_points, altimeter_points, nearest_only=True)
+    assert len(nearest["dh"]) == 1  # only the nearest reference is differenced
+    assert nearest["dh"][0] == 5.0  # 105 - 100 (the ref at (0, 0))
+    assert nearest["reference_x"][0] == 0.0
+
+    # Default (all within radius) differences against both references
+    all_within = get_elev_differences(mock_args, laser_points, altimeter_points)
+    assert len(all_within["dh"]) == 2
+
+
 # -----------------------------------#
 # Test correct_elevation_using_slope #
 # -----------------------------------#

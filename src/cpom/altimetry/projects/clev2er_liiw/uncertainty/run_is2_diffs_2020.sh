@@ -11,6 +11,8 @@
 #   * ku stores sig0 + coherence. Coherence is written only for HR/SARin records, so
 #     downstream it doubles as the HR (valid coherence) vs LR (NaN coherence) split.
 #   * ka stores sig0 only (Ka is not interferometric -> no coherence).
+#   * --nearest_only differences each CRISTAL point against only the single closest IS2
+#     point within --radius (one diff per altimetry point), as recommended for LUT inputs.
 #   * The same --altim_dir is used for every area/band: --band selects the data/<band>
 #     group and --area masks to the region/hemisphere.
 #   * The loop is fault-tolerant: a month with no overlapping data (the tool exits 1)
@@ -62,6 +64,7 @@ for AREA in $AREAS; do
         --radius "$RADIUS" --maxdiff "$MAXDIFF" \
         --band "$BAND" \
         --add_vars $ADD_VARS \
+        --nearest_only \
         --max_workers "$MAX_WORKERS" \
         || echo "WARN: $AREA $BAND $YEAR-$MM produced no output (skipped)"
     done

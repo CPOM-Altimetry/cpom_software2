@@ -190,6 +190,12 @@ def parse_args() -> argparse.Namespace:
             Differences > are not saved.",
     )
     parser.add_argument(
+        "--nearest_only",
+        action="store_true",
+        help="[optional] difference each altimetry point against only the single nearest "
+        "reference point within --radius, instead of every reference point within the radius.",
+    )
+    parser.add_argument(
         "--add_vars",
         nargs="+",
         help="[optional] additional variables in the altimetry file to include in the output."
@@ -1228,13 +1234,16 @@ if __name__ == "__main__":
     # Get elevation differences #
     t_match = time.perf_counter()
     logger.info(
-        "Matching %d altimetry to %d reference points (radius=%.1fm, maxdiff=%.1fm)...",
+        "Matching %d altimetry to %d reference points (radius=%.1fm, maxdiff=%.1fm, %s)...",
         len(altimetry_points),
         len(reference_points),
         params.radius,
         params.maxdiff,
+        "nearest-only" if params.nearest_only else "all-within-radius",
     )
-    elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
+    elev_differences = get_elev_differences(
+        params, reference_points, altimetry_points, PREFIX, nearest_only=params.nearest_only
+    )
     logger.info(
         "Found %d matched pairs in %.1fs",
         len(elev_differences["dh"]),
