@@ -15,6 +15,7 @@ from cpom.altimetry.tools.validate_l2_altimetry_elevations import (
     ProcessData,
     concat_altimetry_results,
     correct_elevation_using_slope,
+    filter_files_by_start_month,
     get_default_variables,
     get_elev_differences,
     get_files_in_dir,
@@ -213,6 +214,29 @@ def test_get_files_in_dir(test_directory):
     }
 
     assert set(map(str, files)) == expected_files
+
+
+# ----------------------------------#
+# Test filter_files_by_start_month #
+# ----------------------------------#
+def test_filter_files_by_start_month():
+    """Keeps files whose measurement START date is in the month, ignoring the
+    processing timestamp (which can false-match via get_files_in_dir's loose regex)."""
+    files = [
+        # January track, but processed at 20:03 -> '...T200312_' false-matches March
+        Path("CRA_IR_GR_HR__SIC_20200104T213307_20200104T213626_20260617T200312_0199_NT.NC"),
+        # genuine March track
+        Path("CRA_IR_GR_HR__SIC_20200315T010000_20200315T010200_20260617T200312_0199_NT.NC"),
+        # no YYYYMMDDThhmmss token -> kept regardless of month
+        Path("ATL06_20200222122926_08820613_007_01.h5"),
+    ]
+    kept = [f.name for f in filter_files_by_start_month(files, "2020", "03")]
+    assert any("20200315T010000" in n for n in kept)  # March track kept
+    assert all("20200104T213307" not in n for n in kept)  # Jan track dropped despite proc 200312
+    assert any("ATL06_20200222122926" in n for n in kept)  # untimestamped file kept
+
+    # the same January file IS kept when its real month is requested
+    assert len(filter_files_by_start_month(files[:1], "2020", "01")) == 1
 
 
 # ---------------------------#

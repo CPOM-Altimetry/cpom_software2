@@ -468,6 +468,35 @@ def get_files_in_dir(
     return []
 
 
+def filter_files_by_start_month(files: list[Path], year: str, month: str) -> list[Path]:
+    """Keep files whose measurement *start* date is in ``year``+``month``.
+
+    ``get_files_in_dir`` matches any date-like token anywhere in the path. For products
+    whose names also embed a processing timestamp (e.g. CRISTAL L2
+    ``..._<start>_<stop>_<YYYYMMDD>T<HHMMSS>_...``), that can false-match the wrong month -
+    a file processed at 20:03 matches the loose ``YYMMDD`` pattern ``2003..`` for March, etc.
+    This narrows an altimetry list to files whose first ``YYYYMMDDThhmmss`` token (the
+    measurement start) is actually in the requested month. Files with no such token are kept
+    unchanged, so products that don't use that timestamp format are unaffected.
+
+    Args:
+        files: candidate file paths.
+        year: 4-digit year string.
+        month: zero-filled 2-digit month string.
+
+    Returns:
+        list[Path]: the filtered file list.
+    """
+    start_date_re = re.compile(r"(\d{8})T\d{6}")  # first measurement YYYYMMDDThhmmss token
+    yyyymm = f"{year}{month}"
+    kept: list[Path] = []
+    for file in files:
+        match = start_date_re.search(Path(file).name)
+        if match is None or match.group(1).startswith(yyyymm):
+            kept.append(file)
+    return kept
+
+
 def collect_with_progress(results_iter, total: int, log: logging.Logger, label: str) -> list:
     """Drain a (lazy) results iterator into a list, logging progress as it goes.
 
@@ -1140,8 +1169,16 @@ if __name__ == "__main__":
             alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
             altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
             found = get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc")
-            logger.info("Found %d altimetry files in %s", len(found), altimetry_dir)
-            altimetry_files.extend(found)
+            month_files = filter_files_by_start_month(found, DATE_YEAR, DATE_MONTH)
+            logger.info("Found %d altimetry files in %s", len(month_files), altimetry_dir)
+            if len(month_files) != len(found):
+                logger.info(
+                    "  (%d candidate(s) dropped: measurement date not in %s-%s)",
+                    len(found) - len(month_files),
+                    DATE_YEAR,
+                    DATE_MONTH,
+                )
+            altimetry_files.extend(month_files)
         if not altimetry_files:
             logger.error(
                 "No altimetry (L2) files for %s-%s - skipping month (reference not loaded)",
