@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import logging
+from collections.abc import Sequence
 from multiprocessing.shared_memory import SharedMemory
 from os import environ
 from os.path import isfile
@@ -105,8 +106,8 @@ class Mask:
         self.shared_mem: Any = None
         self.shared_mem_child = False  # set to True if a child process
         self.polygons = None
-        self.polygons_lon = np.array([])
-        self.polygons_lat = np.array([])
+        self.polygons_lon: list[list[float]] = []
+        self.polygons_lat: list[list[float]] = []
         self.polygon = None
         self.polygon_lon = np.array([])
         self.polygon_lat = np.array([])
@@ -81862,7 +81863,7 @@ class Mask:
             else:
                 inmask = np.zeros(x.size, np.bool_)
 
-            n_inside = np.sum(inmask)
+            n_inside = int(np.sum(inmask))
         else:
             return inmask, 0
 
@@ -81931,7 +81932,9 @@ class Mask:
             mask_values[i] = self.mask_grid[jj, ii]
         return mask_values
 
-    def latlon_to_xy(self, lats: np.ndarray, lons: np.ndarray) -> tuple:
+    def latlon_to_xy(
+        self, lats: Sequence[float] | np.ndarray, lons: Sequence[float] | np.ndarray
+    ) -> tuple:
         """
         :param lats: latitude points in degs
         :param lons: longitude points in degrees E
