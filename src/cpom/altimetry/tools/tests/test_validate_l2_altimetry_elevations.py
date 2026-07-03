@@ -519,11 +519,15 @@ def mock_get_variable(nc, varname):  # pylint: disable=W0613
         (["lrm", "sar"], np.array([True, True, False, True])),
         (["lrm", "sin"], np.array([True, False, True, True])),
         (["sar", "sin"], np.array([False, True, True, False])),
+        # "all" applies no mode filter: every record kept (must NOT be None,
+        # which the caller treats as "drop this file")
+        (["all"], np.array([True, True, True, True])),
+        (["all", "lrm"], np.array([True, True, True, True])),
     ],
 )
 def test_get_cryotempo_filters(mock_process_data, cryotempo_modes, expected_mask):
     """Test get_cryotempo filters : Returns a masked array containing only
-    the passed cryotempo modes"""
+    the passed cryotempo modes ("all" keeps every record)"""
     mock_process_data.args.cryotempo_modes = cryotempo_modes
     dummy_nc = MagicMock()
     with patch(

@@ -582,14 +582,19 @@ class ProcessData:
         self.log = log
 
     def get_cryotempo_filters(self, nc, args):
-        """Check Cryotempo data is in a valid mode."""
-        if "all" in args.cryotempo_modes:
-            return None
+        """Return a boolean mask of the records in the requested CryoTempo modes.
+
+        "all" (or a mode set that applies no restriction) returns an all-True
+        mask, so the caller keeps every record. None is returned only when no
+        record matches the requested modes, which the caller treats as
+        "drop this file".
+        """
+        instrument_mode = get_variable(nc, "instrument_mode")
         mode_map = {"lrm": 1, "sar": 2, "sin": 3}
         valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
-        if not valid_modes:
-            return None
-        valid_mask = np.isin(get_variable(nc, "instrument_mode"), list(valid_modes))
+        if "all" in args.cryotempo_modes or not valid_modes:
+            return np.ones(len(instrument_mode), dtype=bool)
+        valid_mask = np.isin(instrument_mode, list(valid_modes))
         return valid_mask if valid_mask.any() else None
 
     def fill_empty_latlon_with_nadir(

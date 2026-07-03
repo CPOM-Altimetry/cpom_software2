@@ -18,7 +18,6 @@
 #   * The aggregation step renames backscatter -> sig0, the covariate key expected by the
 #     CLEV2ER-style LUT builders (create_luts_from_is2_diffs / create_4d_luts).
 #   * --cryotempo_modes is passed as "lrm sin" (the two modes present in the LI products).
-#     Do not use "all": the validate tool currently drops every file for that setting.
 #   * --nearest_only differences each CryoTEMPO point against only the single closest IS2
 #     point within --radius (one diff per altimetry point), as recommended for LUT inputs.
 #   * The loop is fault-tolerant: a month with no overlapping data (the tool exits 1)
