@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# Generate CPOM land ice portal plots for all cumulative dH products.
+# Generate CPOM land ice portal plots for all cumulative dH or dM products.
 #
-# For each CPOM-AIS-L3C-DH-MULTIMISSION-5KM-*-fv*.nc product in PROD_DIR, plots
-# dH and dH_uncertainty (plain + hillshade webp) using plot_cumulative_dh.py,
-# running up to MAX_JOBS plot jobs in parallel. basin_id and surface_type are
-# identical in every product so are plotted once only, from the most recent
-# product.
+# For each CPOM-AIS-L3C-DH(DM)-MULTIMISSION-5KM-*-fv*.nc product in PROD_DIR,
+# plots dH and dH_uncertainty (or dm and dm_uncertainty) as plain + hillshade
+# webp using plot_cumulative_dh_dm.py, running up to MAX_JOBS plot jobs in
+# parallel. basin_id and surface_type are identical in every product so are
+# plotted once only, from the most recent product.
 #
 # Products whose plot outputs already exist and are newer than the product are
 # skipped, so the script can be re-run cheaply as new products arrive.
 # Set FORCE=1 to regenerate everything.
 #
 # Usage (with the cpom_software2 environment active):
-#   ./gen_all_cumulative_dh_plots.sh
+#   ./gen_all_cumulative_dh_dm_plots.sh [dh|dm]     (default dh)
 #
 # Environment overrides:
 #   PROD_DIR  input product directory
@@ -23,12 +23,29 @@
 
 set -euo pipefail
 
-PROD_DIR=${PROD_DIR:-/cpnet/altimetry/landice/cpom/product_files/multi_mission_dh}
-VIZ_DIR=${VIZ_DIR:-/cpnet/altimetry/landice/cpom/product_viz/multi_mission_dh}
+PRODUCT=${1:-dh}
+case "$PRODUCT" in
+  dh | DH)
+    PREFIX=DH
+    PARAMS=(dH dH_uncertainty)
+    PROD_DIR=${PROD_DIR:-/cpnet/altimetry/landice/cpom/product_files/multi_mission_dh}
+    VIZ_DIR=${VIZ_DIR:-/cpnet/altimetry/landice/cpom/product_viz/multi_mission_dh}
+    ;;
+  dm | DM)
+    PREFIX=DM
+    PARAMS=(dm dm_uncertainty)
+    PROD_DIR=${PROD_DIR:-/cpnet/altimetry/landice/cpom/product_files/mass_change}
+    VIZ_DIR=${VIZ_DIR:-/cpnet/altimetry/landice/cpom/product_viz/multi_mission_dm}
+    ;;
+  *)
+    echo "Usage: $(basename "$0") [dh|dm]" >&2
+    exit 1
+    ;;
+esac
 MAX_JOBS=${MAX_JOBS:-4}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLOT_TOOL="$SCRIPT_DIR/plot_cumulative_dh.py"
+PLOT_TOOL="$SCRIPT_DIR/plot_cumulative_dh_dm.py"
 
 if ! python -c "import cpom" 2>/dev/null; then
   echo "cpom package not importable: activate the cpom_software2 environment first" >&2
@@ -39,13 +56,13 @@ LOG_DIR="$VIZ_DIR/logs"
 mkdir -p "$VIZ_DIR" "$LOG_DIR"
 
 shopt -s nullglob
-files=("$PROD_DIR"/CPOM-AIS-L3C-DH-MULTIMISSION-5KM-*-fv*.nc)
+files=("$PROD_DIR"/CPOM-AIS-L3C-"$PREFIX"-MULTIMISSION-5KM-*-fv*.nc)
 shopt -u nullglob
 if [ ${#files[@]} -eq 0 ]; then
-  echo "No CPOM-AIS-L3C-DH-MULTIMISSION-5KM-*-fv*.nc files found in $PROD_DIR" >&2
+  echo "No CPOM-AIS-L3C-$PREFIX-MULTIMISSION-5KM-*-fv*.nc files found in $PROD_DIR" >&2
   exit 1
 fi
-echo "==> found ${#files[@]} products in $PROD_DIR"
+echo "==> found ${#files[@]} $PREFIX products in $PROD_DIR"
 
 # true if both plot outputs (plain and hillshade) for product $1 / parameter $2
 # exist and are newer than the product
@@ -85,8 +102,9 @@ run_plot() {
 }
 
 for f in "${files[@]}"; do
-  run_plot "$f" dH
-  run_plot "$f" dH_uncertainty
+  for param in "${PARAMS[@]}"; do
+    run_plot "$f" "$param"
+  done
 done
 
 # basin_id and surface_type do not change between products: plot from the most
@@ -109,8 +127,9 @@ check_outputs() {
   fi
 }
 for f in "${files[@]}"; do
-  check_outputs "$f" dH
-  check_outputs "$f" dH_uncertainty
+  for param in "${PARAMS[@]}"; do
+    check_outputs "$f" "$param"
+  done
 done
 check_outputs "$latest" basin_id
 check_outputs "$latest" surface_type

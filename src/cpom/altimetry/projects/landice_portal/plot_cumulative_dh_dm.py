@@ -1,9 +1,9 @@
 """
-cpom.altimetry.projects.landice_portal.plot_cumulative_dh.py
+cpom.altimetry.projects.landice_portal.plot_cumulative_dh_dm.py
 
 # Purpose
 
-Plot parameters from CPOM Antarctic cumulative dH products
+Plot parameters from CPOM Antarctic cumulative dH and dM products
 
 Product naming example:
 CPOM-AIS-L3C-DH-MULTIMISSION-5KM-19950321-20050308-fv1.nc
@@ -154,6 +154,16 @@ variables:
                 :product_created = "2026-06-10T14:37:46Z" ;
                 :netCDF_version = "NETCDF4" ;
 }
+
+# DM (cumulative mass change) products
+
+CPOM Antarctic cumulative dM products in the same format can also be plotted.
+Product naming example:
+CPOM-AIS-L3C-DM-MULTIMISSION-5KM-19950321-19950808-fv1.nc
+
+Key variables are dm(time_period, ny, nx) and dm_uncertainty(time_period, ny, nx),
+in units of kg (converted to Gt for plotting). They are on the same grid, and have
+the same basin_id and surface_type masks, as the DH products.
 """
 
 import argparse
@@ -200,7 +210,10 @@ def main():
     parser.add_argument(
         "--parameter",
         "-p",
-        help=("parameter to plot: dH, dH_uncertainty, basin_id, surface_type"),
+        help=(
+            "parameter to plot: dH, dH_uncertainty (DH products), "
+            "dm, dm_uncertainty (DM products), basin_id, surface_type"
+        ),
         default="dH",
     )
 
@@ -211,15 +224,20 @@ def main():
 
     args = parser.parse_args()
 
-    # Find CPOM cumulative dH netcdf files: example:
+    # the DM product variables are lower case: allow dM/dM_uncertainty as aliases
+    if args.parameter in ("dM", "dM_uncertainty"):
+        args.parameter = args.parameter.lower()
+
+    # Find CPOM cumulative dH or dM netcdf files: examples:
     # CPOM-AIS-L3C-DH-MULTIMISSION-5KM-<YYYYMMDD>-<YYYYMMDD>-fv1.nc
+    # CPOM-AIS-L3C-DM-MULTIMISSION-5KM-<YYYYMMDD>-<YYYYMMDD>-fv1.nc
 
     if args.prod_dir:
         input_files = sorted(
-            glob.glob(f"{args.prod_dir}/CPOM-AIS-L3C-DH-MULTIMISSION-5KM-*-fv*.nc")
+            glob.glob(f"{args.prod_dir}/CPOM-AIS-L3C-D?-MULTIMISSION-5KM-*-fv*.nc")
         )
         if not input_files:
-            sys.exit(f"No CPOM-AIS-L3C-DH-MULTIMISSION-5KM-*-fv*.nc files found in {args.prod_dir}")
+            sys.exit(f"No CPOM-AIS-L3C-D?-MULTIMISSION-5KM-*-fv*.nc files found in {args.prod_dir}")
     elif args.prod_filename:
         input_files = [args.prod_filename]
     else:
@@ -243,12 +261,18 @@ def main():
             param_long_name = "Cumulative Height Change (dH)"
         elif args.parameter == "dH_uncertainty":
             param_long_name = "Uncertainty of Cumulative dH"
+        elif args.parameter == "dm":
+            param_long_name = "Cumulative Mass Change (dM)"
+        elif args.parameter == "dm_uncertainty":
+            param_long_name = "Uncertainty of Cumulative dM"
         elif args.parameter == "basin_id":
             param_long_name = "Glaciological Basin ID (Rignot 2016)"
         elif args.parameter == "surface_type":
             param_long_name = "Ice Surface Type"
         else:
             param_long_name = args.parameter
+
+        period_label = "dM period:" if "-DM-" in prod_name else "dH period:"
 
         # Extract dates YYYYMMDD-YYYYMMDD from the product name
         date_match = re.search(r"(\d{8})-(\d{8})", prod_name)
@@ -260,8 +284,8 @@ def main():
         dh_end_year = date_match.group(2)[0:4]
         dh_end_month = date_match.group(2)[4:6]
         dh_end_day = date_match.group(2)[6:8]
-        print(f"dh period start: {dh_start_year}-{dh_start_month}-{dh_start_day}")
-        print(f"dh period end: {dh_end_year}-{dh_end_month}-{dh_end_day}")
+        print(f"product period start: {dh_start_year}-{dh_start_month}-{dh_start_day}")
+        print(f"product period end: {dh_end_year}-{dh_end_month}-{dh_end_day}")
 
         with Dataset(input_file) as nc:
             lats = np.ma.filled(nc.variables["lat"][:], np.nan)
@@ -278,6 +302,10 @@ def main():
                 units = nc[args.parameter].units
             except (KeyError, AttributeError):
                 units = ""
+
+            if args.parameter in ("dm", "dm_uncertainty"):
+                plot_var /= 1.0e12  # convert kg to Gt
+                units = "Gt"
 
             # Print numpy array dimensions: shape and number of dimensions
             print(f"lats.shape = {lats.shape}, lats.ndim = {lats.ndim}")
@@ -302,12 +330,18 @@ def main():
                 "cmap_extend": "both",  # Optional: Extend colormap
             }
 
+            if args.parameter == "dm":
+                dataset["min_plot_range"] = -1.0
+                dataset["max_plot_range"] = 1.0
+
             if "uncertainty" in args.parameter:
                 dataset["cmap_name"] = "RdBu_r"
                 dataset["cmap_over_color"] = "#9E0005"
                 dataset["cmap_under_color"] = "#150685"
                 dataset["min_plot_range"] = 0.0
                 dataset["max_plot_range"] = 2.0
+                if args.parameter == "dm_uncertainty":
+                    dataset["max_plot_range"] = 0.1
 
             if args.parameter == "surface_type":
                 dataset = {
@@ -415,7 +449,7 @@ def main():
                 Annotation(
                     xpos,
                     ypos + 0.01,
-                    "dH period:",
+                    period_label,
                     None,
                     10,
                 )
@@ -535,7 +569,7 @@ def main():
                 use_default_annotation=False,
                 annotation_list=annotation_list,
                 image_format="webp",
-                use_cmap_in_hist=(args.parameter != "dH"),
+                use_cmap_in_hist=(args.parameter not in ("dH", "dm")),
                 dpi=75,
                 webp_settings=(95, 6),
             )
@@ -553,7 +587,7 @@ def main():
                 use_default_annotation=False,
                 annotation_list=annotation_list,
                 image_format="webp",
-                use_cmap_in_hist=(args.parameter != "dH"),
+                use_cmap_in_hist=(args.parameter not in ("dH", "dm")),
                 dpi=75,
                 webp_settings=(95, 6),
             )
