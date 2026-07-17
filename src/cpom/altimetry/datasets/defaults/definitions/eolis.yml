@@ -1,0 +1,13 @@
+mission : cs2
+long_name : "CryoTEMPO EOLIS SWATH POINT"
+file_backend: "netcdf4"
+dataset_epoch : "2000-01-01T00:00:00"
+search_pattern : "**/CS_OFFL_THEM_POINT_GREENLAND*.nc"
+yyyymm_str_fname_indices: [-35, -28]
+params: 
+  x: "x"
+  y: "y"
+  elevation: "elevation"
+  elevation_err: "uncertainty"
+  time: "time"
+default_qual_correction: cpom.altimetry.datasets.defaults.quality_correction_helper.get_cryotempo_eolis_qual_mask

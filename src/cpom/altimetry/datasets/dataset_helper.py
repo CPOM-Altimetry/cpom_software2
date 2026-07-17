@@ -12,7 +12,7 @@ Supports two configuration methods:
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
@@ -30,32 +30,27 @@ thislog = logging.getLogger(__name__)
 class DatasetConfig:
     """Configuration parameters for altimetry datasets (YAML or constructor kwargs)."""
 
-    data_dir: str  # Always required
-    mission: Optional[str] = None  # e.g., 'is2', 's3', 'cs2'
-    long_name: Optional[str] = None  # Name to describe the dataset
-    # Pattern to match files (e.g., "**/CS_OFFL_SIR_TDP_LI*.nc" for cryotempo data)
-    search_pattern: Optional[str] = None
-    file_backend: Optional[str] = None  # "netcdf4" or "h5py"
-    yyyymm_str_fname_indices: Optional[List[int]] = (
-        None  # [start, end] indices for date in filename
-    )
-    dataset_epoch: Optional[str] = None  # The epoch the time variable is relative to
-    latitude_param: Optional[str] = None  # latitude variable name (and groups if needed)
-    longitude_param: Optional[str] = None  # longitude variable name (and groups if needed)
-    elevation_param: Optional[str] = None  # elevation variable name (and groups if needed)
-    time_param: Optional[str] = None  # time variable name (and groups if needed)
-    # Options for particular datasets
-    power_param: Optional[str] = None  # power variable name (and groups if needed)
-    mode_param: Optional[str] = None  # mode variable name (and groups if needed)
-    quality_param: Optional[str] = None  # quality variable name (and groups if needed)
-    uncertainty_param: Optional[str] = None  # uncertainty variable name (and groups if needed)
-    latitude_nadir_param: Optional[str] = (
-        None  # nadir latitude variable name (and groups if needed)
-    )
-    longitude_nadir_param: Optional[str] = None  # nadir longitude variable
-    beams: Optional[List[str]] = field(default_factory=list)
+    data_dir: str
+    mission: str  # e.g., 'is2', 's3', 'cs2'
+    long_name: str
+    search_pattern: str  # e.g., 'ATL06_*.nc' or '*.h5'
+    file_backend: Optional[str] = "netcdf4"  # "netcdf4" or "h5py"
+    yyyymm_str_fname_indices: Optional[List[int]] = None
+    dataset_epoch: str = "1970-01-01T00:00:00"
+    params: dict[str, str] = field(default_factory=dict)
+    beams: List[str] = field(default_factory=list)
     default_elev_correction: Optional[str] = None  # default elevation correction function
     default_qual_correction: Optional[str] = None  # default quality mask function
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "DatasetConfig":
+        """Build config from a dictionary, dropping unknown keys."""
+        allowed = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in payload.items() if k in allowed})
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return config as a dictionary."""
+        return asdict(self)
 
 
 class DatasetHelper(DatasetConfig):
@@ -63,15 +58,11 @@ class DatasetHelper(DatasetConfig):
     Helper class to load file paths and variables from altimetry datasets
     in NetCDF or HDF5 format.
 
-    Supports two configuration methods:
-    1. YAML configuration file
-    2. Direct keyword arguments to the constructor
-
     ---
     Parameters:
     - base_dir (str): Base directory for the dataset.
     - dataset_yaml (str | None): Optional path to a YAML configuration file.
-    - **config_params: Additional configuration parameters (or alternative to YAML file).
+    - additional_params (dict[str, str] | None): Additional variable parameters.
 
     Example YAML configuration: datasets/definitions/cryotempo.yml
     """
@@ -80,20 +71,36 @@ class DatasetHelper(DatasetConfig):
         self,
         data_dir: str,
         dataset_yaml: Optional[str] = None,
-        **config_params: Any,
+        additional_params: Optional[dict[str, str]] = None,
     ):
         config_dict: dict[str, Any] = {"data_dir": data_dir}
-        if dataset_yaml:
-            loaded = self._load_dataset_config(dataset_yaml)
-            config_dict.update(loaded)
-        config_dict.update(config_params)
+        config_dict.update(self._load_dataset_config(dataset_yaml))
+        if additional_params:
+            extra_params: dict[str, str] = {}
+            extra_params.update(additional_params)
+
+            if extra_params:
+                existing = dict(config_dict.get("params") or {})
+                existing.update(extra_params)
+                config_dict["params"] = existing
+
         super().__init__(**config_dict)  # type: ignore[arg-type]
 
-    def _load_dataset_config(self, dataset_yaml: str | Path) -> dict[str, Any]:
+    def get_param_path(self, name: str) -> str | None:
+        """Get a parameter path from canonical ``params``."""
+        if name in self.params:
+            return self.params[name]
+        return None
+
+    def get_prefixed_param_paths(self, prefix: str) -> dict[str, str]:
+        """Return all canonical params that share a prefix."""
+        return {k: v for k, v in self.params.items() if k.startswith(prefix)}
+
+    def _load_dataset_config(self, dataset_yaml: str | Path | None) -> dict[str, Any]:
         """Load dataset configuration from YAML file.
 
         Args:
-            dataset_yaml (str | Path): Path to YAML configuration file.
+            dataset_yaml (str | Path | None): Path to YAML configuration file.
 
         Returns:
             dict[str, Any]: Configuration parameters.
@@ -101,12 +108,13 @@ class DatasetHelper(DatasetConfig):
         Raises:
             FileNotFoundError: If YAML file not found.
         """
+        yaml_file: Path | None
         if isinstance(dataset_yaml, str):
             yaml_file = Path(dataset_yaml)
         else:
             yaml_file = dataset_yaml
 
-        if yaml_file.is_file():
+        if yaml_file is not None and yaml_file.is_file():
             with open(yaml_file, "r", encoding="utf-8") as f:
                 result: dict[str, Any] = yaml.safe_load(f)
                 return result
@@ -185,18 +193,20 @@ class DatasetHelper(DatasetConfig):
             fname = filename.name
 
         if self.yyyymm_str_fname_indices is not None:
-            date_obj = datetime.strptime(
-                fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]], "%Y%m%d"
-            )
-            return date_obj
-
-        date_formats = ["%Y.%m.%d", "%Y/%m/%d", "%Y%m%d"]
-        for part in reversed(filename.parts):
-            for fmt in date_formats:
+            token = fname[self.yyyymm_str_fname_indices[0] : self.yyyymm_str_fname_indices[1]]
+            for fmt in ("%Y%m%d", "%Y_%m_%d", "%Y-%m-%d", "%Y%m", "%Y_%m", "%Y-%m"):
                 try:
-                    return datetime.strptime(part, fmt)
+                    return datetime.strptime(token, fmt)
                 except ValueError:
                     continue
+
+        for parent in filename.parents:
+            for fmt in ("%Y.%m.%d", "%Y-%m-%d", "%Y_%m_%d", "%Y%m%d"):
+                try:
+                    return datetime.strptime(parent.name, fmt)
+                except ValueError:
+                    continue
+
         return None
 
     def get_files_and_dates(
@@ -252,11 +262,11 @@ class DatasetHelper(DatasetConfig):
                         return candidate
             return l2_dir
 
-        def _get_file_by_hemisphere(self, hemisphere, file_and_dates):
+        def _get_file_by_hemisphere(file_and_dates: np.ndarray) -> np.ndarray:
 
             # Handle IS2 files
             if "ATL06" in self.search_pattern:
-                if hemisphere.upper() == "NORTH":
+                if str(hemisphere).upper() == "NORTH":
                     region_codes = [3, 4, 5]
                 else:
                     region_codes = [10, 11, 12]
@@ -314,17 +324,17 @@ class DatasetHelper(DatasetConfig):
             dtype.append(("cycle", object))
 
         if hemisphere:
-            return _get_file_by_hemisphere(self, hemisphere, np.array(valid_files, dtype=dtype))
+            return _get_file_by_hemisphere(np.array(valid_files, dtype=dtype))
 
         return np.array(valid_files, dtype=dtype)
 
     def get_unified_time_epoch_offset(
-        self, goal_epoch_str: str = "1991-01-01", this_epoch_str: str | None = None
+        self, goal_epoch_str: str = "1970-01-01", this_epoch_str: str | None = None
     ) -> float:
         """Calculate offset in seconds between dataset epoch and target epoch.
 
         Args:
-            goal_epoch_str (str): Target epoch (default: '1991-01-01').
+            goal_epoch_str (str): Target epoch (default: '1970-01-01').
             this_epoch_str (str | None): Dataset epoch; uses config if None.
 
         Returns:
@@ -333,6 +343,7 @@ class DatasetHelper(DatasetConfig):
         if this_epoch_str is None:
             this_epoch_str = self.dataset_epoch
         assert this_epoch_str is not None
+
         this_epoch = datetime.fromisoformat(this_epoch_str)  # + timedelta(days=1)
         goal_epoch = datetime.fromisoformat(goal_epoch_str)
         # Calculate offset between epochs in seconds
@@ -362,17 +373,21 @@ class DatasetHelper(DatasetConfig):
             pass
 
         if latitude is None:
-            if self.latitude_param is not None and nc is not None:
-                assert self.latitude_nadir_param is not None
+            latitude_param = self.get_param_path("latitude")
+            latitude_nadir_param = self.get_param_path("latitude_nadir")
+            if latitude_param is not None and nc is not None:
+                assert latitude_nadir_param is not None
                 latitude = self.get_variable(
                     nc,
-                    self.latitude_nadir_param,
+                    latitude_nadir_param,
                 )  # type: ignore[assignment]
             else:
                 raise ValueError("No latitude data provided or available.")
 
         assert latitude is not None
         asc_directions = np.zeros_like(latitude, dtype=bool)
+        if latitude.size < 2:
+            return asc_directions
         asc_directions[0] = latitude[1] > latitude[0]
         asc_directions[1:-1] = latitude[2:] > latitude[1:-1]
         asc_directions[-1] = latitude[-1] > latitude[-2]
@@ -401,8 +416,9 @@ class DatasetHelper(DatasetConfig):
         descending_start = nc.descending_start_record
 
         if latitude is None:
-            assert self.latitude_param is not None
-            latitude = self.get_variable(nc, self.latitude_param, False)  # type: ignore[assignment]
+            latitude_param = self.get_param_path("latitude")
+            assert latitude_param is not None
+            latitude = self.get_variable(nc, latitude_param, False)  # type: ignore[assignment]
 
         assert latitude is not None
         if ascending_start == "None":
@@ -427,6 +443,7 @@ class DatasetHelper(DatasetConfig):
         self,
         nc: Dataset,
         nc_var_path: str,
+        idx: np.ndarray | None = None,
         return_beams: bool = False,
         replace_fill: bool = True,
         raise_if_missing: bool = False,
@@ -447,70 +464,70 @@ class DatasetHelper(DatasetConfig):
             np.ndarray: Variable data, or concatenated beam data, or beam identifiers.
         """
 
-        def _get_var(dataset, path):
+        def _get_var_obj(dataset, path):
             try:
                 var = dataset
                 for part in path.split("/"):
                     var = var[part]
-                    if var is None:
-                        if raise_if_missing:
-                            raise KeyError(f"missing variable not found in NetCDF: {path}")
-                        return np.array([])  # Variable not found
-                return var[:]
+                return var
             except (KeyError, RuntimeError) as e:
                 if raise_if_missing:
                     raise KeyError(f"missing variable not found in NetCDF: {path}, {e}") from e
-                return np.array([])  # Variable not found
+                return None  # Variable not found
 
-        def _get_var_obj(dataset, path):
-            var = dataset
-            for part in path.split("/"):
-                var = var[part]
-            return var
+        def _apply_fill(var_obj, var_data):
+            fill_value = getattr(var_obj, "_FillValue", None)
+            if fill_value is None:
+                return var_data
+            scale_factor = getattr(var_obj, "scale_factor", 0.0)
+            add_offset = getattr(var_obj, "add_offset", 0.0)
+            if scale_factor == 0.0:
+                return var_data
+            scaled_fill = fill_value * scale_factor + add_offset
+            return np.where(
+                np.isclose(var_data, scaled_fill, atol=1e-6)
+                | np.isclose(var_data, -scaled_fill, atol=1e-6),
+                np.nan,
+                var_data,
+            )
+
+        def _fetch(nc, nc_var_path, idx, replace_fill):
+            var_obj = _get_var_obj(nc, nc_var_path)
+            if var_obj is None:
+                return np.array([])  # Variable not found, return empty array
+            var_data = var_obj[:][idx] if idx is not None else var_obj[:]
+            return _apply_fill(var_obj, var_data) if replace_fill else var_data
 
         if self.beams:
             data_list: list[np.ndarray] = []
             missing_beams: list[str] = []
             for beam in self.beams:
-                try:
-                    var_data = _get_var(nc, f"{beam}/{nc_var_path}")
-                except (IndexError, KeyError):
+                nc_path = f"{beam}/{nc_var_path}"
+                data = _fetch(nc, nc_path, idx, replace_fill)
+
+                if data.size == 0:
                     missing_beams.append(beam)
                     continue
-                if var_data.size > 0:
-                    if return_beams:
-                        data_list.append(np.full(var_data.shape[0], beam))
-                    else:
-                        data_list.append(var_data)
+
+                if return_beams:
+                    beam_arr = np.full(data.shape[0], beam)
+                    data_list.append(beam_arr)
+                else:
+                    data_list.append(data)
 
             if raise_if_missing and not data_list:
-                raise KeyError(
-                    f"missing variable: {nc_var_path} for all beams {self.beams}; "
+                msg = (
+                    f"missing variable: {nc_var_path} "
+                    f"for all beams {self.beams}; "
                     f"missing_beams={missing_beams}"
                 )
-
-            data_array = np.concatenate(data_list, axis=0) if data_list else np.array([])
-            return data_array
+                raise KeyError(msg)
+            return np.concatenate(data_list, axis=0) if data_list else np.array([])
 
         # No beams, just return the variable directly
-        var_data = _get_var(nc, nc_var_path)
+        data = _fetch(nc, nc_var_path, idx, replace_fill)
 
-        if raise_if_missing and var_data.size == 0:
+        if raise_if_missing and data.size == 0:
             raise KeyError(f"missing variable: {nc_var_path}")
 
-        if replace_fill and var_data.size > 0:
-            var = _get_var_obj(nc, nc_var_path)
-            scale_factor = getattr(var, "scale_factor", 0.0)
-            add_offset = getattr(var, "add_offset", 0.0)
-            fill_value = getattr(var, "_FillValue", None)
-
-            if fill_value is not None:
-                scaled_fill = fill_value * scale_factor + add_offset
-                var_data = np.where(
-                    np.isclose(var_data, scaled_fill, atol=1e-6)
-                    | np.isclose(var_data, -scaled_fill, atol=1e-6),
-                    np.nan,
-                    var_data,
-                )
-
-        return var_data
+        return data
