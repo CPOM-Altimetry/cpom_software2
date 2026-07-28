@@ -195,7 +195,12 @@ def parse_arguments(args):
         action="store_true",
         help="Enable DEBUG level logging",
     )
-
+    parser.add_argument(
+        "--standard_epoch",
+        type=str,
+        default="1991-01-01T00:00:00",
+        help="Reference epoch for time calculations (ISO format string)",
+    )
     # Add shared basin/region selection arguments for consistency across tools
     add_basin_selection_arguments(parser)
     return parser.parse_args(args)
