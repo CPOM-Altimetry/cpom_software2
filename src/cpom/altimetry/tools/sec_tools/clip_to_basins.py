@@ -8,6 +8,9 @@ This module supports two clipping routes:
 1. Grid-mask clipping via CPOM Mask classes (--mask)
 2. Polygon clipping via shapefile boundaries (--shapefile or mask-provided shapefile)
 
+When --mask is used and the mask provides a shapefile, --clip_method selects which route
+to take ('grid_mask', 'precise', or 'auto' to prefer the shapefile when available).
+
 For each selected region, the tool:
 - Loads input parquet data
 - Resolves grid-cell centre x/y coordinates from x_bin/y_bin
@@ -25,10 +28,12 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 import geopandas as gpd
 import polars as pl
 
+from cpom.altimetry.datasets.parquet_tools.spatio_temporal import ParquetFilter
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
 )
@@ -80,6 +85,19 @@ def parse_arguments(args: list[str]) -> argparse.Namespace:
         "--shp_file_column",
         type=str,
         help="Shapefile column containing basin/region identifiers.",
+    )
+    parser.add_argument(
+        "--clip_method",
+        type=str,
+        choices=["auto", "grid_mask", "precise"],
+        default="auto",
+        help=(
+            "Clipping route to use with --mask: 'grid_mask' clips using the mask's grid "
+            "values (fast), 'precise' clips using the mask's shapefile boundary (exact but "
+            "slower, errors if the mask provides no shapefile). 'auto' (default) uses the "
+            "shapefile when the mask provides one, else falls back to grid_mask. Ignored "
+            "when --shapefile is given directly (always precise)."
+        ),
     )
     parser.add_argument(
         "--debug",
@@ -134,21 +152,20 @@ def get_basin_values_and_numbers(
             basin_numbers=params.region_selector if params.region_selector != ["all"] else None,
         )
 
-        if mask.basin_numbers:
-            if isinstance(mask.basin_numbers[0], str):
-                names = [str(name) for name in mask.basin_numbers]
-                numbers = [
-                    int(number)
-                    for number in mask.get_grid_value_from_grid_value_names(mask.basin_numbers)
-                ]
-            else:
-                numbers = [int(number) for number in mask.basin_numbers]
-                names = [str(name) for name in mask.get_grid_value_names_from_grid_value(numbers)]
+        numbers = mask.resolve_basin_numbers()
+        if numbers:
+            names = [str(name) for name in mask.get_grid_value_names_from_grid_value(numbers)]
         else:
             names = [str(name) for name in mask.grid_value_names]
             numbers = [int(number) for number in mask.mask_grid_possible_values]
 
-        if hasattr(mask, "shapefile_path"):
+        mask_has_shapefile = hasattr(mask, "shapefile_path")
+        if params.clip_method == "precise" and not mask_has_shapefile:
+            raise ValueError(
+                f"--clip_method=precise requested but mask '{params.mask}' provides no shapefile"
+            )
+
+        if mask_has_shapefile and params.clip_method != "grid_mask":
             logger.info(
                 "Clipping using mask: %s with shapefile: %s", params.mask, mask.shapefile_path
             )
@@ -179,8 +196,7 @@ def get_data(
     infile: str | Path,
     grid_area: GridArea,
     logger: logging.Logger,
-    shapefile: gpd.GeoDataFrame | None = None,
-) -> tuple[pl.LazyFrame, gpd.GeoDataFrame | None]:
+) -> tuple[pl.LazyFrame, pl.DataFrame]:
     """
     Load data and add projected x/y coordinates for each grid-cell centre.
 
@@ -193,9 +209,9 @@ def get_data(
         logger (logging.Logger): Logger Object.
 
     Returns:
-        tuple[pl.LazyFrame, gpd.GeoDataFrame | None]:
+        tuple[pl.LazyFrame, pl.DataFrame]:
             - Input data with 'x' and 'y' columns joined to each row
-            - GeoDataFrame of unique bin centres (only when shapefile clipping is enabled)
+            - DataFrame of unique bin centres (x_bin, y_bin, x, y)
     """
 
     logger.info("Loading data from: %s", Path(infile))
@@ -215,17 +231,10 @@ def get_data(
             pl.Series("y", y),
         ]
     )
-    bin_centres_gdf = None
-    if shapefile is not None:
-        bin_centres_gdf = gpd.GeoDataFrame(
-            unique_cells.to_pandas(),
-            geometry=gpd.points_from_xy(unique_cells["x"], unique_cells["y"]),
-            crs=grid_area.crs_bng,
-        )
 
     # Join coordinates to data
     epoch_data = epoch_data.join(unique_cells.lazy(), on=["x_bin", "y_bin"], how="left")
-    return epoch_data, bin_centres_gdf
+    return epoch_data, unique_cells
 
 
 def process_single_basin(
@@ -233,7 +242,8 @@ def process_single_basin(
     data: pl.LazyFrame,
     mask: Mask | None,
     shapefile: gpd.GeoDataFrame | None,
-    unique_cells: gpd.GeoDataFrame | None,
+    unique_cells: pl.DataFrame | None,
+    data_crs: int | None,
     basin_name: str,
     basin_number: int,
 ) -> pl.LazyFrame:
@@ -245,7 +255,9 @@ def process_single_basin(
         data (pl.LazyFrame): Input data with 'x' and 'y' columns for masking.
         mask (Mask | None): CPOM Mask object for grid-based clipping.
         shapefile (gpd.GeoDataFrame | None): Region polygons for shp clipping.
-        unique_cells (gpd.GeoDataFrame | None): Unique grid-cell centres for shp clipping.
+        unique_cells (pl.DataFrame | None): Unique grid-cell centres (x_bin, y_bin, x, y)
+            for shp clipping.
+        data_crs (int | None): EPSG code of the 'x'/'y' columns, for shp clipping.
         basin_name (str): Basin/region label.
         basin_number (int): Numeric basin identifier.
 
@@ -255,25 +267,30 @@ def process_single_basin(
     if shapefile is not None:
         if unique_cells is None:
             raise ValueError("unique_cells is required when clipping by shapefile")
-        # Find bins with centres inside basin.
-        bins_in_basins = gpd.sjoin(
-            unique_cells,
-            shapefile[shapefile[params.shp_file_column] == basin_name],
-            how="inner",
-            predicate="within",
-        )[["x_bin", "y_bin"]].drop_duplicates()
 
-        basin_data = data.join(
-            pl.from_pandas(bins_in_basins).lazy(),
-            on=["x_bin", "y_bin"],
-            how="inner",
+        # Find bins with centres inside basin.
+        bins_in_basin = (
+            ParquetFilter(
+                unique_cells, lon_col="x", lat_col="y", data_crs=data_crs, engine="duckdb"
+            )
+            .get_polygon(
+                shapefile[shapefile[params.shp_file_column] == basin_name],
+                precise=True,
+            )
+            .select(["x_bin", "y_bin"])
+            .run()
         )
+        bins_in_basin = cast(pl.DataFrame, bins_in_basin)
+
+        basin_data = data.join(bins_in_basin.lazy(), on=["x_bin", "y_bin"], how="inner")
 
     else:
         if mask is None:
             raise ValueError("mask is required when clipping by grid mask")
-        basin_data = mask.points_inside_polars(
-            data, basin_numbers=[basin_number], return_pl_dataframe=False
+        basin_data = (
+            ParquetFilter(data, engine="polars")
+            .get_cpom_grid_mask(mask, basin_numbers=[basin_number])
+            .run()
         )
 
     return basin_data
@@ -373,11 +390,13 @@ def clip_to_basins(args: list[str]) -> None:
 
     selector_name_num, this_mask, shapefile = get_basin_values_and_numbers(params, logger)
 
+    grid_area = GridArea(str(grid_params["gridarea"]), int(grid_params["binsize"]))
+    data_crs = grid_area.crs_bng.to_epsg()
+
     input_data, unique_cells = get_data(
         Path(params.in_dir) / params.parquet_glob,
-        GridArea(str(grid_params["gridarea"]), int(grid_params["binsize"])),
+        grid_area,
         logger,
-        shapefile,
     )
 
     for basin_name, basin_number in selector_name_num:
@@ -398,6 +417,7 @@ def clip_to_basins(args: list[str]) -> None:
                 this_mask,
                 shapefile,
                 unique_cells,
+                data_crs,
                 basin_name,
                 basin_number,
             ),

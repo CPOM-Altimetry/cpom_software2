@@ -172,7 +172,9 @@ def resolve_input_parquet_path(
     """Resolve input parquet pattern and return (resolved_path, effective_parquet_glob)."""
 
     requested_path = in_path / parquet_glob
-    if _has_glob_magic(parquet_glob):
+
+    # A pattern that already scans recursively has opted in explicitly; trust it as-is.
+    if "**" in parquet_glob:
         return str(requested_path), parquet_glob
 
     is_partitioned = False
@@ -200,7 +202,7 @@ def resolve_input_parquet_path(
         )
         return str(resolved_path), effective_glob
 
-    if not requested_path.exists():
+    if not _has_glob_magic(parquet_glob) and not requested_path.exists():
         logger.warning(
             "Input path '%s' does not exist. If epoch_average was partitioned, "
             "set --parquet_glob to '**/%s'.",
