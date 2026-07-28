@@ -22,6 +22,7 @@ from functools import partial
 from pathlib import Path
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
+from cpom.altimetry.datasets.parquet_tools.correction_pipeline import CorrectionPipeline
 from cpom.altimetry.tools.sec_tools.grid_for_elev_change import (
     get_data_and_status_multiprocessed,
     process_file,
@@ -101,20 +102,14 @@ def get_set_up_objects(params):
         setattr(params, key, value)
 
     # Construct dataset object
-    dataset = DatasetHelper(
-        data_dir=grid_meta["data_input_dir"],
-        mission=grid_meta["mission"],
-        long_name=grid_meta["long_name"],
-        dataset_epoch=grid_meta["dataset_epoch"],
-        search_pattern=grid_meta["search_pattern"],
-        yyyymm_str_fname_indices=grid_meta["yyyymm_str_fname_indices"],
-        latitude_param=grid_meta["latitude_param"],
-        longitude_param=grid_meta["longitude_param"],
-        elevation_param=grid_meta["elevation_param"],
-        time_param=grid_meta["time_param"],
-        power_param=grid_meta["power_param"],
-        mode_param=grid_meta["mode_param"],
-    )
+    dataset_path = Path(grid_meta["dataset"])
+    if dataset_path.exists() and dataset_path.suffix in [".yml", ".yaml"]:
+        dataset = DatasetHelper(
+            data_dir=grid_meta["data_input_dir"], dataset_yaml=grid_meta["dataset"]
+        )
+    else:
+        dataset_config = json.loads(grid_meta["dataset"])
+        dataset = DatasetHelper(data_dir=grid_meta["data_input_dir"], **dataset_config)
 
     thisgrid = GridArea(grid_meta["gridarea"], grid_meta["binsize"])
     thisarea = Area(grid_meta["area"])
@@ -249,9 +244,22 @@ def grid_for_elev_change_update_year(
     offset = dataset.get_unified_time_epoch_offset(
         grid_meta["standard_epoch"], grid_meta["dataset_epoch"]
     )
+
+    custom_correction = (
+        grid_meta["correction_function"]
+        if grid_meta["correction_function"] not in (None, "default_corrections")
+        else None
+    )
+    correction_pipeline = (
+        CorrectionPipeline(dataset, custom_correction=custom_correction)
+        if custom_correction is not None
+        else CorrectionPipeline.from_args(dataset)
+    )
+
     worker = partial(
         process_file,
         dataset=dataset,
+        correction_pipeline=correction_pipeline,
         offset=offset,
         this_grid=thisgrid,
         this_area=thisarea,

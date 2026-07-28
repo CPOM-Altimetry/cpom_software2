@@ -34,9 +34,7 @@ import polars as pl
 import pyarrow.parquet as pq
 
 from cpom.altimetry.datasets.dataset_helper import DatasetHelper
-from cpom.altimetry.tools.sec_tools.grid_for_elev_change_corrections import (
-    apply_corrections,
-)
+from cpom.altimetry.datasets.parquet_tools.correction_pipeline import CorrectionPipeline
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
     elapsed,
     get_algo_name,
@@ -76,7 +74,11 @@ def parse_arguments(args):
         "--correction_function",
         type=str,
         default="default_corrections",
-        help="Correction function name from grid_for_elev_change_corrections.py.",
+        help=(
+            "Dotted import path to a custom correction function, used as "
+            "CorrectionPipeline's custom_correction instead of the dataset's default "
+            "quality/elevation corrections. Leave as 'default_corrections' to use those."
+        ),
     )
     parser.add_argument(
         "--force_regrid",
@@ -251,7 +253,7 @@ def clean_directory(params: argparse.Namespace, dataset: DatasetHelper, confirm_
 
 
 def get_processing_objects(
-    params: argparse.Namespace, dataset: DatasetHelper
+    params: argparse.Namespace, dataset: DatasetHelper, correction_pipeline: CorrectionPipeline
 ) -> tuple[np.ndarray, Any, GridArea, logging.Logger]:
     """
     Set up objects needed to process altimetry files.
@@ -262,6 +264,7 @@ def get_processing_objects(
     Args:
         params (argparse.Namespace): Command line parameters
         dataset (DatasetHelper): CPOM DatasetHelper object.
+        correction_pipeline (CorrectionPipeline): Correction pipeline object.
 
     Returns:
         tuple:
@@ -315,6 +318,7 @@ def get_processing_objects(
     worker = partial(
         process_file,
         dataset=dataset,
+        correction_pipeline=correction_pipeline,
         offset=offset,
         this_grid=thisgrid,
         this_area=thisarea,
@@ -349,8 +353,8 @@ def _fill_missing_poca_with_nadir_fdr4alt(
     """
     try:
         # Check if nadir parameters are configured
-        latitude_nadir_param = dataset.latitude_nadir_param
-        longitude_nadir_param = dataset.longitude_nadir_param
+        latitude_nadir_param = dataset.get_param_path("latitude_nadir")
+        longitude_nadir_param = dataset.get_param_path("longitude_nadir")
         if latitude_nadir_param is None or longitude_nadir_param is None:
             return lats, lons
 
@@ -431,9 +435,9 @@ def get_coordinates_from_file(
     Returns:
         dict[str, np.ndarray]: Dictionary of "latitude", "longitude", and optionally "beams" arrays.
     """
-    if dataset.latitude_param is None:
-        raise ValueError("dataset.latitude_param is required but None was provided")
-    latitude_param = dataset.latitude_param
+    latitude_param = dataset.get_param_path("latitude")
+    if latitude_param is None:
+        raise ValueError("dataset params['latitude'] is required but was not provided")
 
     if dataset.beams != []:
         lats = dataset.get_variable(nc, latitude_param, raise_if_missing=strict_missing)
@@ -447,9 +451,9 @@ def get_coordinates_from_file(
         lats = dataset.get_variable(nc, latitude_param, raise_if_missing=strict_missing)
         beams = None
 
-    if dataset.longitude_param is None:
-        raise ValueError("dataset.longitude_param is required but None was provided")
-    longitude_param = dataset.longitude_param
+    longitude_param = dataset.get_param_path("longitude")
+    if longitude_param is None:
+        raise ValueError("dataset params['longitude'] is required but was not provided")
     lons = dataset.get_variable(nc, longitude_param, raise_if_missing=strict_missing) % 360.0
 
     if fill_missing_poca:
@@ -458,13 +462,11 @@ def get_coordinates_from_file(
     return {"latitude": lats, "longitude": lons, "beams": beams}
 
 
-def get_spatial_filter(
+def get_spatial_mask(
     variable_dict: dict, this_area: Area, this_mask: Mask | None
-) -> tuple[dict, int, np.ndarray]:
+) -> tuple[np.ndarray, int]:
     """
-    Filter arrays to points inside CPOM Area bounds or Mask (if specified),
-    and convert lat/lon to x/y coordinates.
-
+    Compute a full-length boolean mask of points inside CPOM Area bounds or Mask.
     First clips to areas lat/lon bounds, then applies mask if specified or area mask if not.
 
     Args:
@@ -475,119 +477,139 @@ def get_spatial_filter(
 
     Returns:
         tuple:
-            - variable_dict (dict[str, np.ndarray]): Updated variable_dict arrays filtered to mask.
+            - inside_mask (np.ndarray): Boolean mask, same length as latitude/longitude.
             - n_inside (int): Number of points inside the area/mask.
-            - valid_original_indices (np.ndarray): Surviving indices.
     """
+    lats = variable_dict["latitude"]
+    lons = variable_dict["longitude"]
+    inside_mask = np.zeros(lats.shape, dtype=bool)
+
     bounded_lat, bounded_lon, bounded_indices, n_bounded = this_area.inside_latlon_bounds(
-        variable_dict["latitude"], variable_dict["longitude"]
+        lats, lons
     )
     if n_bounded == 0:
-        return variable_dict, 0, np.array([], dtype=int)
+        return inside_mask, 0
 
     if this_mask is not None:
         area_mask_valid, n_inside = this_mask.points_inside(bounded_lat, bounded_lon)
-        x, y = this_mask.latlon_to_xy(bounded_lat, bounded_lon)
     else:
         area_mask_valid, n_inside = this_area.inside_area(bounded_lat, bounded_lon)
-        x, y = this_area.latlon_to_xy(bounded_lat, bounded_lon)
 
-    valid_original_indices = bounded_indices[area_mask_valid]
+    inside_mask[bounded_indices[area_mask_valid]] = True
 
-    for var in variable_dict:
-        if variable_dict[var] is not None:
-            variable_dict[var] = variable_dict[var][valid_original_indices]
+    return inside_mask, n_inside
 
-    variable_dict["x"] = x[area_mask_valid]
-    variable_dict["y"] = y[area_mask_valid]
 
-    return variable_dict, n_inside, valid_original_indices
+def add_xy(variable_dict: dict, this_area: Area, this_mask: Mask | None) -> dict:
+    """
+    Convert latitude/longitude to x/y coordinates in the Area/Mask projection.
+
+    Args:
+        variable_dict (dict): Loaded arrays (must include: latitude, longitude), already
+            filtered to points inside the area/mask.
+        this_area (Area): CPOM Area object.
+        this_mask (Mask): CPOM Mask object, or None to use the area's projection.
+
+    Returns:
+        dict: Updated variable_dict with "x" and "y" added.
+    """
+    if this_mask is not None:
+        x, y = this_mask.latlon_to_xy(variable_dict["latitude"], variable_dict["longitude"])
+    else:
+        x, y = this_area.latlon_to_xy(variable_dict["latitude"], variable_dict["longitude"])
+
+    variable_dict["x"] = x
+    variable_dict["y"] = y
+
+    return variable_dict
 
 
 # pylint: disable= R0913, R0917
-def get_variables_and_mask(
+def load_core_variables(
     dataset: DatasetHelper,
     nc,
     variable_dict: dict,
     params: argparse.Namespace,
     offset: float,
-    area_mask: np.ndarray,
-) -> tuple[dict, np.ndarray] | tuple[None, None]:
+) -> dict | None:
     """
-    Reads elevation, time, optionally power, mode, uncertainty and any additional variables from
-    an open file. Derives an ascending/descending flag.
-    Applies the area_mask, adds the time offset to correct time. Builds a combined finite mask of
-    elevation, time and power and subsets all arrays.
-
+    Reads elevation, time, and optionally power, latitude_nadir, mode, uncertainty and any
+    additional variables from an open file, at full file length and adds the time offset.
     Args:
         dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
         nc (netcdf Dataset or h5py.File): Opened file handle.
-        variable_dict (dict): Loaded arrays (must include: latitude, longitude, x, y).
+        variable_dict (dict): Loaded arrays (must include: latitude, longitude).
+        params (argparse.Namespace): Command line arguments.
         offset (float): Seconds to add to raw time values to convert to standard epoch.
-        area_mask (np.ndarray): Boolean index array from get_spatial_filter.
-    Returns:
-        - variable_dict (dict[str, np.ndarray]): Updated variable_dict arrays.
-        - combined_mask (np.ndarray): Combined boolean mask of area_mask and
-            finite elevation/time/power or (None, None) if fewer than two valid points remain.
-    """
-    elevation_param = dataset.elevation_param
-    if elevation_param is None:
-        raise ValueError("dataset.elevation_param is required but None was provided")
 
-    time_param = dataset.time_param
+    Returns:
+        dict | None: Updated variable_dict
+    """
+    elevation_param = dataset.get_param_path("elevation")
+    if elevation_param is None:
+        raise ValueError("dataset params['elevation'] is required but was not provided")
+
+    time_param = dataset.get_param_path("time")
     if time_param is None:
-        raise ValueError("dataset.time_param is required but None was provided")
+        raise ValueError("dataset params['time'] is required but was not provided")
 
     for key, param in [("elevation", elevation_param), ("time", time_param)]:
         var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
         if var_data.size == 0:
-            return None, None
-        variable_dict[key] = var_data[area_mask]
+            return None
+        variable_dict[key] = var_data
 
-    if dataset.power_param is not None:
-        var_data = dataset.get_variable(nc, dataset.power_param, raise_if_missing=params.debug)
+    power_param = dataset.get_param_path("power")
+    if power_param is not None:
+        var_data = dataset.get_variable(nc, power_param, raise_if_missing=params.debug)
         if var_data.size == 0:
-            return None, None
-        variable_dict["power"] = var_data[area_mask]
+            return None
+        variable_dict["power"] = var_data
 
-    variable_dict["time"] += offset
+    variable_dict["time"] = variable_dict["time"] + offset
 
-    # Build boolean mask
-    bool_mask = np.isfinite(variable_dict["elevation"]) & np.isfinite(variable_dict["time"])
-    if "power" in variable_dict:
-        bool_mask &= np.isfinite(variable_dict["power"])
+    latitude_nadir_param = dataset.get_param_path("latitude_nadir")
+    if latitude_nadir_param is not None:
+        var_data = dataset.get_variable(nc, latitude_nadir_param, raise_if_missing=params.debug)
+        if var_data.size == 0:
+            return None
+        variable_dict["latitude_nadir"] = var_data
 
-    if bool_mask.sum() < 2:
-        return None, None
-
-    variable_dict = {k: v[bool_mask] for k, v in variable_dict.items() if v is not None}
-
-    lat_nadir_data = None
-    if dataset.latitude_nadir_param is not None:
-        lat_nadir_data = dataset.get_variable(
-            nc, dataset.latitude_nadir_param, raise_if_missing=params.debug
-        )
-        if lat_nadir_data.size == 0:
-            return None, None
-        lat_nadir_data = lat_nadir_data[area_mask][bool_mask]
-    else:
-        lat_nadir_data = variable_dict["latitude"]
-
-    variable_dict["ascending"] = dataset.get_file_orbital_direction(
-        latitude=lat_nadir_data,
-        nc=nc,
-    )
     for var, param in {
-        "uncertainty": dataset.uncertainty_param,
-        "mode": dataset.mode_param,
+        "uncertainty": dataset.get_param_path("elevation_err"),
+        "mode": dataset.get_param_path("mode"),
         **(params.add_vars if params.add_vars is not None else {}),
     }.items():
         if param is not None:
             var_data = dataset.get_variable(nc, param, raise_if_missing=params.debug)
             if var_data.size > 0:
-                variable_dict[var] = var_data[area_mask][bool_mask]
+                variable_dict[var] = var_data
 
-    return variable_dict, area_mask[bool_mask]
+    return variable_dict
+
+
+def add_ascending_flag(variable_dict: dict, dataset: DatasetHelper, nc) -> dict:
+    """
+    Derive the ascending/descending flag for the (already filtered) points.
+
+    Called after spatial/finite/quality filtering and corrections have already reduced
+    variable_dict, since the flag only needs to be computed for surviving points.
+
+    Args:
+        dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        nc (netcdf Dataset or h5py.File): Opened file handle (used by
+            get_file_orbital_direction's CryoTEMPO fallback).
+        variable_dict (dict): Arrays already loaded, corrected, and filtered.
+
+    Returns:
+        dict: Updated variable_dict with "ascending" added.
+    """
+    variable_dict["ascending"] = dataset.get_file_orbital_direction(
+        latitude=variable_dict.get("latitude_nadir", variable_dict["latitude"]),
+        nc=nc,
+    )
+
+    return variable_dict
 
 
 def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
@@ -615,6 +637,7 @@ def get_grid_cells(variable_dict: dict, this_grid: GridArea) -> dict:
 def process_file(
     file_and_date: dict | np.void,
     dataset: DatasetHelper,
+    correction_pipeline: CorrectionPipeline,
     offset: float,
     this_grid: GridArea,
     this_area: Area,
@@ -627,14 +650,17 @@ def process_file(
     Runs a full per file pipeline:
         1. Load coordinates
         2. Spatial filter to area/mask and convert to x/y
-        3. Load variables, apply corrections and mask.
-        4. Compute grid cell positions.
-        5. Cast dtypes
-        6. Create Polars LazyFrame and apply elevation range filter.
+        3. Load variables, apply corrections.
+        4. Apply mask to variables.
+        5. Convert to x/y and derive ascending flag
+        6. Compute grid cell positions.
+        7. Cast dtypes
+        8. Create Polars LazyFrame and apply elevation range filter.
 
     Args:
         file_and_date (dict): File metadata (must include: 'path', 'year', 'month' keys)
         dataset (DatasetHelper): CPOM DatasetHelper object (dataset configuration).
+        correction_pipeline (CorrectionPipeline): Correction pipeline object.
         offset (float): Time offset in seconds to convert to standard epoch.
         this_grid (GridArea): CPOM GridArea object
         this_area (Area): CPOM Area object
@@ -697,10 +723,8 @@ def process_file(
                 total = int(len(variable_dict["latitude"]))
                 stats["total"] = total
 
-            # 2. Get spatial filter
-            variable_dict, n_inside, area_mask = get_spatial_filter(
-                variable_dict, this_area, this_mask
-            )
+            # 2. Cheap spatial pre-filter
+            spatial_mask, n_inside = get_spatial_mask(variable_dict, this_area, this_mask)
             if params.debug and stats is not None:
                 stats["outside_area_or_mask"] = max(0, total - int(n_inside))
 
@@ -711,55 +735,57 @@ def process_file(
                     return None, stats
                 return None
 
-            # 3. Get variables and combined finite mask
-            # 4. Apply mask to variables
-            tmp_variable_dict, mask = get_variables_and_mask(
-                dataset, nc, variable_dict, params, offset, area_mask
+            # 3. Load elevation, time, and other core variables at full file length
+            tmp_variable_dict = load_core_variables(dataset, nc, variable_dict, params, offset)
+            if tmp_variable_dict is None:
+                if params.debug:
+                    if stats is not None:
+                        stats["file_reject_reason"] = "missing_core_variable"
+                    return None, stats
+                return None
+            variable_dict = tmp_variable_dict
+
+            # 3b. Combine spatial mask with a finite (elevation/time/power) mask.
+            finite_mask = np.isfinite(variable_dict["elevation"]) & np.isfinite(
+                variable_dict["time"]
             )
-            if tmp_variable_dict is None or mask is None:
+            if "power" in variable_dict:
+                finite_mask &= np.isfinite(variable_dict["power"])
+            combined_mask = spatial_mask & finite_mask
+            n_combined = int(combined_mask.sum())
+            if n_combined < 2:
                 if params.debug:
                     if stats is not None:
                         stats["file_reject_reason"] = "too_few_points_after_finite_mask"
                     return None, stats
                 return None
-            variable_dict = tmp_variable_dict
 
-            if (
-                dataset.default_elev_correction is not None
-                or dataset.default_qual_correction is not None
-                or params.correction_function != "default_corrections"
-            ):
-                try:
-                    variable_dict = apply_corrections(
-                        dataset=dataset,
-                        nc=nc,
-                        input_mask=mask,
-                        variable_dict=variable_dict,
-                        params=params,
-                    )
-                except Exception as exc:
-                    raise RuntimeError(
-                        "Failed to apply correction "
-                        f"'{params.correction_function}' for mission '{dataset.mission}': "
-                        f"{type(exc).__name__}: {exc}"
-                    ) from exc
+            # 4. Apply mask to variables
+            strict_missing = getattr(params, "strict_missing", False) or params.debug
+            try:
+                variable_dict = correction_pipeline.run(
+                    nc, combined_mask, variable_dict, strict_missing
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to apply correction "
+                    f"'{params.correction_function}' for mission '{dataset.mission}': "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
 
-                if variable_dict is None:
-                    if params.debug:
-                        if stats is not None:
-                            stats["file_reject_reason"] = "too_few_points_after_quality_mask"
-                        return None, stats
-                    return None
+            # 5. Convert the surviving points to x/y and derive the ascending flag
+            variable_dict = add_xy(variable_dict, this_area, this_mask)
+            variable_dict = add_ascending_flag(variable_dict, dataset, nc)
 
             if params.debug:
                 n_quality = int(len(variable_dict["time"]))
                 if stats is not None:
                     stats["outside_quality_time_elev_or_nan"] = max(0, n_inside - n_quality)
 
-            # 5. Calculate grid cell positions and offsets
+            # 6. Calculate grid cell positions and offsets
             variable_dict = get_grid_cells(variable_dict, this_grid)
 
-            # 6. Cast variables to appropriate data types
+            # 7. Cast variables to appropriate data types
             for variable, arr in variable_dict.items():
                 if arr is None:
                     continue
@@ -779,9 +805,15 @@ def process_file(
                     else arr
                 )
 
-            frame = pl.LazyFrame(variable_dict).with_columns(
-                pl.lit(file_and_date["year"]).alias("year"),
-                pl.lit(file_and_date["month"]).alias("month"),
+            # 8. Build the frame, deriving year/month from each row's own time value.
+            frame = (
+                pl.LazyFrame(variable_dict)
+                .with_columns(pl.from_epoch(pl.col("time"), time_unit="s").alias("_row_datetime"))
+                .with_columns(
+                    pl.col("_row_datetime").dt.year().alias("year"),
+                    pl.col("_row_datetime").dt.month().alias("month"),
+                )
+                .drop("_row_datetime")
             )
 
             if params.debug:
@@ -873,7 +905,7 @@ def write_partitions_to_disk(
         partition_columns (list): List of columns to partition by.
         partition_xy_chunking (int): Divisor applied to x_bin/y_bin to get x_part/y_part.
         out_dir (str): Output directory path.
-        writer_cache (dict | None): Open ParquetWriters.
+        writer_cache (dict | None): Open ParquetWriters keyed by output file path.
 
     Returns:
         int: Total number of rows written to disk.
@@ -927,6 +959,9 @@ def get_data_and_status_multiprocessed(
     collects LazyFrames into a buffer, and flushes to disk every flush_every files.
     Returns a status dictionary with per-period and total ingestion counts.
 
+    The ParquetWriter cache is created once for the whole run, to ensure files which intersect two
+    periods are correctly written.
+
     Args:
         params (argparse.Namespace): Command line parameters.
         file_and_dates (np.ndarray): Structured array of file paths and date information.
@@ -948,17 +983,17 @@ def get_data_and_status_multiprocessed(
         "total_rows_ingested": 0,
     }
     use_month = "month" in params.partition_columns
+    writer_cache: dict[str, pq.ParquetWriter] = {}
 
     try:
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-            for period_label, files_in_period in _group_periods(file_and_dates, use_month):
+            try:
+                for period_label, files_in_period in _group_periods(file_and_dates, use_month):
 
-                n_valid = n_rejected = total_rows = 0
-                writer_cache: dict[str, pq.ParquetWriter] = {}
-                buffer: list[pl.LazyFrame] = []
-                chunksize = max(1, len(files_in_period) // max(1, params.max_workers * 4))
+                    n_valid = n_rejected = total_rows = 0
+                    buffer: list[pl.LazyFrame] = []
+                    chunksize = max(1, len(files_in_period) // max(1, params.max_workers * 4))
 
-                try:
                     for result in executor.map(worker, files_in_period, chunksize=chunksize):
 
                         frame, file_stats = (
@@ -996,33 +1031,39 @@ def get_data_and_status_multiprocessed(
                         )
                         buffer.clear()
 
-                except (ValueError, OSError, RuntimeError) as e:
-                    logger.error(
-                        "Error collecting results for %s: %s", period_label, e, exc_info=True
+                    logger.info(
+                        "Period %s: %d valid, %d rejected, %d rows",
+                        period_label,
+                        n_valid,
+                        n_rejected,
+                        total_rows,
                     )
-                finally:
-                    for w in writer_cache.values():
-                        w.close()
 
-                logger.info(
-                    "Period %s: %d valid, %d rejected, %d rows",
-                    period_label,
-                    n_valid,
-                    n_rejected,
-                    total_rows,
-                )
+                    if n_valid == 0:
+                        status["empty_periods"].append(period_label)
+                        continue
 
-                if n_valid == 0:
-                    status["empty_periods"].append(period_label)
-                    continue
+                    status["years_ingested"].append(period_label)
+                    status["years_files_ingested"].append(n_valid)
+                    status["years_files_rejected"].append(n_rejected)
+                    status["years_rows_ingested"].append(total_rows)
+                    status["total_l2_files_ingested"] += n_valid
+                    status["total_l2_files_rejected"] += n_rejected
+                    status["total_rows_ingested"] += total_rows
 
-                status["years_ingested"].append(period_label)
-                status["years_files_ingested"].append(n_valid)
-                status["years_files_rejected"].append(n_rejected)
-                status["years_rows_ingested"].append(total_rows)
-                status["total_l2_files_ingested"] += n_valid
-                status["total_l2_files_rejected"] += n_rejected
-                status["total_rows_ingested"] += total_rows
+            except (ValueError, OSError, RuntimeError) as e:
+                logger.error("Error collecting results: %s", e, exc_info=True)
+                if buffer:
+                    total_rows += write_partitions_to_disk(
+                        pl.concat(buffer, rechunk=False).collect(),
+                        params.partition_columns,
+                        params.partition_xy_chunking,
+                        params.out_dir,
+                        writer_cache,
+                    )
+            finally:
+                for w in writer_cache.values():
+                    w.close()
 
     except (OSError, ValueError) as e:
         logger.error("Multiprocessing failed: %s", e)
@@ -1130,7 +1171,20 @@ def grid_for_elev_change(args: list[str]) -> None:
 
     clean_directory(parsed_args, dataset, confirm_regrid=not parsed_args.force_regrid)
 
-    file_and_dates, worker, thisgrid, logger = get_processing_objects(parsed_args, dataset)
+    custom_correction = (
+        parsed_args.correction_function
+        if parsed_args.correction_function not in (None, "default_corrections")
+        else None
+    )
+    correction_pipeline = (
+        CorrectionPipeline(dataset, custom_correction=custom_correction)
+        if custom_correction is not None
+        else CorrectionPipeline.from_args(dataset)
+    )
+
+    file_and_dates, worker, thisgrid, logger = get_processing_objects(
+        parsed_args, dataset, correction_pipeline
+    )
 
     # --------------------------------------------------------#
     # 5. Process each year of data and write to Parquet files #
