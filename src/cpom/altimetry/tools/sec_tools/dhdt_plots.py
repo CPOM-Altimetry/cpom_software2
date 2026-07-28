@@ -97,7 +97,14 @@ def parse_arguments(args):
         nargs=2,
         type=float,
         help="Plot range for dhdt values [min max]. Default: -1.0 1.0",
-        default=[-1.0, 1.0],
+        # default=[-1.0, 1.0],
+    )
+    parser.add_argument(
+        "--dataset_label",
+        type=str,
+        help="Label for the dataset to use in plot annotations (e.g. mission name).",
+        required=False,
+        default="",
     )
     parser.add_argument(
         "--shapefile", type=str, help="Path to the shapefile to use for clipping", required=False
@@ -283,7 +290,6 @@ def plot_icesheet(
     period_ids = sorted(
         data.select(pl.col(params.period_column)).unique().collect().to_series().to_list()
     )
-    Path(params.out_dir).mkdir(parents=True, exist_ok=True)
     for period_id in period_ids:
         period_data = data.filter(pl.col(params.period_column) == period_id).collect()
 
@@ -301,34 +307,37 @@ def plot_icesheet(
             Annotation(
                 0.8,
                 0.9,
-                "Mission: ...",
-                # f"Mission: {params.mission_name}",
+                f"{params.dataset_label}",
                 None,
                 12,
                 fontweight="normal",
             )
         )
+        out_path = (
+            f"{params.plotting_column}_period_{period_id}_"
+            f"{start_time_str}-{end_time_str}_"
+            f"{params.plot_range[0]}-{params.plot_range[1]}.png"
+        )
 
         Polarplot(this_area.name, area_overrides={"show_bad_data_map": False}).plot_points(
             {
-                "name": f"dhdt_{period_id}",
+                "name": f"{params.plotting_column}",
                 "lats": period_data["latitude"],
                 "lons": period_data["longitude"],
                 "vals": period_data[params.plotting_column],
-                # "valid_range": tuple(params.plot_range),
+                "valid_range": tuple(params.plot_range),
                 "min_plot_range": params.plot_range[0],
                 "max_plot_range": params.plot_range[1],
                 "units": "m",
-                # "cmap_name": "coolwarm_r",
+                "cmap_name": "coolwarm_r",
                 "plot_size_scale_factor": 0.04,
-                "cmap_name": "RdBu",  # Colormap name, could use RdYlBu
-                "cmap_over_color": "#150685",  # Optional: Over color for colormap
-                "cmap_under_color": "#9E0005",  # Optional: Under color for colormap
-                "cmap_extend": "both",  # Optional: Extend colormap
+                "cmap_over_color": "#150685",
+                "cmap_under_color": "#9E0005",
+                "cmap_extend": "both",
             },
             annotation_list=annotation_list,
             output_dir=str(Path(params.out_dir)),
-            output_file=f"dhdt_period_{period_id}_{start_time_str}-{end_time_str}.png",
+            output_file=out_path,
         )
 
 

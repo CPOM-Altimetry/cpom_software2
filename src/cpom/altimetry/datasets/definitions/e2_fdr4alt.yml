@@ -10,7 +10,6 @@ latitude_nadir_param: "expert/latitude"
 longitude_nadir_param: "expert/longitude"
 elevation_param: "expert/ice_sheet_elevation_ice1_roemer"
 power_param: "expert/sigma0_ice1"
-quality_param: "expert/retracking_ice1_qual"
 time_param: "expert/time"
 default_elev_correction: cpom.altimetry.datasets.elevation_correction_helper.get_fdr4alt_ers_elev
 default_qual_correction: cpom.altimetry.datasets.quality_correction_helper.get_fdr4alt_qual_mask
