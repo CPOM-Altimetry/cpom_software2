@@ -60,7 +60,7 @@ class Mask:
     def __init__(
         self,
         mask_name: str,
-        basin_numbers: Optional[list[int]] = None,
+        basin_numbers: Optional[list[int | str]] = None,
         mask_path: Optional[str] = None,
         store_in_shared_memory: bool = False,
         thislog: logging.Logger | None = None,
@@ -69,7 +69,8 @@ class Mask:
 
         Args:
             mask_name (str): mask name, must be in global mask_list
-            basin_numbers (list[int], optional): list of grid values to select from grid masks.
+            basin_numbers (list[int|str], optional): list of grid values to select from grid
+            masks.
             Can use grid value names instead of numbers. If None, all grid values in mask are used.
             mask_path (str, optional): override default path of mask data file
             store_in_shared_memory (bool, optional): stores/access mask array in SharedMemory
@@ -793,7 +794,7 @@ class Mask:
         self,
         lats: np.ndarray | list,
         lons: np.ndarray | list,
-        basin_numbers: Optional[list[int]] = None,
+        basin_numbers: Optional[list[int | str]] = None,
         inputs_are_xy: bool = False,
     ) -> tuple[np.ndarray, int]:
         """Given a list of lat,lon or x,y points, find the points that are inside the current mask
@@ -911,6 +912,15 @@ class Mask:
         if isinstance(selected[0], str):
             return self.get_grid_value_from_grid_value_names(selected)
         return [int(v) for v in selected]
+
+    def resolve_basin_names(
+        self, basin_numbers: Optional[list[int | str]] = None
+    ) -> Optional[list[str]]:
+        """Resolve caller-supplied or instance-default basin selection to grid value names."""
+        resolved = self.resolve_basin_numbers(basin_numbers)
+        if resolved is None:
+            return None
+        return self.get_grid_value_names_from_grid_value(resolved)
 
     def grid_mask_values(
         self,
