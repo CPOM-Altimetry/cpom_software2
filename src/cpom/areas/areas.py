@@ -286,6 +286,8 @@ class Area:
         self.stats_position_y_offset_simple = area_definition.get(
             "stats_position_y_offset_simple", 0
         )
+        self.show_stats = area_definition.get("show_stats", True)
+
         self.position_stats_manually = area_definition.get("position_stats_manually", False)
         self.nvals_position = area_definition.get("nvals_position", (0.0, 0.0))
         self.stdev_position = area_definition.get("stdev_position", (0.0, 0.0))

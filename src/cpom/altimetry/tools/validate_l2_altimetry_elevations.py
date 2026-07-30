@@ -6,7 +6,8 @@ It also allows comparing a reference mission to itself.
 
 ### **Supported Missions**
 
-- **Altimetry Missions**: CS2 (Native L2 and CryoTempo), S3A, S3B, ENVISAT, ERS1, ERS2
+- **Altimetry Missions**: CS2 (Native L2 and CryoTempo), CRISTAL (CLEV2ER landice L2 POCA),
+                        S3A, S3B, ENVISAT, ERS1, ERS2
 - **Reference Missions**: ICESat-2 (ATL06), IceBridge (ILATM2, ILUTP2),
                         Pre-IceBridge (BRMCR2, BLATM2), ICESat1 (GLAH12)
 
@@ -20,6 +21,16 @@ max_diff argument for your usecase, or provide a DEM to correct reference locati
 to align with altimetry measurements.
 
 When running for Cryotempo, the Cryotempo_Modes argument must be set.
+
+When running for CRISTAL (CLEV2ER landice L2 POCA files, e.g. ``CRA_IR_GR_*MSSL_LIG*.NC``)
+the data are stored in per-band NetCDF groups (``data/ku/...`` and ``data/ka/...``). Use
+``--band`` to select ``ku`` or ``ka`` (run once per band). The POCA elevation/lat/lon are
+read from the selected band's ``poca`` group automatically. ``--add_vars`` names without a
+``/`` are resolved within that band's ``poca`` group, so to also extract backscatter and
+coherence (the POCA uncertainty-LUT covariates) pass ``--add_vars sig0 coherence``; use
+``{band}`` in a full path for variables elsewhere in the tree (e.g.
+``--add_vars data/{band}/penetration_depth``). This produces the ``dh``/``lats``/``lons``
+(+ covariate) ``.npz`` consumed by ``clev2er.utils.uncertainty`` LUT pre-processing.
 
 ### **Command Line Options**
 **Required**
@@ -64,6 +75,7 @@ import logging
 import os
 import re
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -86,20 +98,45 @@ def setup_logging(
     log_name="",
     log_file_info="file.log",
     log_file_error="file.err",
+    console_level=logging.INFO,
 ):
-    """Setup logger"""
-    log = logging.getLogger(log_name)
-    log.setLevel(logging.INFO)
+    """Set up logging to two files (info + error) and to the console (stdout).
 
-    log_format = logging.Formatter(
+    A console (stdout) handler is added so the user sees progress in the
+    terminal as the tool runs, in addition to the persistent log files.
+
+    Args:
+        log_name (str): Logger name ("" selects the root logger).
+        log_file_info (str | Path): Path of the INFO-level log file.
+        log_file_error (str | Path): Path of the ERROR-level log file.
+        console_level (int): Logging level for the console handler.
+
+    Returns:
+        logging.Logger: The configured logger.
+    """
+    log = logging.getLogger(log_name)
+    # let handlers decide what to emit; logger must pass the lowest level through
+    log.setLevel(min(logging.INFO, console_level))
+    log.handlers.clear()  # idempotent: avoid duplicate handlers if called again
+
+    file_format = logging.Formatter(
         "%(levelname)s : %(asctime)s : %(message)s", datefmt="%d/%m/%Y %H:%M:%S"
     )
-
     for log_file, level in [(log_file_info, logging.INFO), (log_file_error, logging.ERROR)]:
         file_handler = logging.FileHandler(log_file, mode="w")
-        file_handler.setFormatter(log_format)
+        file_handler.setFormatter(file_format)
         file_handler.setLevel(level)
         log.addHandler(file_handler)
+
+    # Console handler: concise format (time + message) for readable progress
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
+    console.setLevel(console_level)
+    log.addHandler(console)
+
+    # Quieten third-party libraries that would otherwise flood the console at INFO
+    for noisy in ("matplotlib", "PIL", "numexpr", "fiona", "rasterio", "cartopy"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     return log
 
@@ -136,6 +173,13 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="[optional] IS2 beams to use. Space separated list: gt1l gt1r gt2l gt2r gt3l gt3r",
     )
+    parser.add_argument(
+        "--band",
+        choices={"ku", "ka"},
+        default="ku",
+        help="[optional, default=ku] altimeter band for grouped products (CRISTAL L2). "
+        "Selects the data/<band>/ NetCDF group. Run once per band.",
+    )
     parser.add_argument("--dem", help="[optional] DEM, used in 'correct_elevation_using_slope'")
     parser.add_argument("--radius", type=float, default=20.0, help="[optional] search radius in m")
     parser.add_argument(
@@ -144,6 +188,12 @@ def parse_args() -> argparse.Namespace:
         default=100.0,
         help="[optional] maximum allowed difference in m between reference and altimeter points. \
             Differences > are not saved.",
+    )
+    parser.add_argument(
+        "--nearest_only",
+        action="store_true",
+        help="[optional] difference each altimetry point against only the single nearest "
+        "reference point within --radius, instead of every reference point within the radius.",
     )
     parser.add_argument(
         "--add_vars",
@@ -164,6 +214,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="[optional, default=10] number of worker processes to use",
+    )
+    parser.add_argument(
+        "--log_level",
+        choices={"debug", "info", "warning"},
+        default="info",
+        help="[optional, default=info] console logging verbosity",
     )
     parser.add_argument(  # Default is False, becomes True if provided
         "--compare_to_historical_reference",
@@ -219,6 +275,49 @@ def get_variable(nc: Dataset | h5py.File, nc_var_path: str) -> np.ndarray:
         raise IndexError(f"NetCDF parameter or group {err} not found") from err
 
 
+def variable_exists(nc: Dataset | h5py.File, nc_var_path: str) -> bool:
+    """Return True if a (possibly grouped) variable path exists in the file.
+
+    Unlike ``var in nc.variables`` this walks NetCDF groups, so grouped paths
+    such as ``data/ku/poca/sig0`` are handled. A bare name (no ``/``) keeps the
+    original membership-test semantics against the top-level ``variables``.
+
+    Args:
+        nc (Dataset | h5py.File): The open dataset object.
+        nc_var_path (str): Variable path, groups separated by '/'.
+
+    Returns:
+        bool: True if the variable exists, otherwise False.
+    """
+    parts = nc_var_path.split("/")
+    node = nc
+    for part in parts[:-1]:
+        try:
+            node = node.groups[part]
+        except (KeyError, AttributeError):
+            return False
+    return parts[-1] in getattr(node, "variables", {})
+
+
+def mask_to_nan(array: np.ndarray) -> np.ndarray:
+    """Convert a masked array to a plain float array with NaN in masked cells.
+
+    Scaled-integer NetCDF variables (used throughout the CRISTAL L2 products)
+    are returned by netCDF4 as masked float arrays; downstream code here relies
+    on ``np.isnan`` to detect missing values, so fill the mask with NaN. Plain
+    (unmasked) arrays are returned unchanged.
+
+    Args:
+        array (np.ndarray): Array as returned by ``get_variable``.
+
+    Returns:
+        np.ndarray: NaN-filled float array, or the input unchanged if not masked.
+    """
+    if np.ma.isMaskedArray(array):
+        return np.ma.filled(array.astype("float64"), np.nan)
+    return array
+
+
 def get_default_variables(file: Path) -> dict:
     """
     Return default variable names based on file naming patterns.
@@ -263,6 +362,13 @@ def get_default_variables(file: Path) -> dict:
             "lat": "latitude",
             "lon": "longitude",
             "elev": "elevation",
+        },
+        "CRA_IR_GR": {  # CRISTAL L2 land ice POCA (CLEV2ER landice chain), per-band groups
+            "lat_nadir": "data/{band}/lat",
+            "lon_nadir": "data/{band}/lon",
+            "lat": "data/{band}/poca/lat_surf",
+            "lon": "data/{band}/poca/lon_surf",
+            "elev": "data/{band}/poca/land_ice_elevation",
         },
         # FDR4ALT Products
         "ER1": {
@@ -362,6 +468,101 @@ def get_files_in_dir(
     return []
 
 
+def filter_files_by_start_month(files: list[Path], year: str, month: str) -> list[Path]:
+    """Keep files whose measurement *start* date is in ``year``+``month``.
+
+    ``get_files_in_dir`` matches any date-like token anywhere in the path. For products
+    whose names also embed a processing timestamp (e.g. CRISTAL L2
+    ``..._<start>_<stop>_<YYYYMMDD>T<HHMMSS>_...``), that can false-match the wrong month -
+    a file processed at 20:03 matches the loose ``YYMMDD`` pattern ``2003..`` for March, etc.
+    This narrows an altimetry list to files whose first ``YYYYMMDDThhmmss`` token (the
+    measurement start) is actually in the requested month. Files with no such token are kept
+    unchanged, so products that don't use that timestamp format are unaffected.
+
+    Args:
+        files: candidate file paths.
+        year: 4-digit year string.
+        month: zero-filled 2-digit month string.
+
+    Returns:
+        list[Path]: the filtered file list.
+    """
+    start_date_re = re.compile(r"(\d{8})T\d{6}")  # first measurement YYYYMMDDThhmmss token
+    yyyymm = f"{year}{month}"
+    kept: list[Path] = []
+    for file in files:
+        match = start_date_re.search(Path(file).name)
+        if match is None or match.group(1).startswith(yyyymm):
+            kept.append(file)
+    return kept
+
+
+def collect_with_progress(results_iter, total: int, log: logging.Logger, label: str) -> list:
+    """Drain a (lazy) results iterator into a list, logging progress as it goes.
+
+    The parallel file loaders can run for a long time with no output; this
+    reports progress roughly every 5% so the user can see the run advancing.
+
+    Args:
+        results_iter: Iterator yielding per-file results (e.g. from executor.map).
+        total (int): Total number of items expected (used for the percentage).
+        log (logging.Logger): Logger to report progress to.
+        label (str): Short stage label, e.g. "reference" or "altimetry".
+
+    Returns:
+        list: All collected results, in iteration order.
+    """
+    every = max(1, total // 20)  # ~20 progress lines over the whole stage
+    collected = []
+    for count, result in enumerate(results_iter, start=1):
+        collected.append(result)
+        if count % every == 0 or count == total:
+            log.info(
+                "  %s files processed: %d/%d (%.0f%%)",
+                label,
+                count,
+                total,
+                100.0 * count / total,
+            )
+    return collected
+
+
+def concat_altimetry_results(arrays: list) -> np.ndarray:
+    """Concatenate per-file altimetry arrays that may carry different add_vars.
+
+    Files of different mode/band can legitimately contain different optional
+    ``--add_vars`` (e.g. HR Ku has ``coherence`` but LR Ku and Ka do not). A plain
+    ``np.concatenate`` would fail on the mismatched dtypes, so this takes the union
+    of the extra columns and fills a file's absent columns with NaN. The base
+    ``x``/``y``/``h`` fields are always present. Extra columns are stored as float64
+    so the NaN fill is representable.
+
+    Args:
+        arrays: Non-empty list of structured arrays, each with at least x, y, h.
+
+    Returns:
+        np.ndarray: One structured array with x, y, h + the union of extra fields.
+    """
+    base = ("x", "y", "h")
+    extra_names: list[str] = []
+    for arr in arrays:
+        for name in arr.dtype.names or ():
+            if name not in base and name not in extra_names:
+                extra_names.append(name)
+    out_dtype = [(name, "float64") for name in (*base, *extra_names)]
+    total = sum(int(arr.size) for arr in arrays)
+    out = np.empty(total, dtype=out_dtype)
+    pos = 0
+    for arr in arrays:
+        n = int(arr.size)
+        for name in base:
+            out[name][pos : pos + n] = arr[name]
+        for name in extra_names:
+            out[name][pos : pos + n] = arr[name] if name in arr.dtype.names else np.nan
+        pos += n
+    return out
+
+
 class ProcessData:
     """Class to process laser and altimetry data files by extracting and filtering
     elevation data. To be run by a multiproccessor.
@@ -381,14 +582,19 @@ class ProcessData:
         self.log = log
 
     def get_cryotempo_filters(self, nc, args):
-        """Check Cryotempo data is in a valid mode."""
-        if "all" in args.cryotempo_modes:
-            return None
+        """Return a boolean mask of the records in the requested CryoTempo modes.
+
+        "all" (or a mode set that applies no restriction) returns an all-True
+        mask, so the caller keeps every record. None is returned only when no
+        record matches the requested modes, which the caller treats as
+        "drop this file".
+        """
+        instrument_mode = get_variable(nc, "instrument_mode")
         mode_map = {"lrm": 1, "sar": 2, "sin": 3}
         valid_modes = {mode_map[mode] for mode in args.cryotempo_modes if mode in mode_map}
-        if not valid_modes:
-            return None
-        valid_mask = np.isin(get_variable(nc, "instrument_mode"), list(valid_modes))
+        if "all" in args.cryotempo_modes or not valid_modes:
+            return np.ones(len(instrument_mode), dtype=bool)
+        valid_mask = np.isin(instrument_mode, list(valid_modes))
         return valid_mask if valid_mask.any() else None
 
     def fill_empty_latlon_with_nadir(
@@ -406,11 +612,33 @@ class ProcessData:
         """
         bad_indices = np.isnan(lon)  # np.flatnonzero(lon.mask)  # Find empty longitude values
         if bad_indices.size > 0:
-            lat_nadir = get_variable(nc, config["lat_nadir"])
-            lon_nadir = get_variable(nc, config["lon_nadir"])
+            lat_nadir = mask_to_nan(get_variable(nc, config["lat_nadir"]))
+            lon_nadir = mask_to_nan(get_variable(nc, config["lon_nadir"]))
             lat[bad_indices] = lat_nadir[bad_indices]
             lon[bad_indices] = np.mod(lon_nadir[bad_indices], 360)
         return lat, lon
+
+    @staticmethod
+    def _resolve_altim_var(var: str, band: str, is_cristal: bool) -> str:
+        """Resolve an ``--add_vars`` entry to a full NetCDF variable path.
+
+        A ``{band}`` placeholder is substituted with the selected band. For
+        CRISTAL L2 files a bare name (no '/') is resolved within the band's
+        ``poca`` group, so ``sig0`` -> ``data/<band>/poca/sig0``.
+
+        Args:
+            var (str): The user-supplied ``--add_vars`` entry.
+            band (str): Selected band ('ku' or 'ka').
+            is_cristal (bool): True if the file is a CRISTAL grouped product.
+
+        Returns:
+            str: The resolved variable path (may still not exist in the file).
+        """
+        if "{band}" in var:
+            return var.format(band=band)
+        if is_cristal and "/" not in var:
+            return f"data/{band}/poca/{var}"
+        return var
 
     def get_altimetry_data_array(self, filename: Path) -> Optional[np.ndarray]:
         """Extract and filter data from an altimetry data file.
@@ -424,28 +652,40 @@ class ProcessData:
         try:
             with Dataset(filename) as nc:
                 config = get_default_variables(filename)
-                if config is None:
+                if not config:
                     self.log.error("Unsupported file basename %s for file", filename)
                     return None
 
+                # Per-band grouped products (CRISTAL L2) carry a {band} placeholder
+                # in their variable paths; resolve it from --band.
+                band = getattr(self.args, "band", "ku")
+                is_cristal = any("{band}" in path for path in config.values())
+                if is_cristal:
+                    config = {
+                        key: (path.format(band=band) if "{band}" in path else path)
+                        for key, path in config.items()
+                    }
+
                 lats, lons, elev = (
-                    get_variable(nc, config["lat"]),
-                    np.mod(get_variable(nc, config["lon"]), 360),
-                    get_variable(nc, config["elev"]),
+                    mask_to_nan(get_variable(nc, config["lat"])),
+                    np.mod(mask_to_nan(get_variable(nc, config["lon"])), 360),
+                    mask_to_nan(get_variable(nc, config["elev"])),
                 )
 
                 try:
                     add_vars = self.args.add_vars or []
-                    additional_data = {
-                        var.rsplit("/", 1)[-1]: get_variable(nc, var)
-                        for var in add_vars
-                        if var in nc.variables
-                    }
-                    if list(additional_data.keys()) != add_vars:
-                        self.log.info(
-                            "Variable(s) %s missing from netcdf",
-                            set(add_vars) - set(additional_data.keys()),
-                        )
+                    additional_data = {}
+                    missing = []
+                    for var in add_vars:
+                        resolved = self._resolve_altim_var(var, band, is_cristal)
+                        if variable_exists(nc, resolved):
+                            additional_data[resolved.rsplit("/", 1)[-1]] = mask_to_nan(
+                                get_variable(nc, resolved)
+                            )
+                        else:
+                            missing.append(var)
+                    if missing:
+                        self.log.info("Variable(s) %s missing from netcdf", set(missing))
                 except Exception as err:
                     raise ValueError("Failed to load additional data") from err
 
@@ -478,7 +718,7 @@ class ProcessData:
 
             # Structured NumPy array containing x, y, elevation, and any additional variables
             return np.array(
-                list(zip(x, y, elev, *(additional_data[var] for var in additional_data))),
+                list(zip(x, y, elev, *additional_data.values())),
                 dtype=[("x", "float64"), ("y", "float64"), ("h", "float64")]
                 + [(var, str(data.dtype)) for var, data in additional_data.items()],
             )
@@ -887,67 +1127,185 @@ if __name__ == "__main__":
     logger = setup_logging(
         log_file_info=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.info.log",
         log_file_error=month_outdir / f"{DATE_YEAR}{DATE_MONTH}.errors.log",
+        console_level=getattr(logging, params.log_level.upper()),
     )
-    logger.info("Start processing with arguments %s", params)
+    t_start = time.perf_counter()
+    logger.info("=" * 72)
+    logger.info("validate_l2_altimetry_elevations : %s %s-%s", params.area, DATE_YEAR, DATE_MONTH)
+    logger.info("  reference_dir : %s", params.reference_dir)
+    if params.compare_to_self:
+        logger.info("  mode          : reference self-comparison")
+    else:
+        logger.info("  altim_dir     : %s", ", ".join(params.altim_dir))
+        logger.info("  band          : %s", getattr(params, "band", "ku"))
+    if params.add_vars:
+        logger.info("  add_vars      : %s", " ".join(params.add_vars))
+    if params.beams:
+        logger.info("  beams         : %s", " ".join(params.beams))
+    logger.info(
+        "  radius=%.1fm  maxdiff=%.1fm  workers=%d",
+        params.radius,
+        params.maxdiff,
+        params.max_workers,
+    )
+    logger.info("  output_dir    : %s", month_outdir)
+    logger.info("=" * 72)
 
-    # Load reference data #
+    # Discover input files first (cheap) so a month with no L2 inputs exits fast,
+    # BEFORE the expensive reference-data load.
     reference_path = Path(params.reference_dir) / f"{DATE_YEAR}/{DATE_MONTH}"
     reference_dir = reference_path if reference_path.is_dir() else Path(params.reference_dir)
-    processor = ProcessData(params, AREA_OBJ, logger)
     reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "h5")  # is1 & is2
     if reference_files == []:  # icebridge/pre-icebridge
         reference_files = get_files_in_dir(reference_dir, DATE_YEAR, DATE_MONTH, "nc")
-
-    logger.info("Loaded %d reference data files", len(reference_files))
-
-    chunksize = max(1, len(reference_files) // (params.max_workers * 4))
-    logger.info("Chunksize %d", chunksize)
-    with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-        ref_results = list(
-            executor.map(processor.process_reference_file, reference_files, chunksize=chunksize)
+    if not reference_files:
+        logger.error(
+            "No reference files found in %s for %s-%s", reference_dir, DATE_YEAR, DATE_MONTH
         )
-    valid_results = [result for result in ref_results if result is not None]
-    reference_points = np.concatenate(valid_results)
-    unique_indices = np.unique(reference_points[["x", "y", "h"]], return_index=True)[1]
-    reference_points = reference_points[unique_indices]
-    logger.info("Loaded reference data points, len : %d", len(reference_points))
+        sys.exit(1)
+    logger.info("Found %d reference files in %s", len(reference_files), reference_dir)
 
-    # Load altimetry data #
+    altimetry_files: list[Path] = []
     if params.compare_to_self:
-        logger.info("Performing reference self-comparison")
         PREFIX = "neighbour_"
-        altimetry_points = reference_points  # Compare is2 to itself
     else:
-        logger.info("Comparing reference to altimetry")
         PREFIX = ""
-        altimetry_files = []
         for basepath in params.altim_dir:
             alt_path = Path(basepath) / f"{DATE_YEAR}/{DATE_MONTH}"
             altimetry_dir = alt_path if alt_path.is_dir() else Path(basepath)
+            found = get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc")
+            month_files = filter_files_by_start_month(found, DATE_YEAR, DATE_MONTH)
+            logger.info("Found %d altimetry files in %s", len(month_files), altimetry_dir)
+            if len(month_files) != len(found):
+                logger.info(
+                    "  (%d candidate(s) dropped: measurement date not in %s-%s)",
+                    len(found) - len(month_files),
+                    DATE_YEAR,
+                    DATE_MONTH,
+                )
+            altimetry_files.extend(month_files)
+        if not altimetry_files:
+            logger.error(
+                "No altimetry (L2) files for %s-%s - skipping month (reference not loaded)",
+                DATE_YEAR,
+                DATE_MONTH,
+            )
+            sys.exit(1)
 
-            altimetry_files.extend(get_files_in_dir(altimetry_dir, DATE_YEAR, DATE_MONTH, "nc"))
-        logger.info("Loaded %d altimetry data files", len(altimetry_files))
+    processor = ProcessData(params, AREA_OBJ, logger)
 
+    # Load reference data (expensive) #
+    t_ref = time.perf_counter()
+    chunksize = max(1, len(reference_files) // (params.max_workers * 4))
+    logger.info(
+        "Loading reference data (%d workers, chunksize %d)...", params.max_workers, chunksize
+    )
+    with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
+        ref_results = collect_with_progress(
+            executor.map(processor.process_reference_file, reference_files, chunksize=chunksize),
+            len(reference_files),
+            logger,
+            "reference",
+        )
+    valid_results = [result for result in ref_results if result is not None and result.size > 0]
+    if not valid_results:
+        logger.error(
+            "No valid reference points loaded from %d files (none in area/hemisphere?)",
+            len(reference_files),
+        )
+        sys.exit(1)
+    reference_points = np.concatenate(valid_results)
+    logger.info("Loaded %d reference points; de-duplicating...", len(reference_points))
+    unique_indices = np.unique(reference_points[["x", "y", "h"]], return_index=True)[1]
+    reference_points = reference_points[unique_indices]
+    logger.info(
+        "  %d unique reference points (%.1fs)",
+        len(reference_points),
+        time.perf_counter() - t_ref,
+    )
+
+    # Load altimetry data #
+    if params.compare_to_self:
+        logger.info("Performing reference self-comparison (altimetry = reference)")
+        altimetry_points = reference_points  # Compare is2 to itself
+    else:
+
+        t_alt = time.perf_counter()
         chunksize = max(1, len(altimetry_files) // (params.max_workers * 4))
-        logger.info("Chunksize %d", chunksize)
+        logger.info(
+            "Loading altimetry data (band=%s, %d workers, chunksize %d)...",
+            getattr(params, "band", "ku"),
+            params.max_workers,
+            chunksize,
+        )
         with ProcessPoolExecutor(max_workers=params.max_workers) as executor:
-            altim_results = list(
+            altim_results = collect_with_progress(
                 executor.map(
                     processor.get_altimetry_data_array, altimetry_files, chunksize=chunksize
-                )
+                ),
+                len(altimetry_files),
+                logger,
+                "altimetry",
             )
-        valid_altim_results = [result for result in altim_results if result is not None]
-        altimetry_points = np.concatenate(valid_altim_results)
+        valid_altim_results = [r for r in altim_results if r is not None and r.size > 0]
+        if not valid_altim_results:
+            logger.error(
+                "No valid altimetry points loaded from %d files (none in area/hemisphere?)",
+                len(altimetry_files),
+            )
+            sys.exit(1)
+        # Different mode/band files can carry different optional add_vars (e.g. HR Ku has
+        # coherence, LR Ku and Ka do not), so concatenate on the union of columns.
+        if len({r.dtype for r in valid_altim_results}) == 1:
+            altimetry_points = np.concatenate(valid_altim_results)
+        else:
+            altimetry_points = concat_altimetry_results(valid_altim_results)
+        # Missing in *some* files is normal; warn only if a requested add_var was found
+        # in NO file at all, which usually means a typo or the wrong band/product.
+        if params.add_vars:
+            present = set(altimetry_points.dtype.names or ())
+            absent = [v for v in params.add_vars if v.rsplit("/", 1)[-1] not in present]
+            if absent:
+                logger.warning(
+                    "Requested --add_vars found in NO altimetry file: %s "
+                    "(check spelling, --band, or product type)",
+                    ", ".join(absent),
+                )
+        logger.info("Loaded %d altimetry points; de-duplicating...", len(altimetry_points))
         unique_indices = np.unique(altimetry_points[["x", "y", "h"]], return_index=True)[1]
         altimetry_points = altimetry_points[unique_indices]
-        logger.info("Loaded altimetry data points, len : %d", len(altimetry_points))
+        logger.info(
+            "  %d unique altimetry points (%.1fs)",
+            len(altimetry_points),
+            time.perf_counter() - t_alt,
+        )
 
     outfile = month_outdir / f"p2p_diffs_{params.area}"
 
     # Get elevation differences #
-    elev_differences = get_elev_differences(params, reference_points, altimetry_points, PREFIX)
+    t_match = time.perf_counter()
+    logger.info(
+        "Matching %d altimetry to %d reference points (radius=%.1fm, maxdiff=%.1fm, %s)...",
+        len(altimetry_points),
+        len(reference_points),
+        params.radius,
+        params.maxdiff,
+        "nearest-only" if params.nearest_only else "all-within-radius",
+    )
+    elev_differences = get_elev_differences(
+        params, reference_points, altimetry_points, PREFIX, nearest_only=params.nearest_only
+    )
+    logger.info(
+        "Found %d matched pairs in %.1fs",
+        len(elev_differences["dh"]),
+        time.perf_counter() - t_match,
+    )
     if params.dem:
+        logger.info("Applying DEM slope correction using %s", params.dem)
         elev_differences = correct_elevation_using_slope(elev_differences, params, logger, PREFIX)
+    if len(elev_differences["dh"]) == 0:
+        logger.error("No matched pairs within radius/maxdiff - nothing to save; exiting")
+        sys.exit(1)
 
     # Convert to lat/lon #
     alt_lats, alt_lons = AREA_OBJ.xy_to_latlon(
@@ -980,9 +1338,17 @@ if __name__ == "__main__":
             save_data[variable] = elev_differences[variable]
 
     np.savez(f"{outfile}.npz", **save_data)
+    logger.info(
+        "Wrote %s.npz (%d points, vars: %s)",
+        outfile,
+        len(save_data["dh"]),
+        ", ".join(save_data.keys()),
+    )
 
     compute_elevation_stats(save_data, prefix=PREFIX, output_file=f"{outfile}_elevation_stats.csv")
+    logger.info("Wrote %s_elevation_stats.csv", outfile)
 
+    logger.info("Generating plots...")
     Polarplot(params.area).plot_points(
         {
             "name": "Difference_in_height_(dh)",
@@ -994,3 +1360,18 @@ if __name__ == "__main__":
     )
     elev_dh_histograms(save_data["dh"], f"{outfile}_dh_histogram.png", bins=params.bins)
     elevation_dh_cumulative_dist(save_data["dh"], f"{outfile}_dh_cumulative_distribution.png")
+
+    # Concise result summary so the key numbers are visible on the console
+    dh_arr = np.asarray(save_data["dh"], dtype=float)
+    logger.info("-" * 72)
+    logger.info(
+        "Done in %.1fs | %d matched points | dh mean=%.3f median=%.3f std=%.3f RMS=%.3f m",
+        time.perf_counter() - t_start,
+        dh_arr.size,
+        float(np.mean(dh_arr)),
+        float(np.median(dh_arr)),
+        float(np.std(dh_arr)),
+        float(np.sqrt(np.mean(dh_arr**2))),
+    )
+    logger.info("Results in %s", month_outdir)
+    logger.info("-" * 72)

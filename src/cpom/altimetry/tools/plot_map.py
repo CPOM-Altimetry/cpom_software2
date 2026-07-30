@@ -949,7 +949,6 @@ def main(args):
                                 vals[vals == fill_value] = np.nan
                             elif isinstance(vals[0], int):
                                 vals[vals == fill_value] = None
-                            log.info("FillValue found: %s", fill_value)
                         except AttributeError as exc:
                             log.debug("No FillValue found for %s : %s", params[i], exc)
 

@@ -2,7 +2,7 @@
 
 area_definition = {
     "use_definitions_from": "antarctica",
-    "background_image": "basic_land",
+    "background_image": "basic_land_black",
     "mapscale": [
         -178.0,  # longitude to position scale bar
         -65.0,  # latitide to position scale bar

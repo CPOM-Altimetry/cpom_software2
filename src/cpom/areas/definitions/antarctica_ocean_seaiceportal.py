@@ -14,7 +14,7 @@ area_definition = {
     # --------------------------------------------
     #    mask from cpom.masks.Mask
     # --------------------------------------------
-    "apply_area_mask_to_data": True,  # filter data using areas cpom.masks.Mask
+    "apply_area_mask_to_data": False,  # filter data using areas cpom.masks.Mask
     "maskname": "antarctica_bedmachine_v2_grid_mask",  # from  cpom.masks.Mask
     "masktype": "grid",
     "basin_numbers": [1],  # [n1,n2,..] if mask allows basin numbers
