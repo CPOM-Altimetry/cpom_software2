@@ -1,0 +1,77 @@
+# ------------------------------------------------------------------------------------------------
+# CryoSat-2 Performance Monitoring (CSQA) : parameter definitions
+#
+# Each parameter produces, for every 30-day cycle and product baseline, one map per area (and per
+# variant and acquisition mode where configured) plus statistics per area/variant/mode.
+#
+#   long_name   : display name (portal menu and plot titles)
+#   description : text shown on the portal parameter page
+#   source      : input product id, as in csqa_config.yaml:products
+#   type        : flag  -> statistics are the % of each flag value
+#                 float -> statistics are n, mean, median, stdev, min, max
+#   variable    : netCDF variable (for parameters without variants)
+#   variants    : alternative variables for the same quantity (ie per retracker)
+#                   label   : name of the variant selector shown in the portal
+#                   options : list of {id, name, variable}
+#   modes       : acquisition mode selections (all, lrm, sar, sarin). Omit for no mode selection
+#   areas       : area ids from csqa_config.yaml:areas
+#   flags       : list of {value, name, color} for flag parameters
+#   units       : units of float parameters
+#   plot        : range [min, max] of the map colour scale, cmap (matplotlib colormap name)
+#   dtype       : numpy dtype used to hold float values (default float32). Use float64 for
+#                 parameters needing more than ~7 significant digits (ie elevations)
+# ------------------------------------------------------------------------------------------------
+
+parameters:
+  acquisition_mode:
+    long_name: "SIRAL Acquisition Mode"
+    description: >-
+      Instrument measurement mode of each 20 Hz measurement, derived from the configuration bits
+      in the L0 data: Low Resolution Mode (LRM), Synthetic Aperture Radar mode (SAR) and SAR
+      Interferometric mode (SARin). The mode is selected on board from the CryoSat-2 geographical
+      mode mask.
+    source: GDR-A
+    type: flag
+    variable: flag_instr_mode_op_20_ku
+    flags:
+      - {value: 1, name: "LRM", color: "#0072b2"}
+      - {value: 2, name: "SAR", color: "#009e73"}
+      - {value: 3, name: "SARin", color: "#d55e00"}
+    areas: [global, north_polar, south_polar]
+
+  surface_type:
+    long_name: "Surface Type"
+    description: >-
+      Four-state surface type mask at the measurement location, computed by combining data from
+      GMT, GlobCover, the MODIS Mosaic of Antarctica and water body outlines from LEGOS.
+    source: GDR-A
+    type: flag
+    variable: surf_type_20_ku
+    flags:
+      - {value: 0, name: "Ocean", color: "#0072b2"}
+      - {value: 1, name: "Lake/Enclosed Sea", color: "#56b4e9"}
+      - {value: 2, name: "Ice", color: "#cc79a7"}
+      - {value: 3, name: "Land", color: "#e69f00"}
+    areas: [global, north_polar, south_polar]
+
+  backscatter:
+    long_name: "Backscatter (Sigma0)"
+    description: >-
+      Backscatter coefficient of each 20 Hz measurement for each L2 retracker, corrected for
+      instrument effects and including a system bias. Retracker 1 is the Ocean CFI retracker
+      (LRM) or OCOG applied to an LRM-like convolved waveform (SAR, SARin). Retrackers 2
+      (UCL land ice) and 3 (OCOG) are only used in LRM mode.
+    source: GDR-A
+    type: float
+    units: dB
+    variants:
+      label: "Retracker"
+      options:
+        - {id: rtk1, name: "Retracker 1", variable: sig0_1_20_ku}
+        - {id: rtk2, name: "Retracker 2", variable: sig0_2_20_ku}
+        - {id: rtk3, name: "Retracker 3", variable: sig0_3_20_ku}
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 35.0]
+      cmap: RdYlBu_r

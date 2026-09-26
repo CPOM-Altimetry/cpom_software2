@@ -195,6 +195,11 @@ class Polarplot:
               "max_plot_range": None,           # Optional: Max range for colorbar
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
               "plot_alpha": 1.0,                # Optional: Marker transparency (0 to 1)
+              "stats_vals": None,               # Optional: values used for the displayed stats
+                                                # and flag percentages instead of the plotted
+                                                # vals (ie full resolution values when only a
+                                                # subsample is plotted). Must already be
+                                                # filtered for area, NaN and fill values.
           }
           ```
 
@@ -824,7 +829,10 @@ class Polarplot:
                                 data_set.get("units", "no units"),
                             )
 
-                            self.draw_stats(cbar, vals)
+                            stats_vals = data_set.get("stats_vals")
+                            self.draw_stats(
+                                cbar, vals if stats_vals is None else np.asarray(stats_vals)
+                            )
 
                         if self.thisarea.show_histograms:
                             self.draw_histograms(
@@ -1718,10 +1726,16 @@ class Polarplot:
 
         number_of_each_flag = []
         percent_of_each_flag = []
-        total = vals.size
+
+        # values used to calculate flag percentages (optionally full resolution values
+        # when only a subsample of vals is plotted)
+        stats_vals = data_set.get("stats_vals")
+        pct_vals = vals if stats_vals is None else np.asarray(stats_vals)
+        total = pct_vals.size
 
         for flag_index in range(len(flag_names)):
             flagindices = np.flatnonzero(vals == flag_values[flag_index])
+            n_flag = np.count_nonzero(pct_vals == flag_values[flag_index])
             if flagindices.size > 0:
                 ax.scatter(
                     lons[flagindices],
@@ -1735,9 +1749,9 @@ class Polarplot:
                     zorder=20,
                 )
 
-            number_of_each_flag.append(flagindices.size)
+            number_of_each_flag.append(n_flag)
             if total > 0:
-                percent_of_each_flag.append(100.0 * flagindices.size / total)
+                percent_of_each_flag.append(100.0 * n_flag / total)
             else:
                 percent_of_each_flag.append(0.0)
         number_of_flags = len(flag_values)
@@ -2510,7 +2524,7 @@ class Polarplot:
         # EPSG:3395: World Mercator/ WGS 84
         elif self.thisarea.epsg_number == 3395:
             dataprj = ccrs.epsg("3395")
-            if self.thisarea.name == "global":
+            if "global" in (self.thisarea.name, *self.thisarea.base_area_names):
                 this_projection = ccrs.PlateCarree()
             else:
                 this_projection = ccrs.Mercator()

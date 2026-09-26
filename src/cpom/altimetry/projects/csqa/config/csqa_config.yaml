@@ -1,0 +1,89 @@
+# ------------------------------------------------------------------------------------------------
+# CryoSat-2 Performance Monitoring (CSQA) : global configuration
+#
+# Used by the CSQA QCV processing tools in cpom.altimetry.projects.csqa
+# Environment variables in path values are expanded (ie $HOME/data or ${CSQA_DATA_DIR})
+#
+# An alternative config file can be selected with the --config command line option or the
+# CSQA_CONFIG environment variable.
+# ------------------------------------------------------------------------------------------------
+
+# QA data takes: 30-day sub-cycles numbered from 1, starting at 00:00 UTC on mission_start_date
+cycles:
+  mission_start_date: "2010-10-18"
+  cycle_length_days: 30
+
+# Product baselines processed and displayed by default (baseline character in product filenames)
+baselines: [E, F]
+
+# Input product archives. Each directory in 'dirs' contains <YYYY>/<MM> sub-directories.
+products:
+  GDR-A:
+    long_name: "L2 GDR-A (all acquisition modes)"
+    dirs:
+      - /raid6/cpdata/SATS/RA/CRY/L2/GDR-A
+    file_glob: "CS_*_SIR_GDR_2__*.nc"
+  L2I:
+    long_name: "L2i (LRM, SAR, SARin)"
+    dirs:
+      - /raid6/cpdata/SATS/RA/CRY/L2I/LRM
+      - /raid6/cpdata/SATS/RA/CRY/L2I/SAR-A
+      - /raid6/cpdata/SATS/RA/CRY/L2I/SIN
+    file_glob: "CS_*_SIR_*I2__*.nc"
+
+# When the same product granule exists more than once for a baseline, the highest version is
+# used, and for equal versions the processing stage listed first here is preferred
+stage_preference: ["LTA_", "OFFL", "NRT_"]
+
+# Coordinates used when a parameter variable has no usable 'coordinates' attribute
+# (Baseline-E GDR-A products only contain the POCA coordinates)
+default_coordinates:
+  lat: lat_poca_20_ku
+  lon: lon_poca_20_ku
+
+# Output directory for plots, statistics and the portal index (outside the web root)
+output_dir: /raid6/www/csqa_data
+
+# Parameter definitions (path relative to this file's directory, or absolute)
+parameters_file: csqa_parameters.yaml
+
+# Areas for which plots and statistics are produced.
+#   polarplot_area : cpom.areas.definitions area used by Polarplot
+#   lat_min, lat_max : measurement latitude range selected for the area's statistics and plots
+areas:
+  global:
+    long_name: "Global"
+    polarplot_area: global_csqa
+    lat_min: -90.0
+    lat_max: 90.0
+  north_polar:
+    long_name: "North Polar (>60N)"
+    polarplot_area: north_polar_csqa
+    lat_min: 60.0
+    lat_max: 90.0
+  south_polar:
+    long_name: "South Polar (<60S)"
+    polarplot_area: south_polar_csqa
+    lat_min: -90.0
+    lat_max: -60.0
+
+# SIRAL acquisition modes, used to select parameter values per mode
+modes:
+  variable: flag_instr_mode_op_20_ku
+  values:
+    lrm: 1
+    sar: 2
+    sarin: 3
+  labels:
+    all: "All modes"
+    lrm: "LRM"
+    sar: "SAR"
+    sarin: "SARin"
+
+plots:
+  image_format: webp
+  dpi: 85
+  webp_quality: 80
+  # maximum number of points drawn in each map. Larger selections are plotted as a regular
+  # along-track subsample (statistics always use every record)
+  max_points: 2000000

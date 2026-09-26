@@ -185,11 +185,15 @@ class Area:
 
         area_definition = module.area_definition.copy()
 
+        # names of areas this area inherits definitions from (via use_definitions_from)
+        self.base_area_names: list[str] = []
+
         secondary_area_name = area_definition.get("use_definitions_from", None)
         while secondary_area_name is not None:
             if "use_definitions_from" in area_definition:
                 del area_definition["use_definitions_from"]
             log.info("loading secondary area %s", secondary_area_name)
+            self.base_area_names.append(secondary_area_name)
             try:
                 module2 = importlib.import_module(f"cpom.areas.definitions.{secondary_area_name}")
             except ImportError as exc:

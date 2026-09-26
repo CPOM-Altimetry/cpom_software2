@@ -7,6 +7,12 @@
 # and hillshade), encodes AV1 (webm), VP9 (webm) and H264 (mp4) videos into
 # VIZ_DIR/videos, and copies the newest frame as a last_frame poster image.
 #
+# Also copies the static parameter plots (basin_id, surface_type: identical in
+# every product so plotted from the newest product only) into VIZ_DIR/videos
+# under fixed names (last_frame[_hs].<param>.webp), and writes a
+# manifest.json describing the video timeline, so the portal never has to
+# parse product dates from filenames.
+#
 # Unlike the annually-spaced AIS CCI products, the cumulative products are not
 # evenly spaced in time, so a fixed input framerate would distort the
 # animation timeline. Instead each frame is shown for a duration proportional
@@ -42,6 +48,7 @@ case "$PRODUCT" in
 esac
 SECONDS_PER_YEAR=${SECONDS_PER_YEAR:-0.5}
 LAST_HOLD=${LAST_HOLD:-2.0}
+STATIC_PARAMS=(basin_id surface_type)
 
 command -v ffmpeg >/dev/null || { echo "ffmpeg not found on PATH" >&2; exit 1; }
 command -v python >/dev/null || { echo "python not found on PATH" >&2; exit 1; }
@@ -89,6 +96,52 @@ for i, f in enumerate(files):
 # repeat the last frame: the concat demuxer needs it for the final duration
 # to be honoured
 print(f"file '{files[-1]}'")
+EOF
+}
+
+# Write a JSON manifest of the video timeline to $1, so the portal can label
+# the seek bar without parsing product dates itself. The timeline runs between
+# the end dates (YYYYMMDD) in the first and last product names of the main
+# (non-hillshade, non-uncertainty) frame sequence.
+write_manifest() {
+  python - "$VIZ_DIR" "${TYPES[0]}" "$SECONDS_PER_YEAR" "$LAST_HOLD" > "$1" <<'EOF'
+import glob
+import json
+import re
+import sys
+from datetime import datetime, timezone
+
+viz_dir, main_type, secs_per_year, last_hold = (
+    sys.argv[1],
+    sys.argv[2],
+    float(sys.argv[3]),
+    float(sys.argv[4]),
+)
+files = sorted(glob.glob(f"{viz_dir}/CPOM-AIS-L3C-D?-MULTIMISSION-5KM-*-{main_type}.webp"))
+if not files:
+    sys.exit(f"no *-{main_type}.webp frames found in {viz_dir}")
+
+end_dates = []
+for f in files:
+    match = re.search(r"(\d{8})-(\d{8})", f.rsplit("/", maxsplit=1)[-1])
+    if not match:
+        sys.exit(f"no YYYYMMDD-YYYYMMDD dates in frame name {f}")
+    end_dates.append(datetime.strptime(match.group(2), "%Y%m%d"))
+
+print(
+    json.dumps(
+        {
+            "product": main_type,
+            "first_product_end_date": end_dates[0].strftime("%Y-%m-%d"),
+            "last_product_end_date": end_dates[-1].strftime("%Y-%m-%d"),
+            "num_products": len(files),
+            "seconds_per_year": secs_per_year,
+            "last_hold": last_hold,
+            "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+        indent=2,
+    )
+)
 EOF
 }
 
@@ -165,6 +218,33 @@ for type in "${TYPES[@]}"; do
     cp "$last_frame" "$VIDEO_DIR/last_frame${hstag}.${type}.webp"
   done
 done
+
+# copy the static parameter plots (newest by name; the dates in the plot
+# names are fixed width so glob order is chronological) under fixed names
+for param in "${STATIC_PARAMS[@]}"; do
+  for hs in "" "-hs"; do
+    hstag=""
+    if [ -n "$hs" ]; then
+      hstag="_hs"
+    fi
+    latest=$(ls "$VIZ_DIR"/CPOM-AIS-L3C-D?-MULTIMISSION-5KM-*-"${param}${hs}".webp 2>/dev/null \
+      | tail -1 || true)
+    if [ -z "$latest" ]; then
+      echo "WARNING: no ${param}${hs} plot found in $VIZ_DIR, skipping" >&2
+      continue
+    fi
+    echo "==> copying $(basename "$latest") to last_frame${hstag}.${param}.webp"
+    cp "$latest" "$VIDEO_DIR/last_frame${hstag}.${param}.webp"
+  done
+done
+
+# write the video timeline manifest for the portal
+if write_manifest "$VIDEO_DIR/manifest.json"; then
+  echo "==> wrote $VIDEO_DIR/manifest.json"
+else
+  echo "WARNING: could not write manifest.json" >&2
+  rm -f "$VIDEO_DIR/manifest.json"
+fi
 
 # encodes run in the background so a failed encode does not stop the script:
 # check all expected outputs now exist
