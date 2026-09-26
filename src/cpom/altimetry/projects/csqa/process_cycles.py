@@ -15,11 +15,24 @@ Examples:
     # the cycle containing a date, baseline F, backscatter only
     python process_cycles.py -d 2026-08-01 -b F -p backscatter
 
-    # routine update (ie from cron): reprocess the latest 3 cycles if their input files changed
-    python process_cycles.py --latest 3 --update --workers 3
+    # routine update (ie from cron): reprocess the latest 3 cycles that can have data
+    # (the latest being the cycle containing today - data_latency_days) if their input files
+    # changed, using up to 64 processes
+    python process_cycles.py --latest 3 --update --workers 64
 
-    # full mission reprocessing using 8 parallel processes
-    python process_cycles.py --all --workers 8
+    # full mission reprocessing using 128 processes
+    python process_cycles.py --all --workers 128
+
+Parallel processing:
+
+    --workers is the total number of processes used. Cycles (per baseline) are processed in
+    parallel, and within each cycle the map plots are rendered in parallel by plot worker
+    processes. By default the workers are shared between the cycles that need processing:
+    ie with --workers 64 and 2 cycles to process, each cycle uses 32 plot workers, while with
+    200 cycles to process, 64 cycles are processed at a time, each rendering its plots in turn.
+    Use --plot_workers to set the plot workers per cycle explicitly.
+    Memory: each cycle process holds one parameter of a full cycle (up to ~2-3 GB), each plot
+    worker ~0.5 GB.
 """
 
 import argparse
@@ -33,27 +46,16 @@ from datetime import datetime
 from cpom.altimetry.projects.csqa.build_portal_index import build_portal_index
 from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, load_config
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
+from cpom.altimetry.projects.csqa.log_setup import setup_logging
 from cpom.altimetry.projects.csqa.processing import (
     CycleResult,
     find_cycle_files,
+    plan_cycle,
     process_cycle,
 )
 from cpom.altimetry.projects.csqa.product_files import coverage_days
 
 log = logging.getLogger(__name__)
-
-LOG_FORMAT = "[%(levelname)s] %(asctime)s %(processName)s %(name)s: %(message)s"
-
-
-def setup_logging(level: int, log_file: str | None = None):
-    """configure logging to stderr and optionally a log file"""
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if log_file:
-        handlers.append(logging.FileHandler(log_file))
-    logging.basicConfig(level=level, format=LOG_FORMAT, handlers=handlers, force=True)
-    # quieten verbose third party / plotting modules
-    for name in ("matplotlib", "PIL", "cpom.areas", "cpom.backgrounds", "fiona", "rasterio"):
-        logging.getLogger(name).setLevel(max(level, logging.WARNING))
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -76,9 +78,19 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     )
     select.add_argument("-d", "--date", help="process the cycle containing this date (YYYY-MM-DD)")
     select.add_argument(
-        "-l", "--latest", type=int, metavar="N", help="the latest N cycles (up to today)"
+        "-l",
+        "--latest",
+        type=int,
+        metavar="N",
+        help="the latest N cycles, ending with the latest cycle that can have data: the cycle "
+        "containing (today - csqa_config.yaml cycles:data_latency_days)",
     )
-    select.add_argument("-a", "--all", action="store_true", help="all cycles up to today")
+    select.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="all cycles up to the latest cycle that can have data",
+    )
 
     parser.add_argument(
         "--config", help="CSQA config file (default: $CSQA_CONFIG or config/csqa_config.yaml)"
@@ -106,7 +118,17 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--no_plots", action="store_true", help="only calculate statistics (no map plots)"
     )
     parser.add_argument(
-        "-w", "--workers", type=int, default=1, help="number of cycles processed in parallel"
+        "-w",
+        "--workers",
+        type=int,
+        default=1,
+        help="total number of processes, shared between cycles processed in parallel and the "
+        "plot workers of each cycle (see Parallel processing below)",
+    )
+    parser.add_argument(
+        "--plot_workers",
+        type=int,
+        help="plot worker processes per cycle (default: workers / number of cycles to process)",
     )
     parser.add_argument(
         "--dry_run",
@@ -132,7 +154,7 @@ def select_cycles(parsed: argparse.Namespace, calendar: CycleCalendar) -> list[i
         return [calendar.cycle_for_datetime(datetime.strptime(parsed.date, "%Y-%m-%d"))]
     if parsed.latest:
         return calendar.latest_cycles(parsed.latest)
-    return list(range(1, calendar.current_cycle() + 1))
+    return list(range(1, calendar.latest_available_cycle() + 1))
 
 
 def validate_selection(parsed: argparse.Namespace, cfg: CsqaConfig) -> list[str]:
@@ -151,12 +173,46 @@ def validate_selection(parsed: argparse.Namespace, cfg: CsqaConfig) -> list[str]
     for baseline in parsed.baselines or []:
         if len(baseline) != 1 or not baseline.isalpha():
             errors.append(f"invalid baseline {baseline}: must be a single letter")
+    if parsed.workers < 1:
+        errors.append("--workers must be at least 1")
+    if parsed.plot_workers is not None and parsed.plot_workers < 1:
+        errors.append("--plot_workers must be at least 1")
     return errors
+
+
+def max_plots_per_cycle(cfg: CsqaConfig, param_ids: list[str], area_ids: list[str] | None):
+    """the largest number of map plots a cycle can have"""
+    return sum(
+        len(p.variants)
+        * len(p.mode_options)
+        * len([a for a in p.areas if area_ids is None or a in area_ids])
+        for p in (cfg.parameters[pid] for pid in param_ids)
+    )
+
+
+def allocate_workers(
+    workers: int, n_tasks: int, plot_workers: int | None, max_plots: int
+) -> tuple[int, int]:
+    """Share the worker processes between cycles and their plot workers
+
+    Args:
+        workers (int): total number of processes
+        n_tasks (int): number of cycle/baseline tasks to process
+        plot_workers (int|None): plot workers per cycle requested, or None to share
+        max_plots (int): the largest number of map plots of a cycle
+
+    Returns:
+        tuple[int, int]: (number of cycles processed in parallel, plot workers per cycle)
+    """
+    n_cycle_procs = max(1, min(workers, n_tasks))
+    if plot_workers is None:
+        plot_workers = min(max(1, workers // n_cycle_procs), max(1, max_plots))
+    return n_cycle_procs, plot_workers
 
 
 def dry_run(cfg: CsqaConfig, cycles: list[int], baselines: list[str], param_ids: list[str]):
     """print the input files that each cycle would use"""
-    calendar = CycleCalendar(cfg.mission_start_date, cfg.cycle_length_days)
+    calendar = cfg.calendar()
     sources = {cfg.parameters[p].source for p in param_ids}
     for cycle in cycles:
         start, end = calendar.cycle_bounds(cycle)
@@ -180,15 +236,18 @@ def run_task(  # pylint: disable=too-many-arguments,too-many-positional-argument
     area_ids: list[str] | None,
     make_plots: bool,
     update: bool,
+    plot_workers: int,
     log_level: int,
     log_file: str | None,
 ) -> CycleResult:
-    """process one cycle/baseline (run in a worker process when workers > 1)"""
+    """process one cycle/baseline (run in a worker process when cycles run in parallel)"""
     if multiprocessing.current_process().name != "MainProcess":
         setup_logging(log_level, log_file)
     try:
         cfg = load_config(config_file)
-        return process_cycle(cfg, cycle, baseline, param_ids, area_ids, make_plots, update)
+        return process_cycle(
+            cfg, cycle, baseline, param_ids, area_ids, make_plots, update, plot_workers
+        )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.getLogger(__name__).exception("cycle %d baseline %s failed", cycle, baseline)
         return CycleResult(cycle, baseline, "error", message=str(exc))
@@ -211,40 +270,71 @@ def main(args: list[str] | None = None) -> int:
             log.error(error)
         return 2
 
-    calendar = CycleCalendar(cfg.mission_start_date, cfg.cycle_length_days)
+    calendar = cfg.calendar()
     cycles = select_cycles(parsed, calendar)
     baselines = [b.upper() for b in (parsed.baselines or cfg.baselines)]
     param_ids = parsed.params or list(cfg.parameters)
+    make_plots = not parsed.no_plots
+    if parsed.latest or parsed.all:
+        log.info(
+            "latest cycle that can have data (today - %g days): %d",
+            cfg.data_latency_days,
+            calendar.latest_available_cycle(),
+        )
 
     if parsed.dry_run:
         dry_run(cfg, cycles, baselines, param_ids)
         return 0
 
-    tasks = [(cycle, baseline) for cycle in cycles for baseline in baselines]
-    log.info(
-        "processing %d cycles (%d-%d) for baselines %s, parameters %s, %d workers",
-        len(cycles),
-        cycles[0],
-        cycles[-1],
-        baselines,
-        param_ids,
-        parsed.workers,
-    )
+    # plan: skip cycles without input files, or unchanged in update mode, without starting
+    # worker processes for them
     t_start = time.time()
+    results: list[CycleResult] = []
+    tasks = []
+    for cycle in cycles:
+        for baseline in baselines:
+            status, _ = plan_cycle(cfg, cycle, baseline, param_ids, make_plots, parsed.update)
+            if status == "process":
+                tasks.append((cycle, baseline))
+            else:
+                results.append(CycleResult(cycle, baseline, status))
+                _log_result(results[-1])
+
+    n_cycle_procs, plot_workers = allocate_workers(
+        parsed.workers,
+        len(tasks),
+        parsed.plot_workers,
+        max_plots_per_cycle(cfg, param_ids, parsed.areas),
+    )
+    if not tasks:
+        log.info("nothing to process")
+    else:
+        log.info(
+            "processing %d of %d cycle/baseline selections (cycles %d-%d, baselines %s, "
+            "parameters %s): %d in parallel, %d plot workers each",
+            len(tasks),
+            len(cycles) * len(baselines),
+            cycles[0],
+            cycles[-1],
+            baselines,
+            param_ids,
+            n_cycle_procs,
+            plot_workers if make_plots else 0,
+        )
     task_args = (
         param_ids,
         parsed.areas,
-        not parsed.no_plots,
+        make_plots,
         parsed.update,
+        plot_workers,
         log_level,
         parsed.log_file,
     )
 
-    results: list[CycleResult] = []
-    if parsed.workers > 1 and len(tasks) > 1:
+    if n_cycle_procs > 1:
         # spawn: fresh worker processes (safe with matplotlib/netCDF on all platforms)
         ctx = multiprocessing.get_context("spawn")
-        with ProcessPoolExecutor(max_workers=parsed.workers, mp_context=ctx) as pool:
+        with ProcessPoolExecutor(max_workers=n_cycle_procs, mp_context=ctx) as pool:
             futures = [
                 pool.submit(run_task, cfg.config_file, cycle, baseline, *task_args)
                 for cycle, baseline in tasks

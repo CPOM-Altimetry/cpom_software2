@@ -39,3 +39,15 @@ def test_cycles_between_and_latest():
     assert CAL.latest_cycles(3, now) == [193, 194, 195]
     # latest cycles never go before cycle 1
     assert CycleCalendar(datetime(2026, 9, 1), 30).latest_cycles(5, now) == [1]
+
+
+def test_data_latency():
+    """the latest cycles end with the cycle containing (now - data latency)"""
+    cal = CycleCalendar(datetime(2010, 10, 18), 30, data_latency_days=35)
+    now = datetime(2026, 9, 26)  # in cycle 195, now - 35 days = 22-Aug-2026 in cycle 193
+    assert cal.current_cycle(now) == 195
+    assert cal.latest_available_cycle(now) == 193
+    assert cal.latest_cycles(3, now) == [191, 192, 193]
+    # 35 days after the end of cycle 193 (25-Aug-2026), cycle 194 can have data
+    assert cal.latest_available_cycle(datetime(2026, 9, 29)) == 194
+    assert cal.latest_available_cycle(datetime(2010, 10, 20)) == 1

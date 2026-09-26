@@ -166,6 +166,7 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
         "software_version": __version__,
         "mission_start_date": cfg.mission_start_date.strftime("%Y-%m-%d"),
         "cycle_length_days": cfg.cycle_length_days,
+        "data_latency_days": cfg.data_latency_days,
         "image_format": cfg.image_format,
         "areas": [{"id": a.id, "long_name": a.long_name} for a in cfg.areas.values()],
         "modes": [{"id": k, "label": v} for k, v in cfg.mode_labels.items()],

@@ -22,8 +22,14 @@ Example:
 
 ```
 python process_cycles.py --cycles 193 --baselines F
-python process_cycles.py --latest 3 --update --workers 4     # ie from cron
+python process_cycles.py --latest 3 --update --workers 64    # ie from cron
+python process_cycles.py --all --workers 128                 # full mission
 ```
+
+`--latest` and `--all` end with the latest cycle that can have data: the cycle containing
+(today - `cycles:data_latency_days`, 35 days by default). `--workers` is the total number of
+processes, shared between cycles processed in parallel and the plot worker processes rendering
+each cycle's maps in parallel.
 """
 
 __version__ = "1.0.0"

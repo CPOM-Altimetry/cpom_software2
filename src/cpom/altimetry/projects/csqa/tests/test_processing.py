@@ -9,6 +9,7 @@ import os
 import pytest
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config
+from cpom.altimetry.projects.csqa.process_cycles import allocate_workers
 from cpom.altimetry.projects.csqa.process_cycles import main as process_cycles_main
 from cpom.altimetry.projects.csqa.tests.conftest import write_test_config
 
@@ -33,9 +34,10 @@ def one_file_config(tmp_path):
 def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     """statistics, plots and the portal index are produced for a cycle"""
     cfg = load_config(one_file_config)
+    # maps rendered by a pool of 2 plot worker processes
     status = process_cycles_main(
         ["-c", "193", "-b", "F", "--config", one_file_config, "--areas", "north_polar"]
-        + ["-p", "acquisition_mode"]
+        + ["south_polar", "-p", "acquisition_mode", "--plot_workers", "2"]
     )
     assert status == 0
     status = process_cycles_main(
@@ -52,11 +54,15 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     # flag statistics and plot of the processed area only
     with open(os.path.join(cdir, "stats", "acquisition_mode.json"), encoding="utf-8") as fh:
         mode_stats = json.load(fh)
-    assert [r["area"] for r in mode_stats["rows"]] == ["north_polar"]
-    row = mode_stats["rows"][0]
-    assert row["n_valid"] > 0
-    assert abs(sum(row["pct"].values()) - 100.0) < 0.01
-    assert os.path.isfile(os.path.join(cdir, "plots", "acquisition_mode", row["plot"]))
+    assert [r["area"] for r in mode_stats["rows"]] == ["north_polar", "south_polar"]
+    for row in mode_stats["rows"]:
+        assert row["n_valid"] > 0
+        assert abs(sum(row["pct"].values()) - 100.0) < 0.01
+        assert row["plot_step"] == 1
+        assert os.path.isfile(os.path.join(cdir, "plots", "acquisition_mode", row["plot"]))
+        assert os.path.isfile(
+            os.path.join(cdir, "plots", "acquisition_mode", "thumbs", row["plot"])
+        )
 
     # float statistics per retracker, mode and area. Retracker 2 is only used in LRM mode
     with open(os.path.join(cdir, "stats", "backscatter.json"), encoding="utf-8") as fh:
@@ -99,3 +105,16 @@ def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name
     cfg = load_config(one_file_config)
     assert process_cycles_main(["-c", "100", "--config", one_file_config, "--no_index"]) == 0
     assert not os.path.exists(cfg.output_dir)
+
+
+def test_allocate_workers():
+    """worker processes are shared between the cycles to process and their plot workers"""
+    # few cycles: many plot workers each (limited by the plots of a cycle)
+    assert allocate_workers(64, 2, None, 42) == (2, 32)
+    assert allocate_workers(64, 1, None, 42) == (1, 42)
+    # many cycles: one process per cycle
+    assert allocate_workers(64, 390, None, 42) == (64, 1)
+    assert allocate_workers(8, 3, None, 42) == (3, 2)
+    # explicit plot workers, and nothing to process
+    assert allocate_workers(64, 390, 4, 42) == (64, 4)
+    assert allocate_workers(64, 0, None, 42) == (1, 42)

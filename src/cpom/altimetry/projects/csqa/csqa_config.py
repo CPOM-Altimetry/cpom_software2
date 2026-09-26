@@ -16,6 +16,8 @@ from datetime import datetime
 
 import yaml  # type: ignore[import-untyped]
 
+from cpom.altimetry.projects.csqa.cycles import CycleCalendar
+
 DEFAULT_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config", "csqa_config.yaml")
 
 PARAM_TYPES = ("flag", "float")
@@ -104,6 +106,7 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     config_file: str
     mission_start_date: datetime
     cycle_length_days: int
+    data_latency_days: float
     baselines: list[str]
     products: dict[str, ProductConfig]
     stage_preference: list[str]
@@ -119,6 +122,12 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     webp_quality: int
     max_points: int
     parameters: dict[str, ParameterConfig]
+
+    def calendar(self) -> CycleCalendar:
+        """the cycle calendar of this configuration"""
+        return CycleCalendar(
+            self.mission_start_date, self.cycle_length_days, self.data_latency_days
+        )
 
 
 def sanitize_key(name: str) -> str:
@@ -310,6 +319,7 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         config_file=config_file,
         mission_start_date=mission_start,
         cycle_length_days=int(cycles_cfg.get("cycle_length_days", 30)),
+        data_latency_days=float(cycles_cfg.get("data_latency_days", 0)),
         baselines=[str(b).upper() for b in cfg.get("baselines", [])],
         products=products,
         stage_preference=[str(s) for s in cfg.get("stage_preference", [])],

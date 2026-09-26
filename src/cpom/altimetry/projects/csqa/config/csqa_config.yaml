@@ -12,6 +12,10 @@
 cycles:
   mission_start_date: "2010-10-18"
   cycle_length_days: 30
+  # days after acquisition before input products are available (GDR-A latency). The latest
+  # cycle that can have data is the one containing (today - data_latency_days): --latest and
+  # --all process cycles up to that cycle
+  data_latency_days: 35
 
 # Product baselines processed and displayed by default (baseline character in product filenames)
 baselines: [E, F]

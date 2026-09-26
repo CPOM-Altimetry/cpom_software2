@@ -12,16 +12,19 @@ from datetime import datetime, timedelta, timezone
 class CycleCalendar:
     """Convert between CSQA cycle numbers and dates"""
 
-    def __init__(self, start_date: datetime, length_days: int = 30):
+    def __init__(self, start_date: datetime, length_days: int = 30, data_latency_days: float = 0):
         """
         Args:
             start_date (datetime): start (00:00 UTC) of cycle 1
             length_days (int): cycle length in days
+            data_latency_days (float): days after acquisition before input products are
+                                       available
         """
         if length_days < 1:
             raise ValueError("cycle length must be at least 1 day")
         self.start_date = start_date
         self.length = timedelta(days=length_days)
+        self.data_latency = timedelta(days=data_latency_days)
 
     def cycle_start(self, cycle: int) -> datetime:
         """start time of a cycle (inclusive)"""
@@ -60,7 +63,14 @@ class CycleCalendar:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
         return self.cycle_for_datetime(now)
 
+    def latest_available_cycle(self, now: datetime | None = None) -> int:
+        """latest cycle that can have available input data: the cycle containing
+        (now - data latency)"""
+        if now is None:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+        return self.cycle_for_datetime(max(now - self.data_latency, self.start_date))
+
     def latest_cycles(self, n_cycles: int, now: datetime | None = None) -> list[int]:
-        """the latest n_cycles cycles, ending with the current cycle"""
-        current = self.current_cycle(now)
-        return list(range(max(1, current - n_cycles + 1), current + 1))
+        """the latest n_cycles cycles, ending with the latest cycle that can have data"""
+        latest = self.latest_available_cycle(now)
+        return list(range(max(1, latest - n_cycles + 1), latest + 1))

@@ -92,6 +92,27 @@ def calculate_mad(values: np.ndarray):
     return mad
 
 
+def calculate_display_stats(values: np.ndarray) -> dict:
+    """Calculate the statistics drawn by Polarplot.draw_stats()
+
+    Args:
+        values (np.ndarray): values (after NaN and fill value filtering)
+
+    Returns:
+        dict: nvals, min, max, mean, median, std, mad
+    """
+    values_np = np.asarray(values)
+    return {
+        "nvals": int(values_np.size),
+        "min": float(np.min(values_np)),
+        "max": float(np.max(values_np)),
+        "mean": float(np.mean(values_np)),
+        "median": float(np.median(values_np)),
+        "std": float(np.std(values_np)),
+        "mad": float(calculate_mad(values_np)),
+    }
+
+
 @dataclass
 class Annotation:
     """
@@ -195,11 +216,12 @@ class Polarplot:
               "max_plot_range": None,           # Optional: Max range for colorbar
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
               "plot_alpha": 1.0,                # Optional: Marker transparency (0 to 1)
-              "stats_vals": None,               # Optional: values used for the displayed stats
-                                                # and flag percentages instead of the plotted
-                                                # vals (ie full resolution values when only a
-                                                # subsample is plotted). Must already be
-                                                # filtered for area, NaN and fill values.
+              "stats": None,                    # Optional: statistics drawn instead of those
+                                                # of the plotted vals (ie of the full resolution
+                                                # values when only a subsample is plotted). A dict
+                                                # as returned by calculate_display_stats()
+              "flag_percents": None,            # Optional: % of each flag value (in flag_values
+                                                # order) drawn instead of those of the plotted vals
           }
           ```
 
@@ -829,10 +851,7 @@ class Polarplot:
                                 data_set.get("units", "no units"),
                             )
 
-                            stats_vals = data_set.get("stats_vals")
-                            self.draw_stats(
-                                cbar, vals if stats_vals is None else np.asarray(stats_vals)
-                            )
+                            self.draw_stats(cbar, vals, data_set.get("stats"))
 
                         if self.thisarea.show_histograms:
                             self.draw_histograms(
@@ -1000,7 +1019,7 @@ class Polarplot:
 
         return fx, fy
 
-    def draw_stats(self, cbar, vals: np.ndarray):
+    def draw_stats(self, cbar, vals: np.ndarray, stats: dict | None = None):
         """plot stats info (min,max,mean,std,MAD,nvals) of vals
            positioned around colorbar axes
 
@@ -1008,15 +1027,22 @@ class Polarplot:
             cbar (Axes): colorbar axes instance
             vals (np.ndarray): values array (after Nan filtering) used to calculate and draw stats
                                info
+            stats (dict|None): precomputed stats to draw instead of those of vals, as returned by
+                               calculate_display_stats()
         """
 
         if self.thisarea.show_stats is False:
             return
+
+        if stats is None:
+            stats = calculate_display_stats(vals)
+        s_nvals, s_min, s_max = stats["nvals"], stats["min"], stats["max"]
+        s_mean, s_median, s_std, s_mad = stats["mean"], stats["median"], stats["std"], stats["mad"]
         # Step 1: Get the colorbar's bounding box in figure coordinates
         bbox = cbar.ax.get_window_extent().transformed(plt.gcf().transFigure.inverted())
 
         if self.thisarea.position_stats_manually:
-            nvals_str = r"$\bf{nvals} $" + f"={len(vals)}"
+            nvals_str = r"$\bf{nvals} $" + f"={s_nvals}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.nvals_position[0],
                 bbox.y1 + self.thisarea.nvals_position[1],
@@ -1024,7 +1050,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            std_str = r"$\bf{stdev} $" + f"={np.std(vals):.2f}"
+            std_str = r"$\bf{stdev} $" + f"={s_std:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.stdev_position[0],
                 bbox.y1 + self.thisarea.stdev_position[1],
@@ -1032,7 +1058,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            min_str = r"$\bf{min} $" + f"={np.min(vals):.2f}"
+            min_str = r"$\bf{min} $" + f"={s_min:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.min_position[0],
                 bbox.y1 + self.thisarea.min_position[1],
@@ -1040,7 +1066,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            max_str = r"$\bf{max} $" + f"={np.max(vals):.2f}"
+            max_str = r"$\bf{max} $" + f"={s_max:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.max_position[0],
                 bbox.y1 + self.thisarea.max_position[1],
@@ -1048,7 +1074,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            mad_str = r"$\bf{MAD} $" + f"={calculate_mad(vals):.2f}"
+            mad_str = r"$\bf{MAD} $" + f"={s_mad:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.mad_position[0],
                 bbox.y1 + self.thisarea.mad_position[1],
@@ -1056,7 +1082,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            median_str = r"$\bf{median} $" + f"={np.median(vals):.2f}"
+            median_str = r"$\bf{median} $" + f"={s_median:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.median_position[0],
                 bbox.y1 + self.thisarea.median_position[1],
@@ -1064,7 +1090,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            mean_str = r"$\bf{mean} $" + f"={np.mean(vals):.2f}"
+            mean_str = r"$\bf{mean} $" + f"={s_mean:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.mean_position[0],
                 bbox.y1 + self.thisarea.mean_position[1],
@@ -1082,13 +1108,13 @@ class Polarplot:
             text_x = bbox.x0 + (bbox.width / 2)  # Horizontally centered
 
             # Step 3: Add text to the top and bottom of the colorbar
-            min_str = r"$\bf{min} $" + f"={np.min(vals):.2f}"
-            max_str = r"$\bf{max} $" + f"={np.max(vals):.2f}"
-            mean_str = r"$\bf{mean} $" + f"={np.mean(vals):.2f}"
-            median_str = r"$\bf{median} $" + f"={np.median(vals):.2f}"
-            std_str = r"$\bf{stdev} $" + f"={np.std(vals):.2f}"
-            mad_str = r"$\bf{MAD} $" + f"={calculate_mad(vals):.2f}"
-            nvals_str = r"$\bf{nvals} $" + f"={len(vals)}"
+            min_str = r"$\bf{min} $" + f"={s_min:.2f}"
+            max_str = r"$\bf{max} $" + f"={s_max:.2f}"
+            mean_str = r"$\bf{mean} $" + f"={s_mean:.2f}"
+            median_str = r"$\bf{median} $" + f"={s_median:.2f}"
+            std_str = r"$\bf{stdev} $" + f"={s_std:.2f}"
+            mad_str = r"$\bf{MAD} $" + f"={s_mad:.2f}"
+            nvals_str = r"$\bf{nvals} $" + f"={s_nvals}"
 
             plt.gcf().text(text_x, text_bottom_y, min_str, ha="center", va="top")
             plt.gcf().text(text_x, text_top_y, max_str, ha="center", va="bottom")
@@ -1144,12 +1170,12 @@ class Polarplot:
             text_y = bbox.y0 + (bbox.height / 2)  # Vertically centered
 
             # Step 3: Add text to the left and right of the colorbar
-            min_str = f"min:{np.min(vals):.2f}"
+            min_str = f"min:{s_min:.2f}"
             if len(min_str) > 11:
-                min_str = f"{np.min(vals):.2f}"
-            max_str = f"max:{np.max(vals):.2f}"
+                min_str = f"{s_min:.2f}"
+            max_str = f"max:{s_max:.2f}"
             if len(max_str) > 11:
-                max_str = f"{np.max(vals):.2f}"
+                max_str = f"{s_max:.2f}"
             plt.gcf().text(text_left_x, text_y, min_str, ha="right", va="center")
             plt.gcf().text(text_right_x, text_y, max_str, ha="left", va="center")
             text_y += 0.04
@@ -1158,7 +1184,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{MAD}: $" + f"{calculate_mad(vals):.2f}",
+                r"$\bf{MAD}: $" + f"{s_mad:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1166,7 +1192,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{mean}: $" + f"{np.mean(vals):.2f}",
+                r"$\bf{mean}: $" + f"{s_mean:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1174,7 +1200,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{median}: $" + f"{np.median(vals):.2f}",
+                r"$\bf{median}: $" + f"{s_median:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1182,7 +1208,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{std}: $" + f"{np.std(vals):.2f}",
+                r"$\bf{std}: $" + f"{s_std:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1190,7 +1216,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{nvals}: $" + f"{len(vals)}",
+                r"$\bf{nvals}: $" + f"{s_nvals}",
                 ha="left",
                 va="center",
             )
@@ -1727,15 +1753,13 @@ class Polarplot:
         number_of_each_flag = []
         percent_of_each_flag = []
 
-        # values used to calculate flag percentages (optionally full resolution values
-        # when only a subsample of vals is plotted)
-        stats_vals = data_set.get("stats_vals")
-        pct_vals = vals if stats_vals is None else np.asarray(stats_vals)
-        total = pct_vals.size
+        total = vals.size
+        # optional precomputed percentages (ie of full resolution values when only a subsample
+        # of vals is plotted)
+        flag_percents = data_set.get("flag_percents")
 
         for flag_index in range(len(flag_names)):
             flagindices = np.flatnonzero(vals == flag_values[flag_index])
-            n_flag = np.count_nonzero(pct_vals == flag_values[flag_index])
             if flagindices.size > 0:
                 ax.scatter(
                     lons[flagindices],
@@ -1749,9 +1773,11 @@ class Polarplot:
                     zorder=20,
                 )
 
-            number_of_each_flag.append(n_flag)
-            if total > 0:
-                percent_of_each_flag.append(100.0 * n_flag / total)
+            number_of_each_flag.append(flagindices.size)
+            if flag_percents is not None:
+                percent_of_each_flag.append(float(flag_percents[flag_index] or 0.0))
+            elif total > 0:
+                percent_of_each_flag.append(100.0 * flagindices.size / total)
             else:
                 percent_of_each_flag.append(0.0)
         number_of_flags = len(flag_values)

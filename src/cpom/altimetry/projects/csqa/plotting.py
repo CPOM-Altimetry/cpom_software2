@@ -4,7 +4,10 @@ Map plots of CSQA parameters using cpom.areas.area_plot.Polarplot.
 
 Large selections are drawn as a regular along-track subsample (every Nth record) limited to
 the configured maximum number of points, while the statistics drawn on the plot (and the flag
-percentages) are always calculated from every record.
+percentages) are always those of every record.
+
+Plots are prepared (prepare_plot_job) in the process holding the cycle's data, then rendered
+(render_plot_job) either in the same process or in a pool of plot worker processes.
 
 A thumbnail of each plot is saved in a 'thumbs' sub-directory of the plot's directory.
 """
@@ -14,6 +17,7 @@ import io
 import logging
 import math
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import matplotlib
@@ -88,7 +92,23 @@ def plot_title(param: ParameterConfig, variant: VariantDef, mode: str, cfg: Csqa
     return title
 
 
-def plot_parameter_map(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+@dataclass
+class PlotJob:  # pylint: disable=too-many-instance-attributes
+    """A map plot, prepared in the cycle process and rendered by render_plot_job(), possibly in
+    a separate worker process. It only holds the (decimated) points plotted, so is cheap to
+    send to a worker."""
+
+    out_path: str
+    polarplot_area: str
+    data_set: dict
+    annotations: list[Annotation]
+    image_format: str
+    dpi: int
+    webp_quality: int
+    step: int
+
+
+def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     cfg: CsqaConfig,
     param: ParameterConfig,
     variant: VariantDef,
@@ -97,12 +117,13 @@ def plot_parameter_map(  # pylint: disable=too-many-arguments,too-many-positiona
     lats: np.ndarray,
     lons: np.ndarray,
     vals: np.ndarray,
+    stats: dict,
     cycle: int,
     cycle_bounds: tuple[datetime, datetime],
     baseline: str,
     out_path: str,
-) -> int:
-    """Plot a map of a parameter selection and save it to out_path
+) -> PlotJob:
+    """Prepare the map plot of a parameter selection
 
     Args:
         cfg (CsqaConfig): CSQA config
@@ -113,35 +134,49 @@ def plot_parameter_map(  # pylint: disable=too-many-arguments,too-many-positiona
         lats (np.ndarray): latitudes of the selected records
         lons (np.ndarray): longitudes of the selected records
         vals (np.ndarray): values of the selected records (NaN for missing)
+        stats (dict): statistics of the selection, from stats.float_stats() or
+                      stats.flag_stats(), drawn on the map
         cycle (int): cycle number
         cycle_bounds (tuple[datetime,datetime]): cycle start (inclusive) and end (exclusive)
         baseline (str): product baseline
         out_path (str): output plot file path
 
     Returns:
-        int: decimation step used for the plotted points (1 = every record plotted)
+        PlotJob
     """
     step = decimation_step(vals.size, cfg.max_points)
-    valid_vals = vals[np.isfinite(vals)]
 
     data_set: dict = {
         "name": variant.variable,
-        "lats": lats[::step],
-        "lons": lons[::step],
-        "vals": vals[::step],
+        # compact copies, so a job does not keep the full resolution arrays alive
+        "lats": np.ascontiguousarray(lats[::step]),
+        "lons": np.ascontiguousarray(lons[::step]),
+        "vals": np.ascontiguousarray(vals[::step]),
         "units": param.units if param.units else "no units",
-        "stats_vals": valid_vals,
     }
     if param.type == "flag":
         data_set["flag_values"] = [f.value for f in param.flags]
         data_set["flag_names"] = [f.name for f in param.flags]
         if all(f.color for f in param.flags):
             data_set["flag_colors"] = [f.color for f in param.flags]
+        # percentages of all records, not just those plotted
+        data_set["flag_percents"] = [stats["pct"][f.key] for f in param.flags]
     else:
         data_set["cmap_name"] = param.cmap
         if param.plot_range is not None:
             data_set["min_plot_range"] = param.plot_range[0]
             data_set["max_plot_range"] = param.plot_range[1]
+        # statistics of all records, not just those plotted
+        valid = vals[np.isfinite(vals)].astype(np.float64)
+        data_set["stats"] = {
+            "nvals": stats["n_valid"],
+            "min": stats["min"],
+            "max": stats["max"],
+            "mean": stats["mean"],
+            "median": stats["median"],
+            "std": stats["std"],
+            "mad": float(np.mean(np.abs(valid - stats["mean"]))),
+        }
 
     start, end = cycle_bounds
     last_day = end - timedelta(seconds=1)
@@ -162,26 +197,49 @@ def plot_parameter_map(  # pylint: disable=too-many-arguments,too-many-positiona
             Annotation(
                 0.22,
                 0.928,
-                f"Map shows 1 in {step} records. Statistics use all {valid_vals.size:,} "
+                f"Map shows 1 in {step} records. Statistics use all {stats['n_valid']:,} "
                 "valid records",
                 fontsize=8,
                 color="dimgray",
             )
         )
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    tmp_path = f"{out_path}.tmp.{cfg.image_format}"
+    return PlotJob(
+        out_path=out_path,
+        polarplot_area=area.polarplot_area,
+        data_set=data_set,
+        annotations=annotations,
+        image_format=cfg.image_format,
+        dpi=cfg.dpi,
+        webp_quality=cfg.webp_quality,
+        step=step,
+    )
+
+
+def render_plot_job(job: PlotJob) -> int:
+    """Render a map plot and its thumbnail
+
+    Args:
+        job (PlotJob): prepared plot
+
+    Returns:
+        int: decimation step used for the plotted points (1 = every record plotted)
+    """
+    os.makedirs(os.path.dirname(job.out_path), exist_ok=True)
+    tmp_path = f"{job.out_path}.tmp.{job.image_format}"
     # Polarplot prints progress messages to stdout: keep batch logs readable
     with contextlib.redirect_stdout(io.StringIO()):
-        Polarplot(area.polarplot_area).plot_points(
-            data_set,
-            annotation_list=annotations,
+        Polarplot(job.polarplot_area).plot_points(
+            job.data_set,
+            annotation_list=job.annotations,
             output_file=tmp_path,
-            image_format=cfg.image_format,
-            dpi=cfg.dpi,
-            webp_settings=(cfg.webp_quality, 6),
+            image_format=job.image_format,
+            dpi=job.dpi,
+            webp_settings=(job.webp_quality, 6),
         )
-    os.replace(tmp_path, out_path)
-    save_thumbnail(out_path)
-    log.info("saved %s (%d points plotted, step %d)", out_path, data_set["vals"].size, step)
-    return step
+    os.replace(tmp_path, job.out_path)
+    save_thumbnail(job.out_path)
+    log.info(
+        "saved %s (%d points plotted, step %d)", job.out_path, job.data_set["vals"].size, job.step
+    )
+    return job.step

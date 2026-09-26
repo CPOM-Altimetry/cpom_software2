@@ -3,21 +3,30 @@
 Process one CSQA cycle for one product baseline: find the input files, load each configured
 parameter, and write statistics and map plots per area, variant and acquisition mode.
 
+Map plots can be rendered in parallel by a pool of plot worker processes (plot_workers > 1).
+Each parameter is loaded in turn and its maps are submitted to the pool as soon as its
+statistics are calculated, so rendering overlaps with the loading of the next parameter. The
+statistics file of each parameter is written when all of its maps are complete.
+
 See outputs.py for the output directory layout.
 """
 
+import contextlib
 import hashlib
 import logging
+import multiprocessing
 import os
 import time
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 
 from cpom.altimetry.projects.csqa import __version__
 from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, ParameterConfig
-from cpom.altimetry.projects.csqa.cycles import CycleCalendar
 from cpom.altimetry.projects.csqa.loader import load_parameter_data
+from cpom.altimetry.projects.csqa.log_setup import current_logging_config, setup_logging
 from cpom.altimetry.projects.csqa.outputs import (
     cycle_dir,
     plots_dir,
@@ -27,8 +36,10 @@ from cpom.altimetry.projects.csqa.outputs import (
     write_json_atomic,
 )
 from cpom.altimetry.projects.csqa.plotting import (
+    PlotJob,
     plot_filename,
-    plot_parameter_map,
+    prepare_plot_job,
+    render_plot_job,
     thumbnail_path,
 )
 from cpom.altimetry.projects.csqa.product_files import (
@@ -54,6 +65,18 @@ class CycleResult:
     message: str = ""
 
 
+@dataclass
+class _PendingParameter:  # pylint: disable=too-many-instance-attributes
+    """A parameter whose statistics are calculated, waiting for its map plots"""
+
+    param: ParameterConfig
+    signature: str
+    rows: dict[tuple[str, str, str], dict]  # (area, variant, mode) -> statistics row
+    plots: dict[tuple[str, str, str], "Future[int] | int"]  # -> plot step (or its future)
+    summary: dict  # statistics file fields other than the rows
+    t_start: float
+
+
 def input_signature(files: list[ProductFile]) -> str:
     """signature of a set of input files, used to detect changed cycle inputs"""
     names = "\n".join(sorted(f.name for f in files))
@@ -74,11 +97,16 @@ def find_cycle_files(
     Returns:
         dict[str, list[ProductFile]]: files per product id
     """
-    start, end = CycleCalendar(cfg.mission_start_date, cfg.cycle_length_days).cycle_bounds(cycle)
+    start, end = cfg.calendar().cycle_bounds(cycle)
     return {
         src: find_product_files(cfg.products[src], start, end, baseline, cfg.stage_preference)
         for src in sorted(sources)
     }
+
+
+def _info_path(cfg: CsqaConfig, baseline: str, cycle: int) -> str:
+    """path of a cycle's cycle_info.json file"""
+    return os.path.join(cycle_dir(cfg.output_dir, baseline, cycle), "cycle_info.json")
 
 
 def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, make_plots: bool):
@@ -96,6 +124,72 @@ def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, ma
     return True
 
 
+def params_to_process(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    cfg: CsqaConfig,
+    cycle: int,
+    baseline: str,
+    param_ids: list[str] | None,
+    make_plots: bool,
+    update: bool,
+    cycle_files: dict[str, list[ProductFile]] | None = None,
+) -> list[str]:
+    """Parameters of a cycle and baseline that need processing: those with input files and,
+    in update mode, whose input files changed since last processed (or outputs are missing)
+
+    Args:
+        cfg (CsqaConfig): CSQA config
+        cycle (int): cycle number
+        baseline (str): product baseline
+        param_ids (list[str]|None): parameters requested (default all)
+        make_plots (bool): True if map plots are produced
+        update (bool): update mode
+        cycle_files (dict|None): input files per product, from find_cycle_files()
+
+    Returns:
+        list[str]: parameter ids
+    """
+    params = [cfg.parameters[pid] for pid in (param_ids or list(cfg.parameters))]
+    if cycle_files is None:
+        cycle_files = find_cycle_files(cfg, cycle, baseline, {p.source for p in params})
+    previous = (read_json(_info_path(cfg, baseline, cycle)) or {}).get("parameters", {})
+
+    needed = []
+    for param in params:
+        files = cycle_files.get(param.source, [])
+        if not files:
+            continue
+        if (
+            update
+            and previous.get(param.id, {}).get("input_signature") == input_signature(files)
+            and _outputs_exist(cfg, baseline, cycle, param.id, make_plots)
+        ):
+            continue
+        needed.append(param.id)
+    return needed
+
+
+def plan_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    cfg: CsqaConfig,
+    cycle: int,
+    baseline: str,
+    param_ids: list[str] | None,
+    make_plots: bool,
+    update: bool,
+) -> tuple[str, list[str]]:
+    """What processing a cycle and baseline needs (a quick check of input files and outputs)
+
+    Returns:
+        tuple[str, list[str]]: status ('no_data', 'unchanged' or 'process') and the ids of
+                               the parameters to process
+    """
+    params = [cfg.parameters[pid] for pid in (param_ids or list(cfg.parameters))]
+    cycle_files = find_cycle_files(cfg, cycle, baseline, {p.source for p in params})
+    if not any(cycle_files.values()):
+        return "no_data", []
+    needed = params_to_process(cfg, cycle, baseline, param_ids, make_plots, update, cycle_files)
+    return ("process" if needed else "unchanged"), needed
+
+
 def _remove_plot(plot_path: str):
     """remove a plot and its thumbnail if they exist"""
     for path in (plot_path, thumbnail_path(plot_path)):
@@ -103,16 +197,17 @@ def _remove_plot(plot_path: str):
             os.remove(path)
 
 
-def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     cfg: CsqaConfig,
     param: ParameterConfig,
     files: list[ProductFile],
     cycle: int,
     baseline: str,
     area_ids: list[str],
-    make_plots: bool = True,
-) -> dict:
-    """Calculate the statistics and plot the maps of a parameter for a cycle
+    make_plots: bool,
+    submit_plot: Callable[[PlotJob], "Future[int] | int"],
+) -> _PendingParameter:
+    """Load a parameter, calculate its statistics and submit its map plots
 
     Args:
         cfg (CsqaConfig): CSQA config
@@ -122,11 +217,14 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
         baseline (str): product baseline
         area_ids (list[str]): areas to process (subset of param.areas)
         make_plots (bool): plot maps if True
+        submit_plot (Callable): renders a plot job, returning its plot step or a future of it
 
     Returns:
-        dict: statistics of the parameter for the cycle (as written to the stats json file)
+        _PendingParameter
     """
-    bounds = CycleCalendar(cfg.mission_start_date, cfg.cycle_length_days).cycle_bounds(cycle)
+    # pylint: disable=too-many-locals
+    t_start = time.time()
+    bounds = cfg.calendar().cycle_bounds(cycle)
     data = load_parameter_data(files, param, cfg, *bounds)
     log.info(
         "cycle %d baseline %s %s: %d records from %d files",
@@ -138,15 +236,15 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
     )
 
     pdir = plots_dir(cfg.output_dir, baseline, cycle, param.id)
-    stats_file = stats_path(cfg.output_dir, baseline, cycle, param.id)
 
     # keep rows of areas not processed in this run (when processing a subset of areas)
-    previous = read_json(stats_file) or {}
+    previous = read_json(stats_path(cfg.output_dir, baseline, cycle, param.id)) or {}
     rows = {
         (r["area"], r["variant"], r["mode"]): r
         for r in previous.get("rows", [])
         if r.get("area") not in area_ids and r.get("area") in param.areas
     }
+    plots: dict[tuple[str, str, str], "Future[int] | int"] = {}
 
     for variant in param.variants:
         vals = data.values[variant.id]
@@ -164,6 +262,7 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
                 idx = np.flatnonzero(sel)
                 sel_vals = vals[idx]
 
+                key = (area_id, variant.id, mode)
                 row: dict = {
                     "area": area_id,
                     "variant": variant.id,
@@ -174,15 +273,15 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
                     row.update(flag_stats(sel_vals, param.flags))
                 else:
                     row.update(float_stats(sel_vals))
+                row["plot"] = None
+                row["plot_step"] = None
 
                 fname = plot_filename(param.id, variant.id, mode, area_id, cfg.image_format)
                 fpath = os.path.join(pdir, fname)
-                row["plot"] = None
-                row["plot_step"] = None
                 if row["n_valid"] == 0:
                     _remove_plot(fpath)  # left from an earlier run with different inputs
                 elif make_plots:
-                    row["plot_step"] = plot_parameter_map(
+                    job = prepare_plot_job(
                         cfg,
                         param,
                         variant,
@@ -191,24 +290,18 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
                         lats[idx],
                         lons[idx],
                         sel_vals,
+                        row,
                         cycle,
                         bounds,
                         baseline,
                         fpath,
                     )
-                    row["plot"] = fname
+                    plots[key] = submit_plot(job)
                 elif os.path.isfile(fpath):
                     row["plot"] = fname  # keep the existing plot when not plotting
-                rows[(area_id, variant.id, mode)] = row
+                rows[key] = row
 
-    # order rows as in the parameter definition
-    order = {
-        key: i
-        for i, key in enumerate(
-            (a, v.id, m) for v in param.variants for m in param.mode_options for a in param.areas
-        )
-    }
-    stats = {
+    summary = {
         "parameter": param.id,
         "type": param.type,
         "baseline": baseline,
@@ -221,14 +314,59 @@ def process_parameter(  # pylint: disable=too-many-arguments,too-many-positional
         "last_record_time": data.last_time.strftime(TIME_FMT) if data.last_time else None,
         "bad_files": data.bad_files,
         "missing_variables": data.missing_variables,
+    }
+    return _PendingParameter(param, input_signature(files), rows, plots, summary, t_start)
+
+
+def _finish_parameter(cfg: CsqaConfig, pending: _PendingParameter) -> dict:
+    """Wait for a parameter's map plots, then write its statistics file
+
+    Args:
+        cfg (CsqaConfig): CSQA config
+        pending (_PendingParameter): parameter prepared by _prepare_parameter()
+
+    Returns:
+        dict: statistics of the parameter for the cycle (as written to the stats json file)
+    """
+    param = pending.param
+    for key, result in pending.plots.items():
+        step = result.result() if isinstance(result, Future) else result
+        area_id, variant_id, mode = key
+        pending.rows[key]["plot"] = plot_filename(
+            param.id, variant_id, mode, area_id, cfg.image_format
+        )
+        pending.rows[key]["plot_step"] = step
+
+    # order rows as in the parameter definition
+    order = {
+        key: i
+        for i, key in enumerate(
+            (a, v.id, m) for v in param.variants for m in param.mode_options for a in param.areas
+        )
+    }
+    stats = {
+        **pending.summary,
         "processed_at": utc_now_str(),
         "software_version": __version__,
         "rows": sorted(
-            rows.values(), key=lambda r: order.get((r["area"], r["variant"], r["mode"]), len(order))
+            pending.rows.values(),
+            key=lambda r: order.get((r["area"], r["variant"], r["mode"]), len(order)),
         ),
     }
-    write_json_atomic(stats_file, stats)
+    baseline, cycle = pending.summary["baseline"], pending.summary["cycle"]
+    write_json_atomic(stats_path(cfg.output_dir, baseline, cycle, param.id), stats)
     return stats
+
+
+def plot_pool(plot_workers: int) -> ProcessPoolExecutor:
+    """A pool of plot worker processes, logging like the current process"""
+    return ProcessPoolExecutor(
+        max_workers=plot_workers,
+        # spawn: fresh processes (safe with matplotlib/netCDF threads on all platforms)
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=setup_logging,
+        initargs=current_logging_config(),
+    )
 
 
 def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -239,6 +377,7 @@ def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arg
     area_ids: list[str] | None = None,
     make_plots: bool = True,
     update: bool = False,
+    plot_workers: int = 1,
 ) -> CycleResult:
     """Process the configured parameters for a cycle and baseline
 
@@ -251,19 +390,22 @@ def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arg
         make_plots (bool): plot maps if True, otherwise only calculate statistics
         update (bool): only process parameters whose input files have changed since they
                        were last processed (or whose outputs are missing)
+        plot_workers (int): number of processes rendering the map plots in parallel
+                            (1 = render in this process)
 
     Returns:
         CycleResult
     """
+    # pylint: disable=too-many-locals
     t_start = time.time()
     params = [cfg.parameters[pid] for pid in (param_ids or list(cfg.parameters))]
-    start, end = CycleCalendar(cfg.mission_start_date, cfg.cycle_length_days).cycle_bounds(cycle)
+    start, end = cfg.calendar().cycle_bounds(cycle)
 
     cycle_files = find_cycle_files(cfg, cycle, baseline, {p.source for p in params})
     if not any(cycle_files.values()):
         return CycleResult(cycle, baseline, "no_data", message="no input files")
 
-    info_file = os.path.join(cycle_dir(cfg.output_dir, baseline, cycle), "cycle_info.json")
+    info_file = _info_path(cfg, baseline, cycle)
     info = read_json(info_file) or {}
     info.update(
         {
@@ -285,39 +427,50 @@ def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arg
             "input_signature": input_signature(files),
         }
 
-    result = CycleResult(cycle, baseline, "unchanged")
+    needed = params_to_process(cfg, cycle, baseline, param_ids, make_plots, update, cycle_files)
     for param in params:
-        files = cycle_files[param.source]
-        if not files:
-            log.info(
-                "cycle %d baseline %s: no %s files for %s", cycle, baseline, param.source, param.id
-            )
-            continue
-        signature = input_signature(files)
-        previous = info["parameters"].get(param.id, {})
-        if (
-            update
-            and previous.get("input_signature") == signature
-            and _outputs_exist(cfg, baseline, cycle, param.id, make_plots)
-        ):
-            log.info(
-                "cycle %d baseline %s %s: inputs unchanged, skipping", cycle, baseline, param.id
-            )
-            continue
+        if param.id not in needed:
+            log.info("cycle %d baseline %s %s: nothing to do", cycle, baseline, param.id)
 
-        areas = [a for a in param.areas if area_ids is None or a in area_ids]
-        t_param = time.time()
-        stats = process_parameter(cfg, param, files, cycle, baseline, areas, make_plots)
-        info["parameters"][param.id] = {
-            "input_signature": signature,
-            "n_files": stats["n_files"],
-            "n_records": stats["n_records"],
-            "first_record_time": stats["first_record_time"],
-            "last_record_time": stats["last_record_time"],
-            "processed_at": stats["processed_at"],
-            "processing_seconds": round(time.time() - t_param, 1),
-        }
-        result.params_processed.append(param.id)
+    result = CycleResult(cycle, baseline, "unchanged")
+    use_pool = make_plots and plot_workers > 1 and bool(needed)
+    pool_context = plot_pool(plot_workers) if use_pool else contextlib.nullcontext()
+    with pool_context as pool:
+
+        def submit_plot(job: PlotJob) -> "Future[int] | int":
+            if pool is None:
+                return render_plot_job(job)
+            return pool.submit(render_plot_job, job)
+
+        pending = []
+        for pid in needed:
+            param = cfg.parameters[pid]
+            areas = [a for a in param.areas if area_ids is None or a in area_ids]
+            pending.append(
+                _prepare_parameter(
+                    cfg,
+                    param,
+                    cycle_files[param.source],
+                    cycle,
+                    baseline,
+                    areas,
+                    make_plots,
+                    submit_plot,
+                )
+            )
+
+        for item in pending:
+            stats = _finish_parameter(cfg, item)
+            info["parameters"][item.param.id] = {
+                "input_signature": item.signature,
+                "n_files": stats["n_files"],
+                "n_records": stats["n_records"],
+                "first_record_time": stats["first_record_time"],
+                "last_record_time": stats["last_record_time"],
+                "processed_at": stats["processed_at"],
+                "processing_seconds": round(time.time() - item.t_start, 1),
+            }
+            result.params_processed.append(item.param.id)
 
     if result.params_processed:
         result.status = "processed"
@@ -325,4 +478,6 @@ def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arg
     info["software_version"] = __version__
     write_json_atomic(info_file, info)
     result.message = f"{time.time() - t_start:.0f}s"
+    if use_pool:
+        result.message += f" ({plot_workers} plot workers)"
     return result

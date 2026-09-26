@@ -13,6 +13,8 @@ def test_default_config(default_config):
     cfg = default_config
     assert cfg.mission_start_date == datetime(2010, 10, 18)
     assert cfg.cycle_length_days == 30
+    assert cfg.data_latency_days == 35
+    assert cfg.calendar().data_latency.days == 35
     assert set(cfg.areas) == {"global", "north_polar", "south_polar"}
     assert {"acquisition_mode", "surface_type", "backscatter"} <= set(cfg.parameters)
 
