@@ -106,6 +106,26 @@ parameters:
         - {id: landocean, name: "Land and ocean", range: [-120.0, 4300.0]}
         - {id: ocean, name: "Ocean only", range: [-120.0, 80.0]}
 
+  ssha:
+    long_name: "Sea Surface Height Anomaly"
+    description: >-
+      Interpolated sea surface height anomaly (SSHA) of each 20 Hz measurement, computed using
+      the sea surface height interpolated to the measurement location. Unused (fill value) in
+      LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    variable: ssha_interp_20_ku
+    # SSHA is only computed in SAR and SARin modes
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # diverging, with a neutral grey midpoint at 0 m
+      cmap: coolwarm
+      scales:
+        - {id: standard, name: "Standard", range: [-1.2, 1.2]}
+        - {id: fine, name: "Fine detail", range: [-0.3, 0.3]}
+
   backscatter:
     long_name: "Backscatter (Sigma0)"
     description: >-
