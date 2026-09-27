@@ -12,7 +12,12 @@
 #   variable    : netCDF variable (for parameters without variants)
 #   variants    : alternative variables for the same quantity (ie per retracker)
 #                   label   : name of the variant selector shown in the portal
-#                   options : list of {id, name, variable}
+#                   options : list of {id, name, variable, mode_descriptions}
+#                     mode_descriptions (optional): what the variant is in each acquisition
+#                     mode (ie the retracker used), null where it is not used in a mode.
+#                     Shown in the portal. The retracker definitions below are YAML anchors
+#                     that other retracker parameters can reuse, ie
+#                     mode_descriptions: *retracker_1_modes
 #   modes       : acquisition mode selections (all, lrm, sar, sarin). Omit for no mode selection
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
@@ -58,18 +63,36 @@ parameters:
     long_name: "Backscatter (Sigma0)"
     description: >-
       Backscatter coefficient of each 20 Hz measurement for each L2 retracker, corrected for
-      instrument effects and including a system bias. Retracker 1 is the Ocean CFI retracker
-      (LRM) or OCOG applied to an LRM-like convolved waveform (SAR, SARin). Retrackers 2
-      (UCL land ice) and 3 (OCOG) are only used in LRM mode.
+      instrument effects and including a system bias. In SAR and SARin modes the retracker 1
+      backscatter is computed from the amplitude of an OCOG retracker applied to an LRM-like
+      convolved waveform. Retrackers 2 and 3 are only used in LRM mode.
     source: GDR-A
     type: float
     units: dB
     variants:
       label: "Retracker"
       options:
-        - {id: rtk1, name: "Retracker 1", variable: sig0_1_20_ku}
-        - {id: rtk2, name: "Retracker 2", variable: sig0_2_20_ku}
-        - {id: rtk3, name: "Retracker 3", variable: sig0_3_20_ku}
+        - id: rtk1
+          name: "Retracker 1"
+          variable: sig0_1_20_ku
+          mode_descriptions: &retracker_1_modes
+            lrm: "Ocean CFI retracker"
+            sar: "UCL sea-ice retracker"
+            sarin: "UCL margins retracker"
+        - id: rtk2
+          name: "Retracker 2"
+          variable: sig0_2_20_ku
+          mode_descriptions: &retracker_2_modes
+            lrm: "UCL land-ice retracker"
+            sar: null
+            sarin: null
+        - id: rtk3
+          name: "Retracker 3"
+          variable: sig0_3_20_ku
+          mode_descriptions: &retracker_3_modes
+            lrm: "OCOG retracker"
+            sar: null
+            sarin: null
     modes: [all, lrm, sar, sarin]
     areas: [global, north_polar, south_polar]
     plot:

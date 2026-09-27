@@ -62,6 +62,9 @@ class VariantDef:
     id: str
     name: str
     variable: str
+    # what the variant is in each acquisition mode (ie the retracker used), None where it is
+    # not used in a mode. Empty if not configured
+    mode_descriptions: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,10 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
                 id=str(_require(v, "id", context)),
                 name=str(v.get("name", v["id"])),
                 variable=str(_require(v, "variable", context)),
+                mode_descriptions={
+                    str(mode): (None if desc is None else str(desc))
+                    for mode, desc in (v.get("mode_descriptions") or {}).items()
+                },
             )
             for v in _require(vcfg, "options", context)
         ]
@@ -207,6 +214,12 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
     for mode in modes:
         if mode not in mode_labels:
             raise ValueError(f"{context}: mode {mode} not in configured mode labels")
+    for variant in variants:
+        for mode in variant.mode_descriptions:
+            if mode not in mode_labels or mode == "all":
+                raise ValueError(
+                    f"{context}: variant {variant.id} mode_descriptions has unknown mode {mode}"
+                )
 
     areas = [str(a) for a in pcfg.get("areas", list(cfg_areas))]
     for area in areas:

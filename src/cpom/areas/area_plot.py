@@ -1560,7 +1560,16 @@ class Polarplot:
         hist_axes.get_xaxis().set_visible(False)
         hist_axes.set_facecolor("white")
 
-        hist_axes.text(0.05, -0.05, "Plot Range", fontsize=10, transform=hist_axes.transAxes)
+        # label a fixed distance below the axes, whatever the axes height
+        hist_axes.annotate(
+            "Plot Range",
+            xy=(0.05, 0.0),
+            xycoords="axes fraction",
+            xytext=(0, -4),
+            textcoords="offset points",
+            va="top",
+            fontsize=10,
+        )
 
         # -----------------------------------------------------------------------------------------
         # Histogram (full range) in single color
@@ -1582,7 +1591,16 @@ class Polarplot:
         hist_axes.set_xticklabels([])
         hist_axes.get_xaxis().set_visible(False)
         hist_axes.set_facecolor("white")
-        hist_axes.text(0.05, -0.05, "Full Range", fontsize=10, transform=hist_axes.transAxes)
+        # label a fixed distance below the axes, whatever the axes height
+        hist_axes.annotate(
+            "Full Range",
+            xy=(0.05, 0.0),
+            xycoords="axes fraction",
+            xytext=(0, -4),
+            textcoords="offset points",
+            va="top",
+            fontsize=10,
+        )
         hist_axes.set_ylabel(f"({varunits})")
 
     def draw_mapscale_bar(self, ax, dataprj):
@@ -2292,11 +2310,6 @@ class Polarplot:
             linewidth (int, optional): line width to use for polygon edges. Defaults to 2.
         """
 
-        print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
-        xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
-        print(f"{xc - self.thisarea.width_km * 1000 / 2, xc + self.thisarea.width_km * 1000 / 2}")
-        print(f"{yc - self.thisarea.height_km * 1000 / 2, yc + self.thisarea.height_km * 1000 / 2}")
-
         polygon_color = "red"
         if override_mask_color:
             polygon_color = override_mask_color
@@ -2306,8 +2319,6 @@ class Polarplot:
         if override_mask_display is not None:
             display_polygon_mask = override_mask_display
 
-        print(f"display_polygon_mask {display_polygon_mask}")
-
         # form a polygon from xy limits mask. Only show xy limits polygon for global map where
         # fill is specified
         if (
@@ -2316,7 +2327,7 @@ class Polarplot:
             and display_polygon_mask
             and fill
         ):
-            print("drawing filled xylimits mask...")
+            log.debug("drawing filled xylimits mask...")
 
             x = [
                 self.thisarea.mask.xlimits[0],
@@ -2357,7 +2368,7 @@ class Polarplot:
             and self.thisarea.masktype == "xylimits"
             and display_polygon_mask
         ):
-            print("drawing xylimits mask...")
+            log.debug("drawing xylimits mask...")
             x = [
                 self.thisarea.mask.xlimits[0],
                 self.thisarea.mask.xlimits[1],
@@ -2396,13 +2407,13 @@ class Polarplot:
             and self.thisarea.masktype == "polygon"
             and display_polygon_mask
         ):
-            print("draw mask polygon..")
+            log.debug("draw mask polygon..")
 
             if self.thismask:
-                print("mask found..")
+                log.debug("mask found..")
 
                 if self.thisarea.mask.polygon_lon.any():
-                    print("draw single polygon..")
+                    log.debug("draw single polygon..")
 
                     x, y = self.thisarea.latlon_to_xy(
                         self.thisarea.mask.polygon_lat, self.thisarea.mask.polygon_lon
@@ -2427,7 +2438,7 @@ class Polarplot:
                     ax.add_patch(poly)
 
                 elif self.thismask.polygons_lon:
-                    print("draw multiple polygons..")
+                    log.debug("draw multiple polygons..")
 
                     n_polygons = len(self.thismask.polygons_lon)
                     for pi in range(n_polygons):

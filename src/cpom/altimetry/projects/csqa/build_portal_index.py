@@ -52,7 +52,15 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
         "type": param.type,
         "units": param.units,
         "variant_label": param.variant_label,
-        "variants": [{"id": v.id, "name": v.name, "variable": v.variable} for v in param.variants],
+        "variants": [
+            {
+                "id": v.id,
+                "name": v.name,
+                "variable": v.variable,
+                "mode_descriptions": v.mode_descriptions,
+            }
+            for v in param.variants
+        ],
         "modes": param.modes,
         "areas": param.areas,
         "flags": [

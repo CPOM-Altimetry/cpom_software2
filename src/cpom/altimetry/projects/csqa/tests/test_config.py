@@ -27,6 +27,14 @@ def test_default_config(default_config):
     assert sig0.type == "float" and sig0.has_variants
     assert sig0.variables == ["sig0_1_20_ku", "sig0_2_20_ku", "sig0_3_20_ku"]
     assert sig0.mode_options == ["all", "lrm", "sar", "sarin"]
+    # retracker used in each acquisition mode (None where the retracker is not used)
+    assert sig0.variants[0].mode_descriptions == {
+        "lrm": "Ocean CFI retracker",
+        "sar": "UCL sea-ice retracker",
+        "sarin": "UCL margins retracker",
+    }
+    assert sig0.variants[1].mode_descriptions["sar"] is None
+    assert mode.variants[0].mode_descriptions == {}
 
 
 def test_sanitize_key():

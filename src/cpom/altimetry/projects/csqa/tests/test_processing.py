@@ -81,6 +81,8 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     with open(os.path.join(cfg.output_dir, "manifest.json"), encoding="utf-8") as fh:
         manifest = json.load(fh)
     assert [b["id"] for b in manifest["baselines"]] == ["F"]
+    sig0 = next(p for p in manifest["parameters"] if p["id"] == "backscatter")
+    assert sig0["variants"][2]["mode_descriptions"]["lrm"] == "OCOG retracker"
     assert manifest["baselines"][0]["cycles"][0]["cycle"] == 193
     with open(
         os.path.join(cfg.output_dir, "baseline_F", "timeseries", "backscatter.csv"),
