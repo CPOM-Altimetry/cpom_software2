@@ -65,6 +65,10 @@ class VariantDef:
     # what the variant is in each acquisition mode (ie the retracker used), None where it is
     # not used in a mode. Empty if not configured
     mode_descriptions: dict[str, str | None] = field(default_factory=dict)
+    # for a bit of a bit flag word: the bit's mask. Its values are 1 (set) or 0 (not set)
+    bit_mask: int | None = None
+    # for a bit: the bit's name in the variable's flag_meanings attribute
+    bit_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,13 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     cmap: str = "RdYlBu_r"  # of the default colour scale
     dtype: str = "float32"
     colour_scales: list[ColourScale] = field(default_factory=list)  # default scale first
+    map_modes: list[str] = field(default_factory=list)  # modes with maps (default all modes)
+    default_variant: str = ""  # variant shown first in the portal (default the first)
+
+    @property
+    def is_bit_flag(self) -> bool:
+        """True if the parameter's variants are the bits of a flag word"""
+        return self.variants[0].bit_mask is not None
 
     @property
     def has_variants(self) -> bool:
@@ -197,7 +208,35 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
     if source not in products:
         raise ValueError(f"{context}: source {source} not in configured products")
 
-    if "variants" in pcfg:
+    flags_cfg = pcfg.get("flags")
+    if "bits" in pcfg:
+        # a bit flag word: each bit is a variant with values 0 (not set) and 1 (set)
+        if ptype != "flag":
+            raise ValueError(f"{context}: bits need type flag")
+        bcfg = pcfg["bits"]
+        variable = str(_require(pcfg, "variable", context))
+        variants = []
+        for bit in _require(bcfg, "options", context):
+            mask = int(_require(bit, "mask", context))
+            if mask <= 0 or mask & (mask - 1):
+                raise ValueError(f"{context}: bit mask {mask} is not a single bit")
+            variants.append(
+                VariantDef(
+                    id=f"b{mask.bit_length() - 1}",
+                    name=str(bit.get("label", bit.get("name", mask))),
+                    variable=variable,
+                    bit_mask=mask,
+                    bit_name=str(bit.get("name", "")),
+                )
+            )
+        if len({v.id for v in variants}) != len(variants):
+            raise ValueError(f"{context}: bit masks must be unique")
+        variant_label = str(bcfg.get("label", "Flag bit"))
+        flags_cfg = flags_cfg or [
+            {"value": 0, "name": "Not set", "color": "#b8bfc8"},
+            {"value": 1, "name": "Set", "color": "#d55e00"},
+        ]
+    elif "variants" in pcfg:
         vcfg = pcfg["variants"]
         variants = [
             VariantDef(
@@ -243,7 +282,9 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
 
     flags = []
     if ptype == "flag":
-        for flag in _require(pcfg, "flags", context):
+        if flags_cfg is None:
+            raise ValueError(f"missing 'flags' in {context}")
+        for flag in flags_cfg:
             flags.append(
                 FlagDef(
                     value=int(_require(flag, "value", context)),
@@ -287,6 +328,15 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
     else:
         colour_scales = [ColourScale("", "", plot_range, cmap, "")]
 
+    # modes with maps: all mode selections by default ([''] when there is no mode selection)
+    map_modes = [str(m) for m in pcfg.get("map_modes", modes or [""])]
+    for mode in map_modes:
+        if mode not in (modes or [""]):
+            raise ValueError(f"{context}: map mode {mode} is not one of the parameter's modes")
+    default_variant = str(pcfg.get("default_variant", variants[0].id))
+    if default_variant not in [v.id for v in variants]:
+        raise ValueError(f"{context}: default_variant {default_variant} is not a variant id")
+
     return ParameterConfig(
         id=pid,
         long_name=str(pcfg.get("long_name", pid)),
@@ -303,6 +353,8 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
         cmap=cmap,
         dtype=str(pcfg.get("dtype", "float32")),
         colour_scales=colour_scales,
+        map_modes=map_modes,
+        default_variant=default_variant,
     )
 
 

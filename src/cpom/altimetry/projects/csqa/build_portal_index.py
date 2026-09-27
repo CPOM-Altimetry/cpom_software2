@@ -58,9 +58,14 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "name": v.name,
                 "variable": v.variable,
                 "mode_descriptions": v.mode_descriptions,
+                "bit_mask": v.bit_mask,
+                "bit_name": v.bit_name,
             }
             for v in param.variants
         ],
+        "default_variant": param.default_variant,
+        "bit_flag": param.is_bit_flag,
+        "map_modes": param.map_modes,
         "modes": param.modes,
         "areas": param.areas,
         "flags": [

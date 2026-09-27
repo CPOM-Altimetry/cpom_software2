@@ -160,6 +160,60 @@ parameters:
       range: [0.0, 35.0]
       cmap: RdYlBu_r
 
+  quality_flags:
+    long_name: "Quality Flags"
+    description: >-
+      The 20 Hz L2 quality flag word: bits giving the ground segment's assessment of the quality
+      of each measurement's parameters, and the surface type discriminated by the SAR processing
+      chain. Statistics are the percentage of records with each bit set. An error bit set for a
+      height or backscatter that is not a fill value means the result should typically be
+      rejected.
+    source: GDR-A
+    type: flag
+    variable: flag_prod_status_20_ku
+    # each bit is selectable in the portal, with values Set / Not set. name: the bit's name in
+    # the variable's flag_meanings attribute (checked when reading products)
+    bits:
+      label: "Flag bit"
+      options:
+        - {mask: 134217728, name: block_degraded, label: "Record degraded"}
+        - {mask: 67108864, name: orbit_error, label: "Orbit error"}
+        - {mask: 33554432, name: orbit_discontinuity, label: "Orbit discontinuity"}
+        - {mask: 16777216, name: height_1_error, label: "Height error (retracker 1)"}
+        - {mask: 8388608, name: height_2_error, label: "Height error (retracker 2)"}
+        - {mask: 4194304, name: height_3_error, label: "Height error (retracker 3)"}
+        - {mask: 268435456, name: height_sea_ice_error, label: "Sea ice height error"}
+        - {mask: 262144, name: ssha_interp_error, label: "SSHA interpolation error"}
+        - {mask: 1, name: calibration_warning, label: "Calibration warning"}
+        - {mask: 2097152, name: sig0_1_error, label: "Backscatter error (retracker 1)"}
+        - {mask: 1048576, name: sig0_2_error, label: "Backscatter error (retracker 2)"}
+        - {mask: 524288, name: sig0_3_error, label: "Backscatter error (retracker 3)"}
+        - {mask: 65536, name: freeboard_error, label: "Freeboard error"}
+        - {mask: 131072, name: peakiness_error, label: "Peakiness error"}
+        - {mask: 32768, name: surf_type_class_ocean, label: "Surface class: ocean"}
+        - {mask: 16384, name: surf_type_class_lead, label: "Surface class: lead"}
+        - {mask: 8192, name: surf_type_class_sea_ice, label: "Surface class: sea ice"}
+        - {mask: 4096, name: surf_type_class_undefined, label: "Surface class: undefined"}
+        - {mask: 1024, name: sarin_rx_1_error, label: "SARin RX 1 error"}
+        - {mask: 512, name: sarin_rx_2_error, label: "SARin RX 2 error"}
+        - {mask: 256, name: sarin_side_redundant, label: "SARin side redundant"}
+        - {mask: 128, name: surface_model_unavailable, label: "Surface model unavailable"}
+        - {mask: 64, name: mispointing_error, label: "Mispointing error"}
+        - {mask: 32, name: delta_time_error, label: "Delta time error"}
+        - {mask: 2, name: sarin_bad_velocity, label: "SARin bad velocity"}
+        - {mask: 4, name: sarin_out_of_range, label: "SARin out of range"}
+        - {mask: 8, name: sarin_bad_baseline, label: "SARin bad baseline"}
+        - {mask: 2048, name: sarin_height_ambiguous, label: "SARin height ambiguous"}
+        - {mask: 16, name: lrm_slope_model_invalid, label: "LRM slope model invalid"}
+        # Baseline-F only
+        - {mask: 536870912, name: sarin_height_unwrap, label: "SARin height unwrap"}
+        - {mask: 1073741824, name: sarin_off_nadir_lead, label: "SARin off-nadir lead"}
+    default_variant: b24  # height error (retracker 1)
+    modes: [all, lrm, sar, sarin]
+    # maps (set / not set) only for all modes, and only where a bit is set
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
   peakiness:
     long_name: "Waveform Peakiness"
     description: >-

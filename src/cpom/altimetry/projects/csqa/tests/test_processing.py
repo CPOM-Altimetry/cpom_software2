@@ -107,6 +107,21 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert not os.path.exists(os.path.join(mode_plots, "thumbs", stale))
     assert os.path.isfile(os.path.join(mode_plots, "acquisition_mode_south_polar.webp"))
 
+    # quality flag word: statistics of every bit, in every mode (no maps)
+    status = process_cycles_main(
+        ["-c", "193", "-b", "F", "--config", one_file_config, "--areas", "north_polar"]
+        + ["-p", "quality_flags", "--no_plots"]
+    )
+    assert status == 0
+    with open(os.path.join(cdir, "stats", "quality_flags.json"), encoding="utf-8") as fh:
+        qf_rows = json.load(fh)["rows"]
+    assert len(qf_rows) == 31 * 4
+    for row in qf_rows:
+        assert abs(row["pct"]["set"] + row["pct"]["not_set"] - 100.0) < 1e-3
+    qf = {(r["variant"], r["mode"]): r for r in qf_rows}
+    assert qf[("b21", "sar")]["pct"]["set"] < 100.0  # backscatter (retracker 1) error
+    assert qf[("b19", "sar")]["pct"]["set"] == 100.0  # retracker 3 backscatter unused in SAR
+
     # update mode skips unchanged inputs
     status = process_cycles_main(
         ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "backscatter", "--no_plots"]

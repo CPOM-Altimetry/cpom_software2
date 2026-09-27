@@ -10,6 +10,9 @@ boundary may be assigned to the adjacent cycle.
 
 Locations are taken from the variable's 'coordinates' attribute (ie "lon_poca_20_ku
 lat_poca_20_ku"), or the configured default coordinates when that is missing or unusable.
+
+For bit flag parameters the flag word is read once and each bit's values (1 set, 0 not set)
+are derived from it on demand (ParameterData.variant_values).
 """
 
 import logging
@@ -20,7 +23,11 @@ from typing import cast
 import numpy as np
 from netCDF4 import Dataset, date2num, num2date  # pylint: disable=no-name-in-module
 
-from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, ParameterConfig
+from cpom.altimetry.projects.csqa.csqa_config import (
+    CsqaConfig,
+    ParameterConfig,
+    VariantDef,
+)
 from cpom.altimetry.projects.csqa.product_files import ProductFile
 
 log = logging.getLogger(__name__)
@@ -34,6 +41,7 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
 
     n_records: int = 0
     values: dict[str, np.ndarray] = field(default_factory=dict)  # variant id -> values
+    bit_words: dict[str, np.ndarray] = field(default_factory=dict)  # variable -> flag words
     coord_names: dict[str, tuple[str, str]] = field(default_factory=dict)  # variant -> lat,lon
     lats: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
     lons: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
@@ -43,6 +51,12 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     missing_variables: dict[str, int] = field(default_factory=dict)  # var -> n files missing
     first_time: datetime | None = None
     last_time: datetime | None = None
+
+    def variant_values(self, variant: VariantDef) -> np.ndarray:
+        """values of a variant: for a bit of a flag word 1 (set), 0 (not set) or NaN (fill)"""
+        if variant.bit_mask is None:
+            return self.values[variant.id]
+        return bit_values(self.bit_words[variant.variable], variant.bit_mask)
 
     def lat(self, variant: str) -> np.ndarray:
         """latitudes of a variant's values"""
@@ -107,6 +121,32 @@ def _num2datetime(value: float, time_var) -> datetime:
     return cast(datetime, np.asarray(when)[0]).replace(tzinfo=None, microsecond=0)
 
 
+def bit_values(words: np.ndarray, mask: int) -> np.ndarray:
+    """values of one bit of flag words: 1 (set), 0 (not set) or NaN (missing, words < 0)"""
+    vals = ((words & mask) != 0).astype(np.float32)
+    vals[words < 0] = np.nan
+    return vals
+
+
+def check_bit_meanings(nc: Dataset, param: ParameterConfig, file_name: str):
+    """warn when a configured bit's name differs from the flag_meanings of the product"""
+    var = nc.variables.get(param.variants[0].variable)
+    if var is None or not hasattr(var, "flag_masks") or not hasattr(var, "flag_meanings"):
+        return
+    meanings = dict(zip((int(m) for m in np.atleast_1d(var.flag_masks)), var.flag_meanings.split()))
+    for variant in param.variants:
+        name = meanings.get(int(variant.bit_mask or 0))
+        if name is not None and variant.bit_name and name != variant.bit_name:
+            log.warning(
+                "%s bit %d is %s in %s, not %s as configured",
+                variant.variable,
+                variant.bit_mask,
+                name,
+                file_name,
+                variant.bit_name,
+            )
+
+
 def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     files: list[ProductFile],
     param: ParameterConfig,
@@ -129,7 +169,11 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     data = ParameterData()
     dtype = np.dtype(param.dtype)
 
-    values: dict[str, list[np.ndarray]] = {v.id: [] for v in param.variants}
+    values: dict[str, list[np.ndarray]] = {v.id: [] for v in param.variants if v.bit_mask is None}
+    # flag words of bit flag parameters, read once per variable
+    bit_words: dict[str, list[np.ndarray]] = {
+        v.variable: [] for v in param.variants if v.bit_mask is not None
+    }
     lats: dict[tuple[str, str], list[np.ndarray]] = {}
     lons: dict[tuple[str, str], list[np.ndarray]] = {}
     modes: list[np.ndarray] = []
@@ -186,8 +230,23 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                 data.first_time = first if data.first_time is None else min(data.first_time, first)
                 data.last_time = last if data.last_time is None else max(data.last_time, last)
 
+                # flag words of bit flag parameters (-1 where missing or fill)
+                for var_name, words in bit_words.items():
+                    var = nc.variables.get(var_name)
+                    if var is None or var.dimensions[0] != time_name:
+                        data.missing_variables[var_name] = (
+                            data.missing_variables.get(var_name, 0) + 1
+                        )
+                        words.append(np.full(n_sel, -1, dtype=np.int64))
+                    else:
+                        if not words:
+                            check_bit_meanings(nc, param, pfile.name)
+                        words.append(_read(nc, var_name, sel, np.int64, -1))
+
                 # parameter values of each variant
                 for variant in param.variants:
+                    if variant.bit_mask is not None:
+                        continue
                     var = nc.variables.get(variant.variable)
                     if var is None or var.dimensions[0] != time_name:
                         data.missing_variables[variant.variable] = (
@@ -233,6 +292,10 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     data.values = {
         vid: np.concatenate(arrs) if arrs else np.array([], dtype=dtype)
         for vid, arrs in values.items()
+    }
+    data.bit_words = {
+        var_name: np.concatenate(arrs) if arrs else np.array([], dtype=np.int64)
+        for var_name, arrs in bit_words.items()
     }
     for key in coord_keys:
         data.lats[key] = np.concatenate(lats[key]) if key in lats else np.array([], np.float32)

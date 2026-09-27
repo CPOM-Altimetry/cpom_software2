@@ -25,7 +25,7 @@ import numpy as np
 
 from cpom.altimetry.projects.csqa import __version__
 from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, ParameterConfig
-from cpom.altimetry.projects.csqa.loader import load_parameter_data
+from cpom.altimetry.projects.csqa.loader import bit_values, load_parameter_data
 from cpom.altimetry.projects.csqa.log_setup import current_logging_config, setup_logging
 from cpom.altimetry.projects.csqa.outputs import (
     cycle_dir,
@@ -47,7 +47,7 @@ from cpom.altimetry.projects.csqa.product_files import (
     coverage_days,
     find_product_files,
 )
-from cpom.altimetry.projects.csqa.stats import flag_stats, float_stats
+from cpom.altimetry.projects.csqa.stats import bit_flag_stats, flag_stats, float_stats
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +111,16 @@ def _info_path(cfg: CsqaConfig, baseline: str, cycle: int) -> str:
     return os.path.join(cycle_dir(cfg.output_dir, baseline, cycle), "cycle_info.json")
 
 
+def has_maps(param: ParameterConfig, row: dict) -> bool:
+    """True if a statistics row's selection has maps: its mode has maps, it has valid values
+    and, for a bit of a flag word, the bit is set in some records"""
+    if row.get("mode", "") not in param.map_modes or row.get("n_valid", 0) == 0:
+        return False
+    if param.is_bit_flag:
+        return (row.get("counts") or {}).get("set", 0) > 0
+    return True
+
+
 def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, make_plots: bool):
     """True if the stats file (and plots of every colour scale if required) of a parameter
     exist for a cycle"""
@@ -121,7 +131,7 @@ def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, ma
         param = cfg.parameters[param_id]
         pdir = plots_dir(cfg.output_dir, baseline, cycle, param_id)
         for row in stats.get("rows", []):
-            if row.get("n_valid", 0) == 0:
+            if not has_maps(param, row):
                 continue
             for scale in param.colour_scales:
                 fname = plot_filename(
@@ -259,17 +269,21 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
     }
     plots: dict[tuple[str, str, str, str], "Future[int] | int"] = {}
 
-    def plot_selection(variant, mode, area, lats, lons, idx, sel_vals, row):
+    def plot_selection(variant, mode, area, sel, get_sel_vals, row):
         """submit the maps of a selection in each colour scale (or when not plotting, keep
-        existing maps, and remove maps of selections without valid values)"""
-        sel_lats = lats[idx] if make_plots and row["n_valid"] > 0 else None
-        sel_lons = lons[idx] if make_plots and row["n_valid"] > 0 else None
+        existing maps, and remove maps of selections without maps). get_sel_vals() returns
+        the selection's values (only called when they are plotted)"""
+        with_maps = has_maps(param, row)
+        plotting = make_plots and with_maps
+        sel_lats = data.lat(variant.id)[sel] if plotting else None
+        sel_lons = data.lon(variant.id)[sel] if plotting else None
+        sel_vals = get_sel_vals() if plotting else None
         for scale in param.colour_scales:
             fname = plot_filename(
                 param.id, variant.id, mode, area.id, cfg.image_format, scale.file_suffix
             )
             fpath = os.path.join(pdir, fname)
-            if row["n_valid"] == 0:
+            if not with_maps:
                 _remove_plot(fpath)  # left from an earlier run with different inputs
             elif make_plots:
                 job = prepare_plot_job(
@@ -295,38 +309,72 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
                 else:
                     row["plot"] = fname
 
-    for variant in param.variants:
-        vals = data.values[variant.id]
-        lats = data.lat(variant.id)
-        lons = data.lon(variant.id)
-        for mode in param.mode_options:
-            mode_sel = None
+    # area/mode selections, shared by the variants with the same coordinates
+    selections: dict[tuple, np.ndarray] = {}
+
+    def selection(variant, mode, area):
+        key = (data.coord_names[variant.id], mode, area.id)
+        if key not in selections:
+            lats = data.lat(variant.id)
+            sel = (lats >= area.lat_min) & (lats <= area.lat_max)
             if mode not in ("", "all") and data.modes is not None:
-                mode_sel = data.modes == cfg.mode_values[mode]
+                sel &= data.modes == cfg.mode_values[mode]
+            selections[key] = sel
+        return selections[key]
+
+    def add_row(variant, mode, area, n_records, stats, sel, get_sel_vals):
+        """add the statistics row of a selection, and handle its maps"""
+        row: dict = {
+            "area": area.id,
+            "variant": variant.id,
+            "mode": mode,
+            "n_records": n_records,
+            **stats,
+            "plot": None,  # map of the default colour scale
+            "plot_step": None,
+            "extra_plots": {},  # colour scale id -> map of other colour scales
+        }
+        plot_selection(variant, mode, area, sel, get_sel_vals, row)
+        rows[(area.id, variant.id, mode)] = row
+
+    if param.is_bit_flag:
+        # bits of a flag word: count every bit in each selection of the words
+        words = data.bit_words[param.variants[0].variable]
+        for mode in param.mode_options:
             for area_id in area_ids:
                 area = cfg.areas[area_id]
-                sel = (lats >= area.lat_min) & (lats <= area.lat_max)
-                if mode_sel is not None:
-                    sel &= mode_sel
-                idx = np.flatnonzero(sel)
-                sel_vals = vals[idx]
-
-                key = (area_id, variant.id, mode)
-                row: dict = {
-                    "area": area_id,
-                    "variant": variant.id,
-                    "mode": mode,
-                    "n_records": int(idx.size),
-                }
-                if param.type == "flag":
-                    row.update(flag_stats(sel_vals, param.flags))
-                else:
-                    row.update(float_stats(sel_vals))
-                row["plot"] = None  # map of the default colour scale
-                row["plot_step"] = None
-                row["extra_plots"] = {}  # colour scale id -> map of other colour scales
-                plot_selection(variant, mode, area, lats, lons, idx, sel_vals, row)
-                rows[key] = row
+                sel = selection(param.variants[0], mode, area)
+                sel_words = words[sel]
+                valid = sel_words >= 0
+                n_valid = int(np.count_nonzero(valid))
+                valid_or_none = None if n_valid == sel_words.size else valid
+                for variant in param.variants:
+                    mask = int(variant.bit_mask or 0)
+                    add_row(
+                        variant,
+                        mode,
+                        area,
+                        int(sel_words.size),
+                        bit_flag_stats(sel_words, valid_or_none, n_valid, mask, param.flags),
+                        sel,
+                        lambda w=sel_words, m=mask: bit_values(w, m),
+                    )
+    else:
+        for variant in param.variants:
+            vals = data.variant_values(variant)
+            for mode in param.mode_options:
+                for area_id in area_ids:
+                    area = cfg.areas[area_id]
+                    sel = selection(variant, mode, area)
+                    sel_vals = vals[sel]
+                    stats = (
+                        flag_stats(sel_vals, param.flags)
+                        if param.type == "flag"
+                        else float_stats(sel_vals)
+                    )
+                    add_row(
+                        variant, mode, area, int(sel_vals.size), stats, sel, lambda v=sel_vals: v
+                    )
 
     summary = {
         "parameter": param.id,
@@ -364,7 +412,7 @@ def _remove_stale_plots(
     expected = {
         plot_filename(param.id, r["variant"], r["mode"], r["area"], cfg.image_format, s.file_suffix)
         for r in rows
-        if r.get("n_valid", 0) > 0
+        if has_maps(param, r)
         for s in param.colour_scales
     }
     for directory in (pdir, os.path.join(pdir, "thumbs")):

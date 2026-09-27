@@ -7,6 +7,7 @@ import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config, sanitize_key
 from cpom.altimetry.projects.csqa.plotting import plot_filename
+from cpom.altimetry.projects.csqa.processing import has_maps
 from cpom.areas.area_plot import log_scale_ticks
 
 
@@ -91,6 +92,29 @@ def test_log_colour_scale(tmp_path, default_config):
     config_file.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     with pytest.raises(ValueError, match="needs a range above 0"):
         load_config(str(config_file))
+
+
+def test_bit_flag_parameter(default_config):
+    """the quality flag word is a bit flag parameter with maps for all modes only"""
+    qflags = default_config.parameters["quality_flags"]
+    assert qflags.is_bit_flag and qflags.type == "flag"
+    assert len(qflags.variants) == 31
+    assert {v.variable for v in qflags.variants} == {"flag_prod_status_20_ku"}
+    height_1 = next(v for v in qflags.variants if v.bit_name == "height_1_error")
+    assert (height_1.id, height_1.bit_mask) == ("b24", 16777216)
+    assert qflags.default_variant == "b24"
+    assert qflags.map_modes == ["all"]
+    assert [(f.value, f.key) for f in qflags.flags] == [(0, "not_set"), (1, "set")]
+    # other parameters have maps for every mode
+    assert default_config.parameters["backscatter"].map_modes == ["all", "lrm", "sar", "sarin"]
+    assert default_config.parameters["surface_type"].map_modes == [""]
+
+    # maps only where the mode has maps, and a bit is set
+    row = {"mode": "all", "n_valid": 10, "counts": {"set": 2, "not_set": 8}}
+    assert has_maps(qflags, row)
+    assert not has_maps(qflags, {**row, "mode": "sar"})
+    assert not has_maps(qflags, {**row, "counts": {"set": 0, "not_set": 10}})
+    assert has_maps(default_config.parameters["backscatter"], {"mode": "sar", "n_valid": 5})
 
 
 def test_sanitize_key():
