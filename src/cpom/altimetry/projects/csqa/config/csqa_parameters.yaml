@@ -15,14 +15,16 @@
 #                   options : list of {id, name, variable, mode_descriptions}
 #                     mode_descriptions (optional): what the variant is in each acquisition
 #                     mode (ie the retracker used), null where it is not used in a mode.
-#                     Shown in the portal. The retracker definitions below are YAML anchors
-#                     that other retracker parameters can reuse, ie
+#                     Shown in the portal. The retracker definitions (in height) are YAML
+#                     anchors reused by other retracker parameters, ie
 #                     mode_descriptions: *retracker_1_modes
 #   modes       : acquisition mode selections (all, lrm, sar, sarin). Omit for no mode selection
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
 #   units       : units of float parameters
 #   plot        : range [min, max] of the map colour scale, cmap (matplotlib colormap name)
+#                 or scales: list of {id, name, range, cmap (optional)} for several colour
+#                 scales, each with its own set of maps (the first is the default)
 #   dtype       : numpy dtype used to hold float values (default float32). Use float64 for
 #                 parameters needing more than ~7 significant digits (ie elevations)
 # ------------------------------------------------------------------------------------------------
@@ -59,6 +61,51 @@ parameters:
       - {value: 3, name: "Land", color: "#e69f00"}
     areas: [global, north_polar, south_polar]
 
+  height:
+    long_name: "Surface Height"
+    description: >-
+      Surface height above the WGS84 ellipsoid of each 20 Hz measurement for each L2 retracker,
+      at the estimated echo location (POCA), with instrumental and geophysical corrections and
+      system bias applied. Corrected for surface slope with a slope model in LRM and SARin
+      degraded modes, and with the SARin phase information in SARin mode. Retrackers 2 and 3
+      are only used in LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    # float64: heights of several km with mm resolution
+    dtype: float64
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: height_1_20_ku
+          mode_descriptions: &retracker_1_modes
+            lrm: "Ocean CFI retracker"
+            sar: "UCL sea-ice retracker"
+            sarin: "UCL margins retracker"
+        - id: rtk2
+          name: "Retracker 2"
+          variable: height_2_20_ku
+          mode_descriptions: &retracker_2_modes
+            lrm: "UCL land-ice retracker"
+            sar: null
+            sarin: null
+        - id: rtk3
+          name: "Retracker 3"
+          variable: height_3_20_ku
+          mode_descriptions: &retracker_3_modes
+            lrm: "OCOG retracker"
+            sar: null
+            sarin: null
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+      scales:
+        - {id: landocean, name: "Land and ocean", range: [-120.0, 4300.0]}
+        - {id: ocean, name: "Ocean only", range: [-120.0, 80.0]}
+
   backscatter:
     long_name: "Backscatter (Sigma0)"
     description: >-
@@ -75,24 +122,15 @@ parameters:
         - id: rtk1
           name: "Retracker 1"
           variable: sig0_1_20_ku
-          mode_descriptions: &retracker_1_modes
-            lrm: "Ocean CFI retracker"
-            sar: "UCL sea-ice retracker"
-            sarin: "UCL margins retracker"
+          mode_descriptions: *retracker_1_modes
         - id: rtk2
           name: "Retracker 2"
           variable: sig0_2_20_ku
-          mode_descriptions: &retracker_2_modes
-            lrm: "UCL land-ice retracker"
-            sar: null
-            sarin: null
+          mode_descriptions: *retracker_2_modes
         - id: rtk3
           name: "Retracker 3"
           variable: sig0_3_20_ku
-          mode_descriptions: &retracker_3_modes
-            lrm: "OCOG retracker"
-            sar: null
-            sarin: null
+          mode_descriptions: *retracker_3_modes
     modes: [all, lrm, sar, sarin]
     areas: [global, north_polar, south_polar]
     plot:

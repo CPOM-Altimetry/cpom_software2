@@ -72,7 +72,8 @@ class _PendingParameter:  # pylint: disable=too-many-instance-attributes
     param: ParameterConfig
     signature: str
     rows: dict[tuple[str, str, str], dict]  # (area, variant, mode) -> statistics row
-    plots: dict[tuple[str, str, str], "Future[int] | int"]  # -> plot step (or its future)
+    # (area, variant, mode, colour scale file suffix) -> plot step (or its future)
+    plots: dict[tuple[str, str, str, str], "Future[int] | int"]
     summary: dict  # statistics file fields other than the rows
     t_start: float
 
@@ -110,17 +111,28 @@ def _info_path(cfg: CsqaConfig, baseline: str, cycle: int) -> str:
 
 
 def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, make_plots: bool):
-    """True if the stats file (and plots if required) of a parameter exist for a cycle"""
+    """True if the stats file (and plots of every colour scale if required) of a parameter
+    exist for a cycle"""
     stats = read_json(stats_path(cfg.output_dir, baseline, cycle, param_id))
     if stats is None:
         return False
     if make_plots:
+        param = cfg.parameters[param_id]
         pdir = plots_dir(cfg.output_dir, baseline, cycle, param_id)
         for row in stats.get("rows", []):
-            if row.get("n_valid", 0) > 0 and not (
-                row.get("plot") and os.path.isfile(os.path.join(pdir, row["plot"]))
-            ):
-                return False
+            if row.get("n_valid", 0) == 0:
+                continue
+            for scale in param.colour_scales:
+                fname = plot_filename(
+                    param_id,
+                    row["variant"],
+                    row["mode"],
+                    row["area"],
+                    cfg.image_format,
+                    scale.file_suffix,
+                )
+                if not os.path.isfile(os.path.join(pdir, fname)):
+                    return False
     return True
 
 
@@ -244,7 +256,43 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
         for r in previous.get("rows", [])
         if r.get("area") not in area_ids and r.get("area") in param.areas
     }
-    plots: dict[tuple[str, str, str], "Future[int] | int"] = {}
+    plots: dict[tuple[str, str, str, str], "Future[int] | int"] = {}
+
+    def plot_selection(variant, mode, area, lats, lons, idx, sel_vals, row):
+        """submit the maps of a selection in each colour scale (or when not plotting, keep
+        existing maps, and remove maps of selections without valid values)"""
+        sel_lats = lats[idx] if make_plots and row["n_valid"] > 0 else None
+        sel_lons = lons[idx] if make_plots and row["n_valid"] > 0 else None
+        for scale in param.colour_scales:
+            fname = plot_filename(
+                param.id, variant.id, mode, area.id, cfg.image_format, scale.file_suffix
+            )
+            fpath = os.path.join(pdir, fname)
+            if row["n_valid"] == 0:
+                _remove_plot(fpath)  # left from an earlier run with different inputs
+            elif make_plots:
+                job = prepare_plot_job(
+                    cfg,
+                    param,
+                    variant,
+                    mode,
+                    area,
+                    sel_lats,
+                    sel_lons,
+                    sel_vals,
+                    row,
+                    cycle,
+                    bounds,
+                    baseline,
+                    fpath,
+                    scale,
+                )
+                plots[(area.id, variant.id, mode, scale.file_suffix)] = submit_plot(job)
+            elif os.path.isfile(fpath):  # keep the existing map when not plotting
+                if scale.file_suffix:
+                    row["extra_plots"][scale.id] = fname
+                else:
+                    row["plot"] = fname
 
     for variant in param.variants:
         vals = data.values[variant.id]
@@ -273,32 +321,10 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
                     row.update(flag_stats(sel_vals, param.flags))
                 else:
                     row.update(float_stats(sel_vals))
-                row["plot"] = None
+                row["plot"] = None  # map of the default colour scale
                 row["plot_step"] = None
-
-                fname = plot_filename(param.id, variant.id, mode, area_id, cfg.image_format)
-                fpath = os.path.join(pdir, fname)
-                if row["n_valid"] == 0:
-                    _remove_plot(fpath)  # left from an earlier run with different inputs
-                elif make_plots:
-                    job = prepare_plot_job(
-                        cfg,
-                        param,
-                        variant,
-                        mode,
-                        area,
-                        lats[idx],
-                        lons[idx],
-                        sel_vals,
-                        row,
-                        cycle,
-                        bounds,
-                        baseline,
-                        fpath,
-                    )
-                    plots[key] = submit_plot(job)
-                elif os.path.isfile(fpath):
-                    row["plot"] = fname  # keep the existing plot when not plotting
+                row["extra_plots"] = {}  # colour scale id -> map of other colour scales
+                plot_selection(variant, mode, area, lats, lons, idx, sel_vals, row)
                 rows[key] = row
 
     summary = {
@@ -329,13 +355,16 @@ def _finish_parameter(cfg: CsqaConfig, pending: _PendingParameter) -> dict:
         dict: statistics of the parameter for the cycle (as written to the stats json file)
     """
     param = pending.param
-    for key, result in pending.plots.items():
+    scale_ids = {s.file_suffix: s.id for s in param.colour_scales}
+    for (area_id, variant_id, mode, suffix), result in pending.plots.items():
         step = result.result() if isinstance(result, Future) else result
-        area_id, variant_id, mode = key
-        pending.rows[key]["plot"] = plot_filename(
-            param.id, variant_id, mode, area_id, cfg.image_format
-        )
-        pending.rows[key]["plot_step"] = step
+        row = pending.rows[(area_id, variant_id, mode)]
+        fname = plot_filename(param.id, variant_id, mode, area_id, cfg.image_format, suffix)
+        if suffix:
+            row["extra_plots"][scale_ids[suffix]] = fname
+        else:
+            row["plot"] = fname
+            row["plot_step"] = step
 
     # order rows as in the parameter definition
     order = {

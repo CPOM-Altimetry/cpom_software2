@@ -59,10 +59,11 @@ area_definition = {
         0.07,  # width (axes fraction)
         0.14,  # height (axes fraction)
     ],
+    # room on the left for 5 digit tick labels (ie heights) and the axis label
     "latvals_axes": [
-        0.85,  # left
+        0.87,  # left
         0.05,  # bottom
-        0.12,  # width (axes fraction)
+        0.105,  # width (axes fraction)
         0.14,  # height (axes fraction)
     ],
     # flag percentages below the map ([left, bottom, width], height is set by the flag count)

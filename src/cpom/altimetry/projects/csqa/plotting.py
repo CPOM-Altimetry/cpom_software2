@@ -26,6 +26,7 @@ from PIL import Image
 
 from cpom.altimetry.projects.csqa.csqa_config import (
     AreaConfig,
+    ColourScale,
     CsqaConfig,
     ParameterConfig,
     VariantDef,
@@ -41,8 +42,11 @@ log = logging.getLogger(__name__)
 THUMBNAIL_WIDTH = 360  # pixels
 
 
-def plot_filename(param_id: str, variant_id: str, mode: str, area_id: str, fmt: str) -> str:
-    """Name of a parameter's map plot file, ie backscatter_rtk1_sar_global.webp
+def plot_filename(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    param_id: str, variant_id: str, mode: str, area_id: str, fmt: str, scale_suffix: str = ""
+) -> str:
+    """Name of a parameter's map plot file, ie backscatter_rtk1_sar_global.webp or
+    height_rtk1_all_global_ocean.webp
 
     Args:
         param_id (str): parameter id
@@ -50,11 +54,13 @@ def plot_filename(param_id: str, variant_id: str, mode: str, area_id: str, fmt: 
         mode (str): mode selection ('' if none)
         area_id (str): area id
         fmt (str): image format / file extension
+        scale_suffix (str): colour scale file suffix ('' for the default colour scale)
 
     Returns:
         str: file name
     """
-    return "_".join(part for part in (param_id, variant_id, mode, area_id) if part) + f".{fmt}"
+    parts = (param_id, variant_id, mode, area_id, scale_suffix)
+    return "_".join(part for part in parts if part) + f".{fmt}"
 
 
 def thumbnail_path(plot_path: str) -> str:
@@ -122,6 +128,7 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
     cycle_bounds: tuple[datetime, datetime],
     baseline: str,
     out_path: str,
+    scale: ColourScale | None = None,
 ) -> PlotJob:
     """Prepare the map plot of a parameter selection
 
@@ -140,6 +147,8 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         cycle_bounds (tuple[datetime,datetime]): cycle start (inclusive) and end (exclusive)
         baseline (str): product baseline
         out_path (str): output plot file path
+        scale (ColourScale|None): colour scale of float parameters (default: the parameter's
+                                  default colour scale)
 
     Returns:
         PlotJob
@@ -162,10 +171,12 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         # percentages of all records, not just those plotted
         data_set["flag_percents"] = [stats["pct"][f.key] for f in param.flags]
     else:
-        data_set["cmap_name"] = param.cmap
-        if param.plot_range is not None:
-            data_set["min_plot_range"] = param.plot_range[0]
-            data_set["max_plot_range"] = param.plot_range[1]
+        if scale is None:
+            scale = param.colour_scales[0]
+        data_set["cmap_name"] = scale.cmap
+        if scale.range is not None:
+            data_set["min_plot_range"] = scale.range[0]
+            data_set["max_plot_range"] = scale.range[1]
         # statistics of all records, not just those plotted
         valid = vals[np.isfinite(vals)].astype(np.float64)
         data_set["stats"] = {
@@ -182,7 +193,11 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
     last_day = end - timedelta(seconds=1)
     annotations = [
         Annotation(
-            0.22, 0.972, plot_title(param, variant, mode, cfg), fontsize=13, fontweight="bold"
+            0.22,
+            0.972,
+            plot_title(param, variant, mode, cfg),
+            fontsize=13,
+            fontweight="bold",
         ),
         Annotation(
             0.22,
@@ -192,17 +207,16 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
             fontsize=10,
         ),
     ]
+    # note line: the colour scale (when not the default) and any subsampling of the map
+    notes = []
+    if scale is not None and scale.file_suffix:
+        notes.append(f"{scale.name} colour scale.")
     if step > 1:
-        annotations.append(
-            Annotation(
-                0.22,
-                0.928,
-                f"Map shows 1 in {step} records. Statistics use all {stats['n_valid']:,} "
-                "valid records",
-                fontsize=8,
-                color="dimgray",
-            )
+        notes.append(
+            f"Map shows 1 in {step} records. Statistics use all {stats['n_valid']:,} valid records"
         )
+    if notes:
+        annotations.append(Annotation(0.22, 0.928, " ".join(notes), fontsize=8, color="dimgray"))
 
     return PlotJob(
         out_path=out_path,

@@ -6,6 +6,7 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config, sanitize_key
+from cpom.altimetry.projects.csqa.plotting import plot_filename
 
 
 def test_default_config(default_config):
@@ -35,6 +36,28 @@ def test_default_config(default_config):
     }
     assert sig0.variants[1].mode_descriptions["sar"] is None
     assert mode.variants[0].mode_descriptions == {}
+
+
+def test_colour_scales(default_config):
+    """height maps have a default and an ocean only colour scale, other parameters one"""
+    scales = default_config.parameters["height"].colour_scales
+    assert [(s.id, s.range, s.file_suffix) for s in scales] == [
+        ("landocean", (-120.0, 4300.0), ""),
+        ("ocean", (-120.0, 80.0), "ocean"),
+    ]
+    assert default_config.parameters["height"].plot_range == (-120.0, 4300.0)
+    sig0 = default_config.parameters["backscatter"]
+    assert [(s.range, s.file_suffix) for s in sig0.colour_scales] == [((0.0, 35.0), "")]
+    # the default colour scale's maps have no file name suffix
+    assert plot_filename("height", "rtk1", "all", "global", "webp") == (
+        "height_rtk1_all_global.webp"
+    )
+    assert plot_filename("height", "rtk1", "all", "global", "webp", "ocean") == (
+        "height_rtk1_all_global_ocean.webp"
+    )
+    assert plot_filename("surface_type", "", "", "north_polar", "webp") == (
+        "surface_type_north_polar.webp"
+    )
 
 
 def test_sanitize_key():

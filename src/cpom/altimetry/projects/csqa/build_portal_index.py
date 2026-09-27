@@ -67,6 +67,16 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
             {"value": f.value, "name": f.name, "key": f.key, "color": f.color} for f in param.flags
         ],
         "plot_range": list(param.plot_range) if param.plot_range else None,
+        # colour scales of the maps (the first is the default)
+        "colour_scales": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "range": list(s.range) if s.range else None,
+                "file_suffix": s.file_suffix,
+            }
+            for s in param.colour_scales
+        ],
         "image_format": cfg.image_format,
     }
 

@@ -68,6 +68,19 @@ class VariantDef:
 
 
 @dataclass(frozen=True)
+class ColourScale:
+    """A colour scale of a float parameter's maps. Each colour scale has its own set of maps,
+    of the same data. The first (default) scale's maps have no file name suffix, the others
+    have the suffix _<id>"""
+
+    id: str
+    name: str
+    range: tuple[float, float] | None
+    cmap: str
+    file_suffix: str
+
+
+@dataclass(frozen=True)
 class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     """A monitored parameter"""
 
@@ -82,9 +95,10 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     areas: list[str]
     flags: list[FlagDef] = field(default_factory=list)
     units: str = ""
-    plot_range: tuple[float, float] | None = None
-    cmap: str = "RdYlBu_r"
+    plot_range: tuple[float, float] | None = None  # of the default colour scale
+    cmap: str = "RdYlBu_r"  # of the default colour scale
     dtype: str = "float32"
+    colour_scales: list[ColourScale] = field(default_factory=list)  # default scale first
 
     @property
     def has_variants(self) -> bool:
@@ -241,9 +255,33 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
             raise ValueError(f"{context}: flag names must be unique")
 
     plot_cfg = pcfg.get("plot", {}) or {}
+    cmap = str(plot_cfg.get("cmap", "RdYlBu_r"))
     plot_range = None
     if plot_cfg.get("range") is not None:
         plot_range = (float(plot_cfg["range"][0]), float(plot_cfg["range"][1]))
+
+    # alternative colour scales, each producing its own maps (the first is the default)
+    colour_scales = []
+    for i, scale in enumerate(plot_cfg.get("scales") or []):
+        scale_id = str(_require(scale, "id", context))
+        if not re.fullmatch(r"[a-z0-9]+", scale_id):
+            raise ValueError(f"{context}: colour scale id {scale_id} must only contain [a-z0-9]")
+        scale_range = scale.get("range")
+        colour_scales.append(
+            ColourScale(
+                id=scale_id,
+                name=str(scale.get("name", scale_id)),
+                range=(float(scale_range[0]), float(scale_range[1])) if scale_range else None,
+                cmap=str(scale.get("cmap", cmap)),
+                file_suffix="" if i == 0 else scale_id,
+            )
+        )
+    if len({s.id for s in colour_scales}) != len(colour_scales):
+        raise ValueError(f"{context}: colour scale ids must be unique")
+    if colour_scales:
+        plot_range, cmap = colour_scales[0].range, colour_scales[0].cmap
+    else:
+        colour_scales = [ColourScale("", "", plot_range, cmap, "")]
 
     return ParameterConfig(
         id=pid,
@@ -258,8 +296,9 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
         flags=flags,
         units=str(pcfg.get("units", "")),
         plot_range=plot_range,
-        cmap=str(plot_cfg.get("cmap", "RdYlBu_r")),
+        cmap=cmap,
         dtype=str(pcfg.get("dtype", "float32")),
+        colour_scales=colour_scales,
     )
 
 
