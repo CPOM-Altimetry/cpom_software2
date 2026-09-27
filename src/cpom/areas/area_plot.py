@@ -1529,10 +1529,10 @@ class Polarplot:
         """
 
         if len(vals) < 2:
-            log.error("not enough values to create histogram")
+            log.info("not enough values to create histogram: histograms not drawn")
             return
         if np.nanmin(vals) == np.nanmax(vals):
-            log.error("can't create histogram from equal values")
+            log.info("all values are equal: histograms not drawn")
             return
 
         hist_axes = fig.add_axes(

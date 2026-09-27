@@ -98,3 +98,47 @@ parameters:
     plot:
       range: [0.0, 35.0]
       cmap: RdYlBu_r
+
+  snow_depth:
+    long_name: "Snow Depth"
+    description: >-
+      Snow depth at 1 Hz. Baseline-E: modified Warren climatology (Arctic only). Baseline-F:
+      computed from CryoTEMPO Baseline-C radar freeboard and ICESat-2 ATL10 lidar freeboard.
+      Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    variable: snow_depth_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 0.6]
+      cmap: viridis
+
+  snow_density:
+    long_name: "Snow Density"
+    description: >-
+      Snow density at 1 Hz. Baseline-E: a fixed average value for all records. Baseline-F:
+      interpolated from a monthly model file. Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: "kg/m^3"
+    variable: snow_density_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [250.0, 450.0]
+      cmap: viridis
+
+  sea_ice_concentration:
+    long_name: "Sea Ice Concentration"
+    description: >-
+      Sea ice concentration (sea ice area fraction) at 1 Hz. Baseline-E: derived from NSIDC
+      SSM/I data. Baseline-F: derived from NSIDC-0081 (before July 2025) or OSI-408-a data.
+      Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: "%"
+    variable: sea_ice_concentration_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 100.0]
+      cmap: viridis
