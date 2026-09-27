@@ -122,9 +122,11 @@ parameters:
     plot:
       # diverging, with a neutral grey midpoint at 0 m
       cmap: coolwarm
+      # typical |SSHA| is 0.05-0.1 m: +-0.3 m holds ~95% of values (87-92% in SARin mode).
+      # The wide scale shows larger anomalies and outliers (as the old portal's +-1.2 m)
       scales:
-        - {id: standard, name: "Standard", range: [-1.2, 1.2]}
-        - {id: fine, name: "Fine detail", range: [-0.3, 0.3]}
+        - {id: standard, name: "Standard", range: [-0.3, 0.3]}
+        - {id: wide, name: "Wide", range: [-1.2, 1.2]}
 
   backscatter:
     long_name: "Backscatter (Sigma0)"

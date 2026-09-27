@@ -76,6 +76,7 @@ class _PendingParameter:  # pylint: disable=too-many-instance-attributes
     plots: dict[tuple[str, str, str, str], "Future[int] | int"]
     summary: dict  # statistics file fields other than the rows
     t_start: float
+    make_plots: bool
 
 
 def input_signature(files: list[ProductFile]) -> str:
@@ -341,7 +342,42 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
         "bad_files": data.bad_files,
         "missing_variables": data.missing_variables,
     }
-    return _PendingParameter(param, input_signature(files), rows, plots, summary, t_start)
+    return _PendingParameter(
+        param, input_signature(files), rows, plots, summary, t_start, make_plots
+    )
+
+
+def _remove_stale_plots(
+    cfg: CsqaConfig, param: ParameterConfig, baseline: str, cycle: int, rows: list[dict]
+):
+    """Remove maps (and thumbnails) of a parameter for a cycle that none of its selections
+    and colour scales produce any more (ie after a colour scale is changed or removed)
+
+    Args:
+        cfg (CsqaConfig): CSQA config
+        param (ParameterConfig): parameter
+        baseline (str): product baseline
+        cycle (int): cycle number
+        rows (list[dict]): statistics rows of the parameter for the cycle
+    """
+    pdir = plots_dir(cfg.output_dir, baseline, cycle, param.id)
+    expected = {
+        plot_filename(param.id, r["variant"], r["mode"], r["area"], cfg.image_format, s.file_suffix)
+        for r in rows
+        if r.get("n_valid", 0) > 0
+        for s in param.colour_scales
+    }
+    for directory in (pdir, os.path.join(pdir, "thumbs")):
+        if not os.path.isdir(directory):
+            continue
+        for name in sorted(os.listdir(directory)):
+            if (
+                name.startswith(f"{param.id}_")
+                and name.endswith(f".{cfg.image_format}")
+                and name not in expected
+            ):
+                os.remove(os.path.join(directory, name))
+                log.info("removed stale map %s", os.path.join(directory, name))
 
 
 def _finish_parameter(cfg: CsqaConfig, pending: _PendingParameter) -> dict:
@@ -384,6 +420,8 @@ def _finish_parameter(cfg: CsqaConfig, pending: _PendingParameter) -> dict:
     }
     baseline, cycle = pending.summary["baseline"], pending.summary["cycle"]
     write_json_atomic(stats_path(cfg.output_dir, baseline, cycle, param.id), stats)
+    if pending.make_plots:
+        _remove_stale_plots(cfg, param, baseline, cycle, stats["rows"])
     return stats
 
 

@@ -92,6 +92,21 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert len(ts_rows) == 36
     assert ts_rows[0]["cycle"] == "193" and ts_rows[0]["start_date"] == "2026-07-26"
 
+    # maps no configured selection or colour scale produces are removed when re-plotting
+    mode_plots = os.path.join(cdir, "plots", "acquisition_mode")
+    stale = "acquisition_mode_north_polar_oldscale.webp"
+    for directory in (mode_plots, os.path.join(mode_plots, "thumbs")):
+        with open(os.path.join(directory, stale), "wb"):
+            pass
+    status = process_cycles_main(
+        ["-c", "193", "-b", "F", "--config", one_file_config, "--areas", "north_polar"]
+        + ["-p", "acquisition_mode"]
+    )
+    assert status == 0
+    assert not os.path.exists(os.path.join(mode_plots, stale))
+    assert not os.path.exists(os.path.join(mode_plots, "thumbs", stale))
+    assert os.path.isfile(os.path.join(mode_plots, "acquisition_mode_south_polar.webp"))
+
     # update mode skips unchanged inputs
     status = process_cycles_main(
         ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "backscatter", "--no_plots"]
