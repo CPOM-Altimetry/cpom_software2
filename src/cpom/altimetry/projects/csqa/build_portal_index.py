@@ -74,6 +74,7 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "name": s.name,
                 "range": list(s.range) if s.range else None,
                 "file_suffix": s.file_suffix,
+                "log": s.log,
             }
             for s in param.colour_scales
         ],

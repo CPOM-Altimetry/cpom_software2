@@ -78,6 +78,7 @@ class ColourScale:
     range: tuple[float, float] | None
     cmap: str
     file_suffix: str
+    log: bool = False  # logarithmic colour scale
 
 
 @dataclass(frozen=True)
@@ -274,8 +275,11 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
                 range=(float(scale_range[0]), float(scale_range[1])) if scale_range else None,
                 cmap=str(scale.get("cmap", cmap)),
                 file_suffix="" if i == 0 else scale_id,
+                log=bool(scale.get("log", False)),
             )
         )
+        if colour_scales[-1].log and not (scale_range and float(scale_range[0]) > 0):
+            raise ValueError(f"{context}: log colour scale {scale_id} needs a range above 0")
     if len({s.id for s in colour_scales}) != len(colour_scales):
         raise ValueError(f"{context}: colour scale ids must be unique")
     if colour_scales:

@@ -23,8 +23,9 @@
 #   flags       : list of {value, name, color} for flag parameters
 #   units       : units of float parameters
 #   plot        : range [min, max] of the map colour scale, cmap (matplotlib colormap name)
-#                 or scales: list of {id, name, range, cmap (optional)} for several colour
-#                 scales, each with its own set of maps (the first is the default)
+#                 or scales: list of {id, name, range, cmap (optional), log (optional)} for
+#                 several colour scales, each with its own set of maps (the first is the
+#                 default). log: true for a logarithmic colour scale (range must be above 0)
 #   dtype       : numpy dtype used to hold float values (default float32). Use float64 for
 #                 parameters needing more than ~7 significant digits (ie elevations)
 # ------------------------------------------------------------------------------------------------
@@ -158,6 +159,29 @@ parameters:
     plot:
       range: [0.0, 35.0]
       cmap: RdYlBu_r
+
+  peakiness:
+    long_name: "Waveform Peakiness"
+    description: >-
+      Waveform peakiness of each 20 Hz measurement: the ratio of the maximum power in the
+      waveform to the average power of the waveform to the right of the expected leading edge
+      location (the ENVISAT derivation, used for LRM and SARin). In SAR mode, waveform bins with
+      no power are excluded from the average. SAR and SARin echoes do not have the typical
+      pulse-limited echo shape, so peakiness needs a different interpretation in each mode.
+    source: GDR-A
+    type: float
+    variable: peakiness_20_ku
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+      # peakiness is highly skewed and mode dependent: median ~1.3 in LRM, ~5-10 in SARin,
+      # ~10-35 in SAR, with 95th percentiles of ~10-25 (LRM) and ~50-100 (SAR, SARin), so the
+      # default is a log scale showing all modes. Values <= 0 are drawn in the under colour
+      scales:
+        - {id: log, name: "Logarithmic", range: [0.5, 200.0], log: true}
+        - {id: low, name: "Low (LRM)", range: [0.0, 5.0]}
+        - {id: high, name: "High (SAR/SARin)", range: [0.0, 100.0]}
 
   snow_depth:
     long_name: "Snow Depth"

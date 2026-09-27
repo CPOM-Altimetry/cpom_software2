@@ -8,6 +8,7 @@ TODO: grid support
 
 import io
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import List, Tuple, Union
@@ -90,6 +91,33 @@ def calculate_mad(values: np.ndarray):
     absolute_deviations = np.abs(values_np - mean_value)
     mad = np.mean(absolute_deviations)
     return mad
+
+
+def log_scale_ticks(vmin: float, vmax: float, decades_only: bool = False) -> list[float]:
+    """Ticks of a logarithmic scale: 1, 2 and 5 x 10^n (or only 10^n) within [vmin, vmax]
+
+    Args:
+        vmin (float): minimum of the scale (> 0)
+        vmax (float): maximum of the scale
+        decades_only (bool): only 10^n ticks (for small axes)
+
+    Returns:
+        list[float]: tick values, ie [0.5, 1, 2, 5, 10, 20, 50, 100, 200]
+    """
+    first, last = math.floor(math.log10(vmin)), math.ceil(math.log10(vmax))
+    mantissas = (1,) if decades_only else (1, 2, 5)
+    ticks = [round(m * 10.0**e, 12) for e in range(first, last + 1) for m in mantissas]
+    return [t for t in ticks if vmin <= t <= vmax]
+
+
+def positive_log_min(vmin: float, vals: np.ndarray) -> float:
+    """minimum of a logarithmic colour scale: vmin, or if vmin <= 0 the smallest positive value"""
+    if vmin > 0:
+        return vmin
+    positive = vals[vals > 0]
+    new_min = float(np.nanmin(positive)) if positive.size else 1.0
+    log.warning("log colour scale minimum %s <= 0: using %s", vmin, new_min)
+    return new_min
 
 
 def calculate_display_stats(values: np.ndarray) -> dict:
@@ -214,6 +242,9 @@ class Polarplot:
                                                 # colorbar : {'neither', 'both', 'min', 'max'}
               "min_plot_range": None,           # Optional: Min range for colorbar
               "max_plot_range": None,           # Optional: Max range for colorbar
+              "cmap_log": False,                # Optional: logarithmic colour scale (the plot
+                                                # range must be > 0). Values <= 0 are drawn in
+                                                # the under colour
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
               "plot_alpha": 1.0,                # Optional: Marker transparency (0 to 1)
               "stats": None,                    # Optional: statistics drawn instead of those
@@ -799,6 +830,7 @@ class Polarplot:
                         "cmap_extend": data_set.get("cmap_extend", self.thisarea.cmap_extend),
                         "min_plot_range": data_set.get("min_plot_range", np.nanmin(vals)),
                         "max_plot_range": data_set.get("max_plot_range", np.nanmax(vals)),
+                        "log": bool(data_set.get("cmap_log", False)),
                     }
 
                     if is_flag_data:
@@ -862,6 +894,7 @@ class Polarplot:
                                 data_set.get("units", "no units"),
                                 cmap,  # pylint: disable=used-before-assignment
                                 use_cmap=use_cmap_in_hist,
+                                log_scale=bool(data_set.get("cmap_log", False)),
                             )
 
                         if self.thisarea.show_latitude_scatter:
@@ -1516,6 +1549,7 @@ class Polarplot:
         varunits: str,
         cmap,
         use_cmap=True,
+        log_scale=False,
     ):
         """draw two histograms of plot range and full range
 
@@ -1526,6 +1560,9 @@ class Polarplot:
             max_plot_range (float): maximum plot range
             varunits (str): units of vals
             cmap (_type_): colormap instance
+            use_cmap (bool): colour the plot range histogram with the colormap
+            log_scale (bool): the colour scale is logarithmic: use log spaced bins and a log
+                              axis for the plot range histogram
         """
 
         if len(vals) < 2:
@@ -1539,17 +1576,30 @@ class Polarplot:
             self.thisarea.histogram_plotrange_axes
         )  # left, bottom, width, height (fractions of axes)
 
+        bins_spec: int | np.ndarray = 120
+        if log_scale:
+            min_plot_range = positive_log_min(min_plot_range, np.asarray(vals))
+            bins_spec = np.geomspace(min_plot_range, max_plot_range, 121)
         _, bins, patches = hist_axes.hist(
             np.array(vals),
-            120,
+            bins_spec,
             range=[min_plot_range, max_plot_range],
             density=1,
             facecolor="darkblue",
             alpha=0.75,
             orientation="horizontal",
         )
-        bin_centers = 0.5 * (bins[:-1] + bins[1:])
-        col = bin_centers - min(bin_centers)
+        if log_scale:
+            hist_axes.set_yscale("log")
+            ticks = log_scale_ticks(min_plot_range, max_plot_range, decades_only=True)
+            hist_axes.set_yticks(ticks)
+            hist_axes.set_yticklabels([f"{t:g}" for t in ticks])
+            hist_axes.minorticks_off()
+            bin_centers = np.sqrt(bins[:-1] * bins[1:])  # geometric centres
+            col = np.log(bin_centers) - np.log(min(bin_centers))
+        else:
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+            col = bin_centers - min(bin_centers)
         col /= max(col)
 
         if use_cmap:
@@ -1709,6 +1759,12 @@ class Polarplot:
                 orientation="horizontal",
                 extend=dataset.get("cmap_extend", self.thisarea.cmap_extend),
             )
+        if dataset.get("cmap_log"):
+            # plain number ticks (1, 2, 5 x 10^n) instead of the default 10^n labels
+            ticks = log_scale_ticks(scatter.norm.vmin, scatter.norm.vmax)
+            cbar.set_ticks(ticks)
+            cbar.set_ticklabels([f"{t:g}" for t in ticks])
+            cbar.minorticks_off()
         cbar.set_label(f"{varname} ({varunits})")
 
         return cbar
@@ -1938,7 +1994,14 @@ class Polarplot:
         else:
             vmax = np.nanmax(vals)
         # Normalizer
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        norm: mcolors.Normalize
+        if cmap_info.get("log"):
+            norm = mcolors.LogNorm(vmin=positive_log_min(vmin, vals), vmax=vmax)
+            # values <= 0 can not be placed on a log scale: draw them in the under colour
+            if cmap_info["cmap_under_color"] is not None:
+                new_cmap.set_bad(cmap_info["cmap_under_color"])
+        else:
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
         # Default size is 36. Scale up or down
         scale_factor = 36 * plot_size_scale_factor

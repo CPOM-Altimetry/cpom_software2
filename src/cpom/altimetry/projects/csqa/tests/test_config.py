@@ -7,6 +7,7 @@ import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config, sanitize_key
 from cpom.altimetry.projects.csqa.plotting import plot_filename
+from cpom.areas.area_plot import log_scale_ticks
 
 
 def test_default_config(default_config):
@@ -58,6 +59,38 @@ def test_colour_scales(default_config):
     assert plot_filename("surface_type", "", "", "north_polar", "webp") == (
         "surface_type_north_polar.webp"
     )
+
+
+def test_log_colour_scale(tmp_path, default_config):
+    """peakiness has a default log colour scale, and log scales need a range above 0"""
+    peakiness = default_config.parameters["peakiness"]
+    assert [(s.id, s.log, s.file_suffix) for s in peakiness.colour_scales] == [
+        ("log", True, ""),
+        ("low", False, "low"),
+        ("high", False, "high"),
+    ]
+    assert log_scale_ticks(0.5, 200) == [0.5, 1, 2, 5, 10, 20, 50, 100, 200]
+    assert log_scale_ticks(0.5, 200, decades_only=True) == [1, 10, 100]
+
+    params = {
+        "parameters": {
+            "bad": {
+                "source": "GDR-A",
+                "type": "float",
+                "variable": "x",
+                "plot": {"scales": [{"id": "log", "range": [0.0, 10.0], "log": True}]},
+            }
+        }
+    }
+    params_file = tmp_path / "params.yaml"
+    params_file.write_text(yaml.safe_dump(params), encoding="utf-8")
+    with open(default_config.config_file, encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh)
+    cfg["parameters_file"] = str(params_file)
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    with pytest.raises(ValueError, match="needs a range above 0"):
+        load_config(str(config_file))
 
 
 def test_sanitize_key():

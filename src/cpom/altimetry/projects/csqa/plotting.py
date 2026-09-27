@@ -174,6 +174,7 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         if scale is None:
             scale = param.colour_scales[0]
         data_set["cmap_name"] = scale.cmap
+        data_set["cmap_log"] = scale.log
         if scale.range is not None:
             data_set["min_plot_range"] = scale.range[0]
             data_set["max_plot_range"] = scale.range[1]
