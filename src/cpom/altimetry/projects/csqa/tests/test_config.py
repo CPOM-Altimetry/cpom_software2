@@ -117,6 +117,17 @@ def test_bit_flag_parameter(default_config):
     assert has_maps(default_config.parameters["backscatter"], {"mode": "sar", "n_valid": 5})
 
 
+def test_variant_plot_ranges(default_config):
+    """each geophysical correction has its own colour range and colormap"""
+    cors = default_config.parameters["geophysical_corrections"]
+    assert cors.mode_options == [""]
+    by_id = {v.id: v for v in cors.variants}
+    assert by_id["dry"].plot_range == (-2.4, -1.4) and by_id["dry"].cmap == "viridis"
+    assert by_id["pt"].plot_range == (-0.015, 0.015) and by_id["pt"].cmap == "coolwarm"
+    # variants without their own range use the parameter's
+    assert default_config.parameters["backscatter"].variants[0].plot_range is None
+
+
 def test_sanitize_key():
     """display names are converted to keys"""
     assert sanitize_key("Lake/Enclosed Sea") == "lake_enclosed_sea"

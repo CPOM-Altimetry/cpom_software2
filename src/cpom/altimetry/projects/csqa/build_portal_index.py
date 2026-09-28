@@ -60,6 +60,7 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "mode_descriptions": v.mode_descriptions,
                 "bit_mask": v.bit_mask,
                 "bit_name": v.bit_name,
+                "plot_range": list(v.plot_range) if v.plot_range else None,
             }
             for v in param.variants
         ],

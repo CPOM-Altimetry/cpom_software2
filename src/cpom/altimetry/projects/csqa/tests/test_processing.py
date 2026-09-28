@@ -122,6 +122,22 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert qf[("b21", "sar")]["pct"]["set"] < 100.0  # backscatter (retracker 1) error
     assert qf[("b19", "sar")]["pct"]["set"] == 100.0  # retracker 3 backscatter unused in SAR
 
+    # geophysical corrections (1 Hz): the sea state bias is not in Baseline-F products, which
+    # must not stop the other corrections being read
+    status = process_cycles_main(
+        ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "geophysical_corrections"]
+        + ["--no_plots"]
+    )
+    assert status == 0
+    with open(os.path.join(cdir, "stats", "geophysical_corrections.json"), encoding="utf-8") as fh:
+        cor_stats = json.load(fh)
+    assert not cor_stats["bad_files"]
+    assert cor_stats["missing_variables"] == {"sea_state_bias_01_ku": 1}
+    cors = {(r["area"], r["variant"]): r for r in cor_stats["rows"]}
+    assert cors[("global", "ssb")]["n_valid"] == 0
+    assert cors[("global", "dry")]["n_valid"] > 0
+    assert -2.5 < cors[("global", "dry")]["median"] < -2.0
+
     # update mode skips unchanged inputs
     status = process_cycles_main(
         ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "backscatter", "--no_plots"]

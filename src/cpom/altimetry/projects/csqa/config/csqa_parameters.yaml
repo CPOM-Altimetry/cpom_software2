@@ -12,12 +12,14 @@
 #   variable    : netCDF variable (for parameters without variants)
 #   variants    : alternative variables for the same quantity (ie per retracker)
 #                   label   : name of the variant selector shown in the portal
-#                   options : list of {id, name, variable, mode_descriptions}
+#                   options : list of {id, name, variable, mode_descriptions, plot}
 #                     mode_descriptions (optional): what the variant is in each acquisition
 #                     mode (ie the retracker used), null where it is not used in a mode.
 #                     Shown in the portal. The retracker definitions (in height) are YAML
 #                     anchors reused by other retracker parameters, ie
 #                     mode_descriptions: *retracker_1_modes
+#                     plot (optional): {range, cmap} of the variant's maps, overriding the
+#                     parameter's (for variants with very different value ranges)
 #   modes       : acquisition mode selections (all, lrm, sar, sarin). Omit for no mode selection
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
@@ -212,6 +214,70 @@ parameters:
     modes: [all, lrm, sar, sarin]
     # maps (set / not set) only for all modes, and only where a bit is set
     map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  geophysical_corrections:
+    long_name: "Geophysical Corrections"
+    description: >-
+      The atmospheric and geophysical range corrections at 1 Hz. These are 1-way corrections that
+      are added to the range (or subtracted from the height); flag_cor_applied_20_ku shows which
+      were applied to each measurement's height (ie the tide, inverse barometer and dynamic
+      atmosphere corrections over ocean only). The sea state bias is not provided in Baseline-F.
+    source: GDR-A
+    type: float
+    units: m
+    variants:
+      label: "Correction"
+      # plot: colour range of each correction's maps (~1st-99th percentile of the values)
+      options:
+        - id: dry
+          name: "Dry troposphere (model)"
+          variable: mod_dry_tropo_cor_01
+          plot: {range: [-2.4, -1.4], cmap: viridis}
+        - id: wet
+          name: "Wet troposphere (model)"
+          variable: mod_wet_tropo_cor_01
+          plot: {range: [-0.45, 0.0], cmap: viridis}
+        - id: ib
+          name: "Inverse barometer"
+          variable: inv_bar_cor_01
+          plot: {range: [-0.4, 0.4], cmap: coolwarm}
+        - id: dac
+          name: "Dynamic atmosphere (DAC)"
+          variable: hf_fluct_total_cor_01
+          plot: {range: [-0.4, 0.4], cmap: coolwarm}
+        - id: iono
+          name: "Ionosphere (model)"
+          variable: iono_cor_01
+          plot: {range: [-0.12, 0.0], cmap: viridis}
+        - id: ionogim
+          name: "Ionosphere (GIM)"
+          variable: iono_cor_gim_01
+          plot: {range: [-0.12, 0.0], cmap: viridis}
+        - id: ssb
+          name: "Sea state bias"
+          variable: sea_state_bias_01_ku
+          plot: {range: [-0.3, 0.0], cmap: viridis}
+        - id: ot
+          name: "Ocean tide"
+          variable: ocean_tide_01
+          plot: {range: [-1.0, 1.0], cmap: coolwarm}
+        - id: lpt
+          name: "Long period tide"
+          variable: ocean_tide_eq_01
+          plot: {range: [-0.04, 0.04], cmap: coolwarm}
+        - id: olt
+          name: "Ocean loading tide"
+          variable: load_tide_01
+          plot: {range: [-0.05, 0.05], cmap: coolwarm}
+        - id: set
+          name: "Solid earth tide"
+          variable: solid_earth_tide_01
+          plot: {range: [-0.2, 0.2], cmap: coolwarm}
+        - id: pt
+          name: "Geocentric pole tide"
+          variable: pole_tide_01
+          plot: {range: [-0.015, 0.015], cmap: coolwarm}
     areas: [global, north_polar, south_polar]
 
   peakiness:

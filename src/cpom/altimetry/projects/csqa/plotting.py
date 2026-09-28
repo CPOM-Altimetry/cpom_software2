@@ -173,11 +173,13 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
     else:
         if scale is None:
             scale = param.colour_scales[0]
-        data_set["cmap_name"] = scale.cmap
+        # a variant's own colour range / colormap override the parameter's
+        plot_range = variant.plot_range or scale.range
+        data_set["cmap_name"] = variant.cmap or scale.cmap
         data_set["cmap_log"] = scale.log
-        if scale.range is not None:
-            data_set["min_plot_range"] = scale.range[0]
-            data_set["max_plot_range"] = scale.range[1]
+        if plot_range is not None:
+            data_set["min_plot_range"] = plot_range[0]
+            data_set["max_plot_range"] = plot_range[1]
         # statistics of all records, not just those plotted
         valid = vals[np.isfinite(vals)].astype(np.float64)
         data_set["stats"] = {

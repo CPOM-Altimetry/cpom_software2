@@ -55,7 +55,7 @@ class FlagDef:
 
 
 @dataclass(frozen=True)
-class VariantDef:
+class VariantDef:  # pylint: disable=too-many-instance-attributes
     """A variable providing one variant of a parameter (ie one retracker).
     Parameters without variants have a single variant with id ''."""
 
@@ -69,6 +69,10 @@ class VariantDef:
     bit_mask: int | None = None
     # for a bit: the bit's name in the variable's flag_meanings attribute
     bit_name: str = ""
+    # colour scale range and colormap of this variant's maps, overriding the parameter's
+    # (for variants with very different value ranges, ie geophysical corrections)
+    plot_range: tuple[float, float] | None = None
+    cmap: str | None = None
 
 
 @dataclass(frozen=True)
@@ -183,6 +187,12 @@ def _require(cfg: dict, key: str, context: str):
     return cfg[key]
 
 
+def _variant_plot_range(variant_cfg: dict) -> tuple[float, float] | None:
+    """colour scale range of a variant's maps (plot: range: [min, max]), or None"""
+    plot_range = (variant_cfg.get("plot") or {}).get("range")
+    return (float(plot_range[0]), float(plot_range[1])) if plot_range else None
+
+
 def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, products: dict):
     """parse and validate one parameter definition
 
@@ -247,6 +257,8 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
                     str(mode): (None if desc is None else str(desc))
                     for mode, desc in (v.get("mode_descriptions") or {}).items()
                 },
+                plot_range=_variant_plot_range(v),
+                cmap=(v.get("plot") or {}).get("cmap"),
             )
             for v in _require(vcfg, "options", context)
         ]

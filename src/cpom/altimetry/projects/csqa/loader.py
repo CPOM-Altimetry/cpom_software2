@@ -193,8 +193,11 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                         )
         except OSError:
             continue
+    # a variant missing from every file uses the coordinates of another variant (which are on
+    # the parameter's time dimension), rather than the default coordinates (which may not be)
+    fallback = next(iter(data.coord_names.values()), (cfg.default_lat, cfg.default_lon))
     for variant in param.variants:
-        data.coord_names.setdefault(variant.id, (cfg.default_lat, cfg.default_lon))
+        data.coord_names.setdefault(variant.id, fallback)
     coord_keys = set(data.coord_names.values())
 
     for pfile in files:
@@ -298,8 +301,8 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
         for var_name, arrs in bit_words.items()
     }
     for key in coord_keys:
-        data.lats[key] = np.concatenate(lats[key]) if key in lats else np.array([], np.float32)
-        data.lons[key] = np.concatenate(lons[key]) if key in lons else np.array([], np.float32)
+        data.lats[key] = np.concatenate(lats[key]) if lats.get(key) else np.array([], np.float32)
+        data.lons[key] = np.concatenate(lons[key]) if lons.get(key) else np.array([], np.float32)
     if need_modes:
         data.modes = np.concatenate(modes) if modes else np.array([], dtype=np.int8)
 
