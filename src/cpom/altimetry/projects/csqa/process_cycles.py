@@ -57,6 +57,9 @@ from cpom.altimetry.projects.csqa.product_files import coverage_days
 
 log = logging.getLogger(__name__)
 
+# during long runs, update the portal index at this interval so progress appears in the portal
+INDEX_UPDATE_SECONDS = 600
+
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     """parse command line arguments"""
@@ -331,32 +334,81 @@ def main(args: list[str] | None = None) -> int:
         parsed.log_file,
     )
 
+    last_index = time.time()
     if n_cycle_procs > 1:
         # spawn: fresh worker processes (safe with matplotlib/netCDF on all platforms)
         ctx = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=n_cycle_procs, mp_context=ctx) as pool:
-            futures = [
-                pool.submit(run_task, cfg.config_file, cycle, baseline, *task_args)
+            futures = {
+                pool.submit(run_task, cfg.config_file, cycle, baseline, *task_args): (
+                    cycle,
+                    baseline,
+                )
                 for cycle, baseline in tasks
-            ]
+            }
             for future in as_completed(futures):
-                results.append(future.result())
-                _log_result(results[-1])
+                cycle, baseline = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    # ie BrokenProcessPool when a worker process is killed (out of memory):
+                    # record the failure and carry on, so the portal index is still updated
+                    result = CycleResult(
+                        cycle, baseline, "error", message=f"{type(exc).__name__}: {exc}"
+                    )
+                results.append(result)
+                _log_result(result)
+                last_index = _update_index_periodically(cfg, parsed, results, last_index)
     else:
         for cycle, baseline in tasks:
             results.append(run_task(cfg.config_file, cycle, baseline, *task_args))
             _log_result(results[-1])
+            last_index = _update_index_periodically(cfg, parsed, results, last_index)
 
     n_status = {
         s: sum(r.status == s for r in results)
         for s in ("processed", "unchanged", "no_data", "error")
     }
     log.info("finished in %.0fs: %s", time.time() - t_start, n_status)
+    if n_status["error"] > 0:
+        failed = sorted((r.cycle, r.baseline) for r in results if r.status == "error")
+        log.error(
+            "%d cycle/baseline selections failed: %s. Re-run with --update to process them "
+            "(completed cycles are skipped)%s",
+            len(failed),
+            ", ".join(f"{c}{b}" for c, b in failed[:20]) + (" ..." if len(failed) > 20 else ""),
+            (
+                ", with fewer --workers if workers ran out of memory"
+                if any("BrokenProcessPool" in r.message for r in results)
+                else ""
+            ),
+        )
 
     if not parsed.no_index and (n_status["processed"] > 0 or not parsed.update):
         build_portal_index(cfg)
 
     return 1 if n_status["error"] > 0 else 0
+
+
+def _update_index_periodically(
+    cfg: CsqaConfig, parsed: argparse.Namespace, results: list[CycleResult], last_index: float
+) -> float:
+    """rebuild the portal index if INDEX_UPDATE_SECONDS have passed since it was last built
+    and cycles have been processed, so a long run's progress appears in the portal
+
+    Returns:
+        float: time the index was last built
+    """
+    if parsed.no_index or time.time() - last_index < INDEX_UPDATE_SECONDS:
+        return last_index
+    if not any(r.status == "processed" for r in results):
+        return last_index
+    try:
+        build_portal_index(cfg)
+        log.info("portal index updated (%d cycle/baseline selections done)", len(results))
+    except Exception:  # pylint: disable=broad-exception-caught
+        log.exception("failed to update the portal index")
+    return time.time()
 
 
 def _log_result(result: CycleResult):
