@@ -54,6 +54,8 @@ parameters_file: csqa_parameters.yaml
 # Areas for which plots and statistics are produced.
 #   polarplot_area : cpom.areas.definitions area used by Polarplot
 #   lat_min, lat_max : measurement latitude range selected for the area's statistics and plots
+#   grid_area : cpom.gridding.gridareas.GridArea used for the area's gridded maps (parameters
+#               with a grid). The polar stereographic grid must cover the area
 areas:
   global:
     long_name: "Global"
@@ -65,11 +67,13 @@ areas:
     polarplot_area: north_polar_csqa
     lat_min: 60.0
     lat_max: 90.0
+    grid_area: arctic  # EPSG:3413
   south_polar:
     long_name: "South Polar (<60S)"
     polarplot_area: south_polar_csqa
     lat_min: -90.0
     lat_max: -60.0
+    grid_area: antarctic_ocean  # EPSG:3031
 
 # SIRAL acquisition modes, used to select parameter values per mode
 modes:

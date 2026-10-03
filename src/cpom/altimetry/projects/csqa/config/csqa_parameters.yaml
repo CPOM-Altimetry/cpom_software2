@@ -30,6 +30,21 @@
 #                 default). log: true for a logarithmic colour scale (range must be above 0)
 #   dtype       : numpy dtype used to hold float values (default float32). Use float64 for
 #                 parameters needing more than ~7 significant digits (ie elevations)
+#   reject_bit  : (variant or parameter) {variable, mask, name}: values are rejected where this
+#                 bit of a flag word is set (ie freeboard_error). name is the bit's name in
+#                 the variable's flag_meanings (checked when reading products)
+#   grid        : gridded maps and statistics of a float parameter, in addition to the along-
+#                 track maps. The measurements of each selection are gridded into cells of
+#                 binsize_km of the area's grid_area (csqa_config.yaml), and a statistic of the
+#                 measurements in each cell is mapped. Gridded statistics are of the cell values
+#                   binsize_km : cell size (km)
+#                   areas      : areas gridded (with a grid_area)
+#                   modes      : mode selections gridded (default: the first of modes)
+#                   min_count  : minimum number of measurements in a cell (default 1)
+#                   statistics : list of {id, name, range, cmap, log} of the cell statistics
+#                                mapped (median, mean, max, min, std, count; the first is the
+#                                default). range/cmap/log default to the parameter's default
+#                                colour scale (count/std: the range of the values)
 # ------------------------------------------------------------------------------------------------
 
 parameters:
@@ -346,3 +361,44 @@ parameters:
     plot:
       range: [0.0, 100.0]
       cmap: viridis
+
+  freeboard:
+    long_name: "Radar Freeboard"
+    description: >-
+      Radar freeboard of each 20 Hz measurement: the height of the radar scattering horizon above
+      the local sea surface, from the sea ice processing of SAR and SARin mode measurements (fill
+      value in LRM mode). Freeboard can be a small negative value due to noise in the height and
+      in the interpolated sea surface. By default measurements with the freeboard error flag set
+      are excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in
+      each cell of a 10 km polar stereographic grid, with statistics of the cell values.
+    source: GDR-A
+    type: float
+    units: m
+    variants:
+      label: "Measurements"
+      options:
+        - id: filtered
+          name: "Freeboard error not set"
+          variable: radar_freeboard_20_ku
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 65536, name: freeboard_error}
+        - id: unfiltered
+          name: "All measurements"
+          variable: radar_freeboard_20_ku
+    # radar freeboard is only computed in SAR and SARin modes
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged values are ~-0.25 to 0.55 m (1st-99th percentile), above -0.3 m
+      range: [-0.3, 0.7]
+      cmap: viridis
+    grid:
+      binsize_km: 10
+      areas: [north_polar, south_polar]
+      modes: [all]
+      statistics:
+        - {id: median}
+        - {id: mean}
+        - {id: max, range: [-0.3, 1.5]}
+        - {id: std, range: [0.0, 0.4]}
+        # ~1-30 measurements per cell in a week of data
+        - {id: count, range: [1.0, 500.0], log: true}

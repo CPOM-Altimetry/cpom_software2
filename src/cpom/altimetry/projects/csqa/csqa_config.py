@@ -17,6 +17,7 @@ from datetime import datetime
 import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
+from cpom.altimetry.projects.csqa.gridding import GRID_STATISTICS
 
 DEFAULT_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config", "csqa_config.yaml")
 
@@ -32,6 +33,8 @@ class AreaConfig:
     polarplot_area: str
     lat_min: float
     lat_max: float
+    # cpom.gridding.gridareas.GridArea of the area's gridded maps ('' if the area has none)
+    grid_area: str = ""
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,11 @@ class VariantDef:  # pylint: disable=too-many-instance-attributes
     # (for variants with very different value ranges, ie geophysical corrections)
     plot_range: tuple[float, float] | None = None
     cmap: str | None = None
+    # values are rejected (NaN) where this bit of a flag word variable is set, ie
+    # freeboard_error of flag_prod_status_20_ku. reject_name: the bit's name in flag_meanings
+    reject_variable: str = ""
+    reject_mask: int | None = None
+    reject_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -87,6 +95,40 @@ class ColourScale:
     cmap: str
     file_suffix: str
     log: bool = False  # logarithmic colour scale
+
+
+@dataclass(frozen=True)
+class GridStatistic:
+    """A statistic of the measurements in each grid cell, mapped and summarised"""
+
+    id: str  # a key of gridding.GRID_STATISTICS, ie 'median'
+    name: str
+    units: str
+    range: tuple[float, float] | None  # colour scale range (None: range of the values)
+    cmap: str
+    log: bool = False  # logarithmic colour scale
+
+
+@dataclass(frozen=True)
+class GridConfig:
+    """Gridded maps and statistics of a float parameter: the parameter's measurements in each
+    area are gridded into cells of binsize_km, and statistics of the measurements in each cell
+    are mapped. The gridded statistics of an area are statistics of its cell values"""
+
+    binsize_km: float
+    areas: list[str]
+    modes: list[str]  # mode selections gridded ([''] when the parameter has no modes)
+    statistics: list[GridStatistic]  # the first is the default
+    min_count: int = 1  # minimum number of measurements in a cell
+
+    @property
+    def label(self) -> str:
+        """display name, ie '10 km grid'"""
+        return f"{self.binsize_km:g} km grid"
+
+    def file_suffix(self, stat_id: str) -> str:
+        """plot file name suffix of a statistic's maps, ie 'grid10km_median'"""
+        return f"grid{self.binsize_km:g}km_{stat_id}".replace(".", "p")
 
 
 @dataclass(frozen=True)
@@ -110,6 +152,7 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     colour_scales: list[ColourScale] = field(default_factory=list)  # default scale first
     map_modes: list[str] = field(default_factory=list)  # modes with maps (default all modes)
     default_variant: str = ""  # variant shown first in the portal (default the first)
+    grid: GridConfig | None = None  # gridded maps and statistics (None: not gridded)
 
     @property
     def is_bit_flag(self) -> bool:
@@ -193,6 +236,76 @@ def _variant_plot_range(variant_cfg: dict) -> tuple[float, float] | None:
     return (float(plot_range[0]), float(plot_range[1])) if plot_range else None
 
 
+def _reject_bit(variant_cfg: dict, context: str) -> dict:
+    """VariantDef fields of a variant's reject_bit: {variable, mask, name}, if configured"""
+    reject = variant_cfg.get("reject_bit")
+    if not reject:
+        return {}
+    mask = int(_require(reject, "mask", context))
+    if mask <= 0 or mask & (mask - 1):
+        raise ValueError(f"{context}: reject_bit mask {mask} is not a single bit")
+    return {
+        "reject_variable": str(_require(reject, "variable", context)),
+        "reject_mask": mask,
+        "reject_name": str(reject.get("name", "")),
+    }
+
+
+def _parse_grid(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    pcfg: dict,
+    context: str,
+    cfg_areas: dict,
+    modes: list[str],
+    units: str,
+    default_scale: ColourScale,
+) -> GridConfig | None:
+    """parse and validate a parameter's grid definition (None if it has none)"""
+    gcfg = pcfg.get("grid")
+    if not gcfg:
+        return None
+    context = f"{context} grid"
+    binsize_km = float(_require(gcfg, "binsize_km", context))
+    if binsize_km <= 0:
+        raise ValueError(f"{context}: binsize_km must be > 0")
+    areas = [str(a) for a in _require(gcfg, "areas", context)]
+    for area in areas:
+        if area not in cfg_areas or not cfg_areas[area].grid_area:
+            raise ValueError(f"{context}: area {area} is not configured with a grid_area")
+    grid_modes = [str(m) for m in gcfg.get("modes", modes[:1] or [""])]
+    for mode in grid_modes:
+        if mode not in (modes or [""]):
+            raise ValueError(f"{context}: mode {mode} is not one of the parameter's modes")
+    statistics = []
+    for stat in _require(gcfg, "statistics", context):
+        stat_id = str(_require(stat, "id", context))
+        if stat_id not in GRID_STATISTICS:
+            raise ValueError(f"{context}: unknown statistic {stat_id}")
+        # values of the parameter by default use the parameter's default colour scale
+        is_value = stat_id not in ("count", "std")
+        stat_range = stat.get("range", default_scale.range if is_value else None)
+        statistics.append(
+            GridStatistic(
+                id=stat_id,
+                name=str(stat.get("name", GRID_STATISTICS[stat_id])),
+                units="" if stat_id == "count" else units,
+                range=(float(stat_range[0]), float(stat_range[1])) if stat_range else None,
+                cmap=str(stat.get("cmap", default_scale.cmap)),
+                log=bool(stat.get("log", default_scale.log if is_value else False)),
+            )
+        )
+        if statistics[-1].log and not (stat_range and float(stat_range[0]) > 0):
+            raise ValueError(f"{context}: log colour scale of {stat_id} needs a range above 0")
+    if not statistics or len({s.id for s in statistics}) != len(statistics):
+        raise ValueError(f"{context}: statistics must be unique and not empty")
+    return GridConfig(
+        binsize_km=binsize_km,
+        areas=areas,
+        modes=grid_modes,
+        statistics=statistics,
+        min_count=int(gcfg.get("min_count", 1)),
+    )
+
+
 def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, products: dict):
     """parse and validate one parameter definition
 
@@ -259,6 +372,7 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
                 },
                 plot_range=_variant_plot_range(v),
                 cmap=(v.get("plot") or {}).get("cmap"),
+                **_reject_bit(v, context),
             )
             for v in _require(vcfg, "options", context)
         ]
@@ -272,6 +386,7 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
                 id="",
                 name=str(pcfg.get("long_name", pid)),
                 variable=str(_require(pcfg, "variable", context)),
+                **_reject_bit(pcfg, context),
             )
         ]
         variant_label = ""
@@ -345,6 +460,10 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
     for mode in map_modes:
         if mode not in (modes or [""]):
             raise ValueError(f"{context}: map mode {mode} is not one of the parameter's modes")
+    units = str(pcfg.get("units", ""))
+    grid = _parse_grid(pcfg, context, cfg_areas, modes, units, colour_scales[0])
+    if grid is not None and (ptype != "float" or variants[0].bit_mask is not None):
+        raise ValueError(f"{context}: only float parameters can be gridded")
     default_variant = str(pcfg.get("default_variant", variants[0].id))
     if default_variant not in [v.id for v in variants]:
         raise ValueError(f"{context}: default_variant {default_variant} is not a variant id")
@@ -360,13 +479,14 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
         modes=modes,
         areas=areas,
         flags=flags,
-        units=str(pcfg.get("units", "")),
+        units=units,
         plot_range=plot_range,
         cmap=cmap,
         dtype=str(pcfg.get("dtype", "float32")),
         colour_scales=colour_scales,
         map_modes=map_modes,
         default_variant=default_variant,
+        grid=grid,
     )
 
 
@@ -413,6 +533,7 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
             polarplot_area=str(_require(area, "polarplot_area", f"area {area_id}")),
             lat_min=float(area.get("lat_min", -90.0)),
             lat_max=float(area.get("lat_max", 90.0)),
+            grid_area=str(area.get("grid_area", "")),
         )
 
     modes_cfg = _require(cfg, "modes", context)
@@ -431,6 +552,10 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
     parameters = {}
     for pid, pcfg in _require(params_cfg, "parameters", params_file).items():
         parameters[pid] = _parse_parameter(pid, pcfg, areas, mode_labels, products)
+    for param in parameters.values():
+        # gridded statistics timeseries are saved as <param>_grid.csv
+        if param.grid is not None and f"{param.id}_grid" in parameters:
+            raise ValueError(f"parameter id {param.id}_grid clashes with {param.id}'s grid")
 
     plots_cfg = cfg.get("plots", {}) or {}
     default_coords = cfg.get("default_coordinates", {}) or {}

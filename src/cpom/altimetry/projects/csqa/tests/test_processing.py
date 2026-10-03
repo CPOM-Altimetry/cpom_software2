@@ -6,7 +6,9 @@ import glob
 import json
 import os
 
+import numpy as np
 import pytest
+from netCDF4 import Dataset  # pylint: disable=no-name-in-module
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config
 from cpom.altimetry.projects.csqa.process_cycles import allocate_workers
@@ -146,6 +148,95 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert status == 0
     with open(os.path.join(cdir, "stats", "backscatter.json"), encoding="utf-8") as fh:
         assert json.load(fh)["processed_at"] == sig0_stats["processed_at"]
+
+
+def test_freeboard_grid(one_file_config):  # pylint: disable=redefined-outer-name
+    """freeboard: values with the freeboard error bit set are rejected, and the measurements
+    of the polar areas are gridded into 10 km cells with maps and statistics of the cells"""
+    cfg = load_config(one_file_config)
+    args = ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "freeboard"]
+    status = process_cycles_main(
+        args + ["--areas", "north_polar", "south_polar", "--plot_workers", "2"]
+    )
+    assert status == 0
+
+    # expected numbers of measurements, read directly from the product
+    with Dataset(GDR_A_FILES[0]) as nc:
+        fb = np.ma.filled(nc["radar_freeboard_20_ku"][:].astype(float), np.nan)
+        lat = np.ma.filled(nc["lat_20_ku"][:].astype(float), np.nan)
+        fb_error = (np.ma.filled(nc["flag_prod_status_20_ku"][:], 0) & 65536) != 0
+    south = (lat <= -60) & np.isfinite(fb)
+    n_south, n_south_unflagged = int(south.sum()), int((south & ~fb_error).sum())
+    assert 0 < n_south_unflagged < n_south
+
+    cdir = os.path.join(cfg.output_dir, "baseline_F", "cycles", "cycle_193")
+    pdir = os.path.join(cdir, "plots", "freeboard")
+    with open(os.path.join(cdir, "stats", "freeboard.json"), encoding="utf-8") as fh:
+        fb_stats = json.load(fh)
+    rows = {(r["area"], r["variant"], r["mode"]): r for r in fb_stats["rows"]}
+    assert rows[("south_polar", "unfiltered", "all")]["n_valid"] == n_south
+    assert rows[("south_polar", "filtered", "all")]["n_valid"] == n_south_unflagged
+    assert rows[("south_polar", "filtered", "all")]["min"] >= -0.3
+    # every north polar freeboard value of this file has the freeboard error bit set
+    assert rows[("north_polar", "filtered", "all")]["n_valid"] == 0
+    assert rows[("north_polar", "unfiltered", "all")]["n_valid"] > 0
+
+    assert fb_stats["grid"]["grid_areas"] == {
+        "north_polar": "arctic",
+        "south_polar": "antarctic_ocean",
+    }
+    grid_rows = {
+        (r["area"], r["variant"], r["mode"], r["statistic"]): r for r in fb_stats["grid_rows"]
+    }
+    assert len(grid_rows) == 2 * 2 * 5
+    count = grid_rows[("south_polar", "filtered", "all", "count")]
+    median = grid_rows[("south_polar", "filtered", "all", "median")]
+    assert count["n_records"] == median["n_records"] == n_south_unflagged
+    # the mean number of measurements per cell x the number of cells = number of measurements
+    assert count["mean"] * count["n_cells"] == pytest.approx(n_south_unflagged, rel=1e-5)
+    assert 0 < median["n_cells"] < n_south_unflagged
+    assert median["plot"] == "freeboard_filtered_all_south_polar_grid10km_median.webp"
+    assert os.path.isfile(os.path.join(pdir, median["plot"]))
+    assert os.path.isfile(os.path.join(pdir, "thumbs", median["plot"]))
+    empty = grid_rows[("north_polar", "filtered", "all", "median")]
+    assert empty["n_cells"] == 0 and empty["plot"] is None
+    assert not os.path.exists(
+        os.path.join(pdir, "freeboard_filtered_all_north_polar_grid10km_median.webp")
+    )
+
+    # gridded statistics timeseries and portal description of the grid
+    with open(
+        os.path.join(cfg.output_dir, "baseline_F", "timeseries", "freeboard_grid.csv"),
+        encoding="utf-8",
+    ) as fh:
+        ts_rows = list(csv.DictReader(fh))
+    assert len(ts_rows) == 20
+    assert int(ts_rows[0]["n_cells"]) == 0 and ts_rows[0]["statistic"] == "median"
+    with open(os.path.join(cfg.output_dir, "manifest.json"), encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    fb_manifest = next(p for p in manifest["parameters"] if p["id"] == "freeboard")
+    assert fb_manifest["grid"]["statistics"][0]["file_suffix"] == "grid10km_median"
+    assert fb_manifest["variants"][0]["reject_bit"]["name"] == "freeboard_error"
+
+    # update mode: nothing to do, unless the statistics predate the grid
+    status = process_cycles_main(args + ["--areas", "north_polar", "south_polar", "--update"])
+    assert status == 0
+    with open(os.path.join(cdir, "stats", "freeboard.json"), encoding="utf-8") as fh:
+        assert json.load(fh)["processed_at"] == fb_stats["processed_at"]
+    del fb_stats["grid_rows"]
+    with open(os.path.join(cdir, "stats", "freeboard.json"), "w", encoding="utf-8") as fh:
+        json.dump(fb_stats, fh)
+    status = process_cycles_main(
+        args + ["--areas", "north_polar", "south_polar", "--update", "--no_plots"]
+    )
+    assert status == 0
+    with open(os.path.join(cdir, "stats", "freeboard.json"), encoding="utf-8") as fh:
+        updated = json.load(fh)
+    assert len(updated["grid_rows"]) == 20
+    # maps are kept when not plotting
+    assert {(r["area"], r["variant"], r["statistic"]): r["plot"] for r in updated["grid_rows"]} == {
+        (r["area"], r["variant"], r["statistic"]): r["plot"] for r in grid_rows.values()
+    }
 
 
 def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name

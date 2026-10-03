@@ -150,3 +150,104 @@ def test_invalid_parameter(tmp_path, default_config):
     config_file.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     with pytest.raises(ValueError, match="area arctic"):
         load_config(str(config_file))
+
+
+def _config_with_parameters(tmp_path, default_config, params: dict) -> str:
+    """write a config using the default config with other parameter definitions"""
+    params_file = tmp_path / "params.yaml"
+    params_file.write_text(yaml.safe_dump({"parameters": params}), encoding="utf-8")
+    with open(default_config.config_file, encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh)
+    cfg["parameters_file"] = str(params_file)
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return str(config_file)
+
+
+def test_freeboard_grid(default_config):
+    """freeboard has filtered and unfiltered variants, and 10 km gridded maps of the polar
+    areas"""
+    fb = default_config.parameters["freeboard"]
+    filtered, unfiltered = fb.variants
+    assert (filtered.id, filtered.variable) == ("filtered", "radar_freeboard_20_ku")
+    assert (filtered.reject_variable, filtered.reject_mask, filtered.reject_name) == (
+        "flag_prod_status_20_ku",
+        65536,
+        "freeboard_error",
+    )
+    assert unfiltered.reject_mask is None
+    assert default_config.areas["north_polar"].grid_area == "arctic"
+    assert default_config.areas["global"].grid_area == ""
+
+    grid = fb.grid
+    assert grid is not None
+    assert (grid.binsize_km, grid.areas, grid.modes) == (
+        10.0,
+        ["north_polar", "south_polar"],
+        ["all"],
+    )
+    assert grid.label == "10 km grid"
+    assert grid.file_suffix("median") == "grid10km_median"
+    stats = {s.id: s for s in grid.statistics}
+    assert list(stats) == ["median", "mean", "max", "std", "count"]
+    # values use the parameter's colour scale unless configured, counts have no units
+    assert stats["median"].range == fb.plot_range and stats["median"].units == "m"
+    assert stats["max"].range == (-0.3, 1.5)
+    assert stats["count"].log and stats["count"].units == ""
+    assert default_config.parameters["backscatter"].grid is None
+
+
+@pytest.mark.parametrize(
+    "grid, message",
+    [
+        ({"binsize_km": 10, "areas": ["global"], "statistics": [{"id": "mean"}]}, "grid_area"),
+        ({"binsize_km": 10, "areas": ["north_polar"], "statistics": [{"id": "mode"}]}, "unknown"),
+        (
+            {
+                "binsize_km": 10,
+                "areas": ["north_polar"],
+                "statistics": [{"id": "count", "log": True}],
+            },
+            "range above 0",
+        ),
+        (
+            {
+                "binsize_km": 10,
+                "areas": ["north_polar"],
+                "modes": ["lrm"],
+                "statistics": [{"id": "mean"}],
+            },
+            "mode lrm",
+        ),
+    ],
+)
+def test_invalid_grid(tmp_path, default_config, grid, message):
+    """invalid grid definitions are rejected"""
+    params = {"bad": {"source": "GDR-A", "type": "float", "variable": "x", "grid": grid}}
+    with pytest.raises(ValueError, match=message):
+        load_config(_config_with_parameters(tmp_path, default_config, params))
+
+
+def test_invalid_reject_bit(tmp_path, default_config):
+    """a reject bit must be a single bit, and flag parameters can not be gridded"""
+    params = {
+        "bad": {
+            "source": "GDR-A",
+            "type": "float",
+            "variable": "x",
+            "reject_bit": {"variable": "flags", "mask": 3},
+        }
+    }
+    with pytest.raises(ValueError, match="not a single bit"):
+        load_config(_config_with_parameters(tmp_path, default_config, params))
+    params = {
+        "bad": {
+            "source": "GDR-A",
+            "type": "flag",
+            "variable": "x",
+            "flags": [{"value": 1, "name": "one"}],
+            "grid": {"binsize_km": 10, "areas": ["north_polar"], "statistics": [{"id": "mean"}]},
+        }
+    }
+    with pytest.raises(ValueError, match="only float parameters"):
+        load_config(_config_with_parameters(tmp_path, default_config, params))

@@ -184,13 +184,28 @@ def validate_selection(parsed: argparse.Namespace, cfg: CsqaConfig) -> list[str]
 
 
 def max_plots_per_cycle(cfg: CsqaConfig, param_ids: list[str], area_ids: list[str] | None):
-    """the largest number of map plots a cycle can have"""
-    return sum(
-        len(p.variants)
-        * len(p.mode_options)
-        * len([a for a in p.areas if area_ids is None or a in area_ids])
-        for p in (cfg.parameters[pid] for pid in param_ids)
-    )
+    """the largest number of map plots a cycle can have (along-track maps of every colour
+    scale, and gridded maps)"""
+
+    def n_areas(areas: list[str]) -> int:
+        return len([a for a in areas if area_ids is None or a in area_ids])
+
+    n_plots = 0
+    for param in (cfg.parameters[pid] for pid in param_ids):
+        n_plots += (
+            len(param.variants)
+            * len(param.map_modes)
+            * n_areas(param.areas)
+            * len(param.colour_scales)
+        )
+        if param.grid is not None:
+            n_plots += (
+                len(param.variants)
+                * len(param.grid.modes)
+                * n_areas(param.grid.areas)
+                * len(param.grid.statistics)
+            )
+    return n_plots
 
 
 def allocate_workers(

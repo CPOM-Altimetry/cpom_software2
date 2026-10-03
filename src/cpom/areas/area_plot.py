@@ -253,6 +253,17 @@ class Polarplot:
                                                 # as returned by calculate_display_stats()
               "flag_percents": None,            # Optional: % of each flag value (in flag_values
                                                 # order) drawn instead of those of the plotted vals
+              "bad_data_percents": None,        # Optional: {"valid": %, "nan": %} of all the
+                                                # data, drawn on the bad data mini-map instead of
+                                                # those of the plotted vals (ie when the valid and
+                                                # Nan values are subsampled differently)
+              "grid": None,                    # Optional: draw the map as a grid of cells
+                                                # instead of points: a dict with "x_edges" (nx+1),
+                                                # "y_edges" (ny+1) cell edges (m) in projection
+                                                # "epsg" and "values" (ny, nx), NaN where empty.
+                                                # lats, lons, vals are then the centres and values
+                                                # of the cells with data (for the histograms and
+                                                # statistics). Not for flag data
           }
           ```
 
@@ -813,6 +824,11 @@ class Polarplot:
 
                 percent_valid = np.mean(valid_vals_bool) * 100.0
 
+                # % valid and Nan of all the data, when the data plotted are a subsample
+                bad_data_percents = data_set.get("bad_data_percents") or {}
+                percent_valid = bad_data_percents.get("valid", percent_valid)
+                percent_nan = bad_data_percents.get("nan", percent_nan)
+
                 # ------------------------------------------------------------------------------
                 # Plot data
                 # ------------------------------------------------------------------------------
@@ -853,6 +869,7 @@ class Polarplot:
                             cmap_info,
                             data_set.get("plot_size_scale_factor", 1.0),
                             data_set.get("plot_alpha", 1.0),
+                            grid=data_set.get("grid"),
                         )
 
                 # Only draw colorbar and histograms of 1st data set
@@ -1966,6 +1983,7 @@ class Polarplot:
         cmap_info: dict,
         plot_size_scale_factor=1.0,
         plot_alpha=1.0,
+        grid: dict | None = None,
     ):
         """plot lat,lon,vals, data on map
 
@@ -1975,6 +1993,10 @@ class Polarplot:
             lons (np.ndarray): longitude values
             vals (np.ndarray): values to plot
             cmap_info: (dict): colormap info
+            plot_size_scale_factor (float): marker size scale factor
+            plot_alpha (float): marker transparency (0 to 1)
+            grid (dict|None): if set, draw this grid of cells instead of the points:
+                              {"x_edges", "y_edges", "values", "epsg"} (see plot_points)
         """
 
         # load colormap
@@ -2002,6 +2024,23 @@ class Polarplot:
                 new_cmap.set_bad(cmap_info["cmap_under_color"])
         else:
             norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+        if grid is not None:
+            # empty cells (and values <= 0 on a log scale) are not drawn
+            new_cmap.set_bad((0.0, 0.0, 0.0, 0.0))
+            mesh = ax.pcolormesh(
+                np.asarray(grid["x_edges"]),
+                np.asarray(grid["y_edges"]),
+                np.ma.masked_invalid(np.asarray(grid["values"])),
+                cmap=new_cmap,
+                norm=norm,
+                shading="flat",
+                alpha=plot_alpha,
+                transform=ccrs.epsg(str(grid["epsg"])),
+                zorder=20,
+                rasterized=True,
+            )
+            return mesh, new_cmap
 
         # Default size is 36. Scale up or down
         scale_factor = 36 * plot_size_scale_factor

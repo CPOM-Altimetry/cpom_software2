@@ -13,6 +13,9 @@ lat_poca_20_ku"), or the configured default coordinates when that is missing or 
 
 For bit flag parameters the flag word is read once and each bit's values (1 set, 0 not set)
 are derived from it on demand (ParameterData.variant_values).
+
+Variants with a reject bit (ie freeboard_error of flag_prod_status_20_ku) have their values set
+to NaN where the bit is set, so only unflagged values are counted, mapped and gridded.
 """
 
 import logging
@@ -147,6 +150,60 @@ def check_bit_meanings(nc: Dataset, param: ParameterConfig, file_name: str):
             )
 
 
+def _reject(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    nc: Dataset,
+    variant: VariantDef,
+    vals: np.ndarray,
+    sel: np.ndarray,
+    time_name: str,
+    words_cache: dict[str, np.ndarray | None],
+    data: "ParameterData",
+    file_name: str,
+):
+    """Set a variant's values to NaN where its reject bit is set (every value if the flag
+    word variable is missing)
+
+    Args:
+        nc (Dataset): open product file
+        variant (VariantDef): variant with a reject bit
+        vals (np.ndarray): the variant's values of the selected records, updated in place
+        sel (np.ndarray): selected records of the file
+        time_name (str): time dimension of the values
+        words_cache (dict): flag words read from this file, by variable name
+        data (ParameterData): loaded data (for the missing variable counts)
+        file_name (str): name of the file (for messages)
+    """
+    var_name = variant.reject_variable
+    if var_name not in words_cache:
+        var = nc.variables.get(var_name)
+        if var is None or var.dimensions[0] != time_name:
+            data.missing_variables[var_name] = data.missing_variables.get(var_name, 0) + 1
+            words_cache[var_name] = None
+        else:
+            meanings = dict(
+                zip(
+                    (int(m) for m in np.atleast_1d(getattr(var, "flag_masks", []))),
+                    str(getattr(var, "flag_meanings", "")).split(),
+                )
+            )
+            name = meanings.get(int(variant.reject_mask or 0))
+            if name is not None and variant.reject_name and name != variant.reject_name:
+                log.warning(
+                    "%s bit %d is %s in %s, not %s as configured",
+                    var_name,
+                    variant.reject_mask,
+                    name,
+                    file_name,
+                    variant.reject_name,
+                )
+            words_cache[var_name] = _read(nc, var_name, sel, np.int64, 0)
+    words = words_cache[var_name]
+    if words is None:
+        vals[:] = np.nan
+    else:
+        vals[(words & int(variant.reject_mask or 0)) != 0] = np.nan
+
+
 def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     files: list[ProductFile],
     param: ParameterConfig,
@@ -247,6 +304,7 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                         words.append(_read(nc, var_name, sel, np.int64, -1))
 
                 # parameter values of each variant
+                reject_words: dict[str, np.ndarray | None] = {}
                 for variant in param.variants:
                     if variant.bit_mask is not None:
                         continue
@@ -256,8 +314,11 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                             data.missing_variables.get(variant.variable, 0) + 1
                         )
                         values[variant.id].append(np.full(n_sel, np.nan, dtype=dtype))
-                    else:
-                        values[variant.id].append(_read(nc, variant.variable, sel, dtype, np.nan))
+                        continue
+                    vals = _read(nc, variant.variable, sel, dtype, np.nan)
+                    if variant.reject_mask is not None:
+                        _reject(nc, variant, vals, sel, time_name, reject_words, data, pfile.name)
+                    values[variant.id].append(vals)
 
                 # locations (read once per coordinate pair)
                 for key in coord_keys:

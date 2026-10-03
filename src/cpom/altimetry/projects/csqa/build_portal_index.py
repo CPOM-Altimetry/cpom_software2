@@ -7,6 +7,9 @@ Build the CSQA portal index from the processed cycle outputs:
         parameter definitions, areas, modes and the processed cycles of each baseline
     <output_dir>/baseline_<B>/timeseries/<param>.csv
         statistics of every processed cycle, one row per cycle/area/variant/mode
+    <output_dir>/baseline_<B>/timeseries/<param>_grid.csv
+        gridded statistics (of parameters with a grid), one row per
+        cycle/area/variant/mode/grid statistic
 
 Run automatically at the end of process_cycles.py, or standalone:
 
@@ -40,6 +43,17 @@ from cpom.altimetry.projects.csqa.stats import FLOAT_STATS
 log = logging.getLogger(__name__)
 
 ROW_KEYS = ("cycle", "start_date", "end_date", "area", "variant", "mode", "n_records", "n_valid")
+GRID_ROW_KEYS = (
+    "cycle",
+    "start_date",
+    "end_date",
+    "area",
+    "variant",
+    "mode",
+    "statistic",
+    "n_records",
+    "n_cells",
+)
 
 
 def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
@@ -61,6 +75,12 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "bit_mask": v.bit_mask,
                 "bit_name": v.bit_name,
                 "plot_range": list(v.plot_range) if v.plot_range else None,
+                # values are rejected where this bit is set
+                "reject_bit": (
+                    {"variable": v.reject_variable, "mask": v.reject_mask, "name": v.reject_name}
+                    if v.reject_mask is not None
+                    else None
+                ),
             }
             for v in param.variants
         ],
@@ -84,7 +104,35 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
             }
             for s in param.colour_scales
         ],
+        "grid": grid_manifest(param),
         "image_format": cfg.image_format,
+    }
+
+
+def grid_manifest(param: ParameterConfig) -> dict | None:
+    """portal description of a parameter's grid (None if it is not gridded)"""
+    grid = param.grid
+    if grid is None:
+        return None
+    return {
+        "label": grid.label,
+        "binsize_km": grid.binsize_km,
+        "min_count": grid.min_count,
+        "areas": grid.areas,
+        "modes": grid.modes,
+        # each statistic's maps have the file name suffix <file_suffix> (the first statistic is
+        # the default)
+        "statistics": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "units": s.units,
+                "range": list(s.range) if s.range else None,
+                "log": s.log,
+                "file_suffix": grid.file_suffix(s.id),
+            }
+            for s in grid.statistics
+        ],
     }
 
 
@@ -112,6 +160,25 @@ def timeseries_csv(param: ParameterConfig, stats_files: list[dict]) -> str:
             if param.type == "flag":
                 for key, pct in (row.get("pct") or {}).items():
                     values[f"pct_{key}"] = pct
+            writer.writerow(["" if values.get(c) is None else values.get(c) for c in columns])
+    return out.getvalue()
+
+
+def grid_timeseries_csv(stats_files: list[dict]) -> str:
+    """csv text of a parameter's gridded statistics for a list of cycle stats (sorted by
+    cycle)"""
+    columns = [*GRID_ROW_KEYS, *FLOAT_STATS]
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(columns)
+    for stats in stats_files:
+        for row in stats.get("grid_rows", []):
+            values = {
+                "cycle": stats["cycle"],
+                "start_date": stats["start"][:10],
+                "end_date": stats["end"][:10],
+                **row,
+            }
             writer.writerow(["" if values.get(c) is None else values.get(c) for c in columns])
     return out.getvalue()
 
@@ -176,6 +243,11 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
                 timeseries_path(cfg.output_dir, baseline, pid),
                 timeseries_csv(cfg.parameters[pid], stats_list),
             )
+            if cfg.parameters[pid].grid is not None:
+                write_text_atomic(
+                    timeseries_path(cfg.output_dir, baseline, f"{pid}_grid"),
+                    grid_timeseries_csv(stats_list),
+                )
 
         baselines.append(
             {

@@ -3,6 +3,11 @@
 Process one CSQA cycle for one product baseline: find the input files, load each configured
 parameter, and write statistics and map plots per area, variant and acquisition mode.
 
+Parameters with a grid (ie freeboard) also have gridded maps and statistics: the measurements
+of each selection are gridded into polar stereographic cells, and statistics of the cell values
+(ie the median freeboard of each 10 km cell) are mapped and summarised ('grid_rows' of the
+statistics file).
+
 Map plots can be rendered in parallel by a pool of plot worker processes (plot_workers > 1).
 Each parameter is loaded in turn and its maps are submitted to the pool as soon as its
 statistics are calculated, so rendering overlaps with the loading of the next parameter. The
@@ -24,7 +29,13 @@ from typing import Callable
 import numpy as np
 
 from cpom.altimetry.projects.csqa import __version__
-from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, ParameterConfig
+from cpom.altimetry.projects.csqa.csqa_config import (
+    AreaConfig,
+    CsqaConfig,
+    ParameterConfig,
+    VariantDef,
+)
+from cpom.altimetry.projects.csqa.gridding import grid_measurements
 from cpom.altimetry.projects.csqa.loader import bit_values, load_parameter_data
 from cpom.altimetry.projects.csqa.log_setup import current_logging_config, setup_logging
 from cpom.altimetry.projects.csqa.outputs import (
@@ -38,6 +49,7 @@ from cpom.altimetry.projects.csqa.outputs import (
 from cpom.altimetry.projects.csqa.plotting import (
     PlotJob,
     plot_filename,
+    prepare_grid_plot_job,
     prepare_plot_job,
     render_plot_job,
     thumbnail_path,
@@ -77,6 +89,21 @@ class _PendingParameter:  # pylint: disable=too-many-instance-attributes
     summary: dict  # statistics file fields other than the rows
     t_start: float
     make_plots: bool
+    # (area, variant, mode, grid statistic) -> gridded statistics row / its map's plot step
+    grid_rows: dict[tuple[str, str, str, str], dict] = field(default_factory=dict)
+    grid_plots: dict[tuple[str, str, str, str], "Future[int] | int"] = field(default_factory=dict)
+
+
+@dataclass
+class _PlotContext:
+    """What the maps of a parameter's selections need besides the selection"""
+
+    cycle: int
+    bounds: tuple
+    baseline: str
+    pdir: str
+    make_plots: bool
+    submit_plot: Callable[[PlotJob], "Future[int] | int"]
 
 
 def input_signature(files: list[ProductFile]) -> str:
@@ -121,29 +148,52 @@ def has_maps(param: ParameterConfig, row: dict) -> bool:
     return True
 
 
+def grid_plot_filename(param: ParameterConfig, row: dict, fmt: str) -> str:
+    """name of the gridded map of a grid statistics row, ie
+    freeboard_filtered_all_north_polar_grid10km_median.webp"""
+    assert param.grid is not None
+    return plot_filename(
+        param.id,
+        row["variant"],
+        row["mode"],
+        row["area"],
+        fmt,
+        param.grid.file_suffix(row["statistic"]),
+    )
+
+
+def expected_plots(param: ParameterConfig, stats: dict, fmt: str) -> set[str]:
+    """names of the maps (of every colour scale, and gridded maps) that a parameter's cycle
+    statistics should have"""
+    names = {
+        plot_filename(param.id, r["variant"], r["mode"], r["area"], fmt, s.file_suffix)
+        for r in stats.get("rows", [])
+        if has_maps(param, r)
+        for s in param.colour_scales
+    }
+    if param.grid is not None:
+        names |= {
+            grid_plot_filename(param, r, fmt)
+            for r in stats.get("grid_rows", [])
+            if r.get("n_cells", 0) > 0
+        }
+    return names
+
+
 def _outputs_exist(cfg: CsqaConfig, baseline: str, cycle: int, param_id: str, make_plots: bool):
-    """True if the stats file (and plots of every colour scale if required) of a parameter
-    exist for a cycle"""
+    """True if the stats file (and plots of every colour scale and grid if required) of a
+    parameter exist for a cycle"""
     stats = read_json(stats_path(cfg.output_dir, baseline, cycle, param_id))
     if stats is None:
         return False
+    param = cfg.parameters[param_id]
+    if param.grid is not None and "grid_rows" not in stats:
+        return False  # processed before the parameter was gridded
     if make_plots:
-        param = cfg.parameters[param_id]
         pdir = plots_dir(cfg.output_dir, baseline, cycle, param_id)
-        for row in stats.get("rows", []):
-            if not has_maps(param, row):
-                continue
-            for scale in param.colour_scales:
-                fname = plot_filename(
-                    param_id,
-                    row["variant"],
-                    row["mode"],
-                    row["area"],
-                    cfg.image_format,
-                    scale.file_suffix,
-                )
-                if not os.path.isfile(os.path.join(pdir, fname)):
-                    return False
+        for fname in expected_plots(param, stats, cfg.image_format):
+            if not os.path.isfile(os.path.join(pdir, fname)):
+                return False
     return True
 
 
@@ -218,6 +268,82 @@ def _remove_plot(plot_path: str):
     for path in (plot_path, thumbnail_path(plot_path)):
         if os.path.isfile(path):
             os.remove(path)
+
+
+def _grid_selection(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    cfg: CsqaConfig,
+    param: ParameterConfig,
+    variant: VariantDef,
+    mode: str,
+    area: AreaConfig,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    vals: np.ndarray,
+    ctx: _PlotContext,
+    pending: _PendingParameter,
+):
+    """Grid the measurements of a selection, adding a gridded statistics row for each grid
+    statistic and submitting their maps (or, when not plotting, keeping existing maps)
+
+    Args:
+        cfg (CsqaConfig): CSQA config
+        param (ParameterConfig): parameter (with a grid)
+        variant (VariantDef): variant gridded
+        mode (str): mode selection
+        area (AreaConfig): area gridded (with a grid_area)
+        lats (np.ndarray): latitudes of the selection's measurements
+        lons (np.ndarray): longitudes of the selection's measurements
+        vals (np.ndarray): values of the selection's measurements (NaN for missing)
+        ctx (_PlotContext): plot context
+        pending (_PendingParameter): parameter whose grid rows and plots are added to
+    """
+    grid = param.grid
+    assert grid is not None
+    gridded = grid_measurements(
+        area.grid_area,
+        int(round(grid.binsize_km * 1000.0)),
+        lats,
+        lons,
+        vals,
+        [s.id for s in grid.statistics],
+        grid.min_count,
+    )
+    for stat in grid.statistics:
+        cell_stats = float_stats(gridded.values[stat.id])
+        row: dict = {
+            "area": area.id,
+            "variant": variant.id,
+            "mode": mode,
+            "statistic": stat.id,
+            "n_records": gridded.n_records,  # valid measurements gridded
+            "n_cells": cell_stats.pop("n_valid"),  # cells with data
+            **cell_stats,  # statistics of the cell values
+            "plot": None,
+        }
+        key = (area.id, variant.id, mode, stat.id)
+        pending.grid_rows[key] = row
+        fname = grid_plot_filename(param, row, cfg.image_format)
+        fpath = os.path.join(ctx.pdir, fname)
+        if row["n_cells"] == 0:
+            _remove_plot(fpath)  # left from an earlier run with different inputs
+        elif ctx.make_plots:
+            job = prepare_grid_plot_job(
+                cfg,
+                param,
+                variant,
+                mode,
+                area,
+                gridded,
+                stat,
+                row,
+                ctx.cycle,
+                ctx.bounds,
+                ctx.baseline,
+                fpath,
+            )
+            pending.grid_plots[key] = ctx.submit_plot(job)
+        elif os.path.isfile(fpath):  # keep the existing map when not plotting
+            row["plot"] = fname
 
 
 def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -390,31 +516,53 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
         "bad_files": data.bad_files,
         "missing_variables": data.missing_variables,
     }
-    return _PendingParameter(
+    pending = _PendingParameter(
         param, input_signature(files), rows, plots, summary, t_start, make_plots
     )
+    if param.grid is not None:
+        # keep the grid rows of areas not processed in this run
+        pending.grid_rows = {
+            (r["area"], r["variant"], r["mode"], r["statistic"]): r
+            for r in previous.get("grid_rows", [])
+            if r.get("area") not in area_ids and r.get("area") in param.grid.areas
+        }
+        ctx = _PlotContext(cycle, bounds, baseline, pdir, make_plots, submit_plot)
+        for variant in param.variants:
+            vals = data.variant_values(variant)
+            for mode in param.grid.modes:
+                for area in [cfg.areas[a] for a in param.grid.areas if a in area_ids]:
+                    sel = selection(variant, mode, area)
+                    _grid_selection(
+                        cfg,
+                        param,
+                        variant,
+                        mode,
+                        area,
+                        data.lat(variant.id)[sel],
+                        data.lon(variant.id)[sel],
+                        vals[sel],
+                        ctx,
+                        pending,
+                    )
+    return pending
 
 
 def _remove_stale_plots(
-    cfg: CsqaConfig, param: ParameterConfig, baseline: str, cycle: int, rows: list[dict]
+    cfg: CsqaConfig, param: ParameterConfig, baseline: str, cycle: int, stats: dict
 ):
-    """Remove maps (and thumbnails) of a parameter for a cycle that none of its selections
-    and colour scales produce any more (ie after a colour scale is changed or removed)
+    """Remove maps (and thumbnails) of a parameter for a cycle that none of its selections,
+    colour scales and grid statistics produce any more (ie after a colour scale is changed or
+    removed)
 
     Args:
         cfg (CsqaConfig): CSQA config
         param (ParameterConfig): parameter
         baseline (str): product baseline
         cycle (int): cycle number
-        rows (list[dict]): statistics rows of the parameter for the cycle
+        stats (dict): statistics of the parameter for the cycle
     """
     pdir = plots_dir(cfg.output_dir, baseline, cycle, param.id)
-    expected = {
-        plot_filename(param.id, r["variant"], r["mode"], r["area"], cfg.image_format, s.file_suffix)
-        for r in rows
-        if has_maps(param, r)
-        for s in param.colour_scales
-    }
+    expected = expected_plots(param, stats, cfg.image_format)
     for directory in (pdir, os.path.join(pdir, "thumbs")):
         if not os.path.isdir(directory):
             continue
@@ -466,10 +614,37 @@ def _finish_parameter(cfg: CsqaConfig, pending: _PendingParameter) -> dict:
             key=lambda r: order.get((r["area"], r["variant"], r["mode"]), len(order)),
         ),
     }
+    if param.grid is not None:
+        for key, result in pending.grid_plots.items():
+            if isinstance(result, Future):
+                result.result()
+            row = pending.grid_rows[key]
+            row["plot"] = grid_plot_filename(param, row, cfg.image_format)
+        grid_order = {
+            key: i
+            for i, key in enumerate(
+                (a, v.id, m, s.id)
+                for v in param.variants
+                for m in param.grid.modes
+                for a in param.grid.areas
+                for s in param.grid.statistics
+            )
+        }
+        stats["grid"] = {
+            "binsize_km": param.grid.binsize_km,
+            "min_count": param.grid.min_count,
+            "grid_areas": {a: cfg.areas[a].grid_area for a in param.grid.areas},
+        }
+        stats["grid_rows"] = sorted(
+            pending.grid_rows.values(),
+            key=lambda r: grid_order.get(
+                (r["area"], r["variant"], r["mode"], r["statistic"]), len(grid_order)
+            ),
+        )
     baseline, cycle = pending.summary["baseline"], pending.summary["cycle"]
     write_json_atomic(stats_path(cfg.output_dir, baseline, cycle, param.id), stats)
     if pending.make_plots:
-        _remove_stale_plots(cfg, param, baseline, cycle, stats["rows"])
+        _remove_stale_plots(cfg, param, baseline, cycle, stats)
     return stats
 
 
