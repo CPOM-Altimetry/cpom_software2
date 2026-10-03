@@ -153,6 +153,16 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     map_modes: list[str] = field(default_factory=list)  # modes with maps (default all modes)
     default_variant: str = ""  # variant shown first in the portal (default the first)
     grid: GridConfig | None = None  # gridded maps and statistics (None: not gridded)
+    # acquisition modes with valid values: values of other modes are rejected (ie LRM values
+    # of parameters only computed in SAR and SARin modes). Empty: every mode
+    valid_modes: list[str] = field(default_factory=list)
+    # first product baseline containing the parameter (ie 'F'): earlier baselines are not
+    # processed for it. Empty: every baseline
+    first_baseline: str = ""
+
+    def in_baseline(self, baseline: str) -> bool:
+        """True if the parameter is processed for a product baseline"""
+        return not self.first_baseline or baseline >= self.first_baseline
 
     @property
     def is_bit_flag(self) -> bool:
@@ -460,6 +470,13 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
     for mode in map_modes:
         if mode not in (modes or [""]):
             raise ValueError(f"{context}: map mode {mode} is not one of the parameter's modes")
+    valid_modes = [str(m) for m in pcfg.get("valid_modes", [])]
+    for mode in valid_modes:
+        if mode not in mode_labels or mode == "all":
+            raise ValueError(f"{context}: valid mode {mode} is not an acquisition mode")
+    first_baseline = str(pcfg.get("first_baseline", "")).upper()
+    if first_baseline and not re.fullmatch(r"[A-Z]", first_baseline):
+        raise ValueError(f"{context}: first_baseline must be a baseline letter")
     units = str(pcfg.get("units", ""))
     grid = _parse_grid(pcfg, context, cfg_areas, modes, units, colour_scales[0])
     if grid is not None and (ptype != "float" or variants[0].bit_mask is not None):
@@ -487,6 +504,8 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
         map_modes=map_modes,
         default_variant=default_variant,
         grid=grid,
+        valid_modes=valid_modes,
+        first_baseline=first_baseline,
     )
 
 

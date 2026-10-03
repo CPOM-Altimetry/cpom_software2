@@ -105,6 +105,8 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
             for s in param.colour_scales
         ],
         "grid": grid_manifest(param),
+        "valid_modes": param.valid_modes,
+        "first_baseline": param.first_baseline,
         "image_format": cfg.image_format,
     }
 

@@ -7,7 +7,9 @@ import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.csqa_config import load_config, sanitize_key
 from cpom.altimetry.projects.csqa.plotting import plot_filename
-from cpom.altimetry.projects.csqa.processing import has_maps
+from cpom.altimetry.projects.csqa.processing import has_maps, params_to_process
+from cpom.altimetry.projects.csqa.product_files import parse_product_filename
+from cpom.altimetry.projects.csqa.tests.conftest import write_test_config
 from cpom.areas.area_plot import log_scale_ticks
 
 
@@ -250,4 +252,47 @@ def test_invalid_reject_bit(tmp_path, default_config):
         }
     }
     with pytest.raises(ValueError, match="only float parameters"):
+        load_config(_config_with_parameters(tmp_path, default_config, params))
+
+
+def test_sea_ice_parameters(tmp_path, default_config):
+    """sea ice freeboard and thickness are Baseline-F onwards, SAR/SARin only, without values
+    with the freeboard error bit set, and gridded like the radar freeboard"""
+    radar_fb = default_config.parameters["freeboard"]
+    for pid in ("sea_ice_freeboard", "sea_ice_thickness"):
+        param = default_config.parameters[pid]
+        assert not param.has_variants
+        assert param.variants[0].reject_mask == 65536
+        assert param.variants[0].reject_variable == "flag_prod_status_20_ku"
+        assert param.valid_modes == ["sar", "sarin"]
+        assert param.first_baseline == "F"
+        assert not param.in_baseline("E")
+        assert param.in_baseline("F") and param.in_baseline("G")
+        assert param.grid is not None and radar_fb.grid is not None
+        assert (param.grid.binsize_km, param.grid.areas) == (10.0, radar_fb.grid.areas)
+    assert radar_fb.in_baseline("E") and radar_fb.valid_modes == []
+    thickness_grid = default_config.parameters["sea_ice_thickness"].grid
+    assert thickness_grid is not None
+    assert thickness_grid.statistics[0].range == (-1.0, 5.0)
+
+    # parameters are not processed for baselines before their first baseline
+    cfg = load_config(write_test_config(tmp_path))
+    e_file = parse_product_filename(
+        "/data/CS_LTA__SIR_GDR_2__20110101T011919_20110101T025833_E001.nc"
+    )
+    assert e_file is not None
+    needed = params_to_process(
+        cfg, 3, "E", ["freeboard", "sea_ice_freeboard"], False, False, {"GDR-A": [e_file]}
+    )
+    assert needed == ["freeboard"]
+
+
+@pytest.mark.parametrize(
+    "extra, message",
+    [({"valid_modes": ["all"]}, "valid mode all"), ({"first_baseline": "F1"}, "baseline letter")],
+)
+def test_invalid_valid_modes(tmp_path, default_config, extra, message):
+    """valid modes must be acquisition modes, and the first baseline a letter"""
+    params = {"bad": {"source": "GDR-A", "type": "float", "variable": "x", **extra}}
+    with pytest.raises(ValueError, match=message):
         load_config(_config_with_parameters(tmp_path, default_config, params))

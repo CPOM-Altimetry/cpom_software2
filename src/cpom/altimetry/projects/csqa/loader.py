@@ -15,7 +15,8 @@ For bit flag parameters the flag word is read once and each bit's values (1 set,
 are derived from it on demand (ParameterData.variant_values).
 
 Variants with a reject bit (ie freeboard_error of flag_prod_status_20_ku) have their values set
-to NaN where the bit is set, so only unflagged values are counted, mapped and gridded.
+to NaN where the bit is set, so only unflagged values are counted, mapped and gridded. Likewise
+the values of parameters with valid_modes are set to NaN in the other acquisition modes.
 """
 
 import logging
@@ -234,7 +235,7 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     lats: dict[tuple[str, str], list[np.ndarray]] = {}
     lons: dict[tuple[str, str], list[np.ndarray]] = {}
     modes: list[np.ndarray] = []
-    need_modes = bool(param.modes)
+    need_modes = bool(param.modes or param.valid_modes)
 
     # coordinates of each variant, from the first file containing the variant's variable
     for pfile in files:
@@ -366,6 +367,11 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
         data.lons[key] = np.concatenate(lons[key]) if lons.get(key) else np.array([], np.float32)
     if need_modes:
         data.modes = np.concatenate(modes) if modes else np.array([], dtype=np.int8)
+    if param.valid_modes and data.modes is not None:
+        # values of other acquisition modes are rejected (ie 0 rather than fill in LRM mode)
+        other_mode = ~np.isin(data.modes, [cfg.mode_values[m] for m in param.valid_modes])
+        for vals in data.values.values():
+            vals[other_mode] = np.nan
 
     for var_name, n_missing in data.missing_variables.items():
         log.warning("%s missing in %d of %d files", var_name, n_missing, len(files))

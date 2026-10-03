@@ -33,6 +33,10 @@
 #   reject_bit  : (variant or parameter) {variable, mask, name}: values are rejected where this
 #                 bit of a flag word is set (ie freeboard_error). name is the bit's name in
 #                 the variable's flag_meanings (checked when reading products)
+#   valid_modes : acquisition modes with valid values (ie [sar, sarin]): values in other modes
+#                 are rejected. Default: every mode
+#   first_baseline : first product baseline containing the parameter (ie F). Earlier baselines
+#                 are not processed for it. Default: every baseline
 #   grid        : gridded maps and statistics of a float parameter, in addition to the along-
 #                 track maps. The measurements of each selection are gridded into cells of
 #                 binsize_km of the area's grid_area (csqa_config.yaml), and a statistic of the
@@ -380,7 +384,8 @@ parameters:
         - id: filtered
           name: "Freeboard error not set"
           variable: radar_freeboard_20_ku
-          reject_bit: {variable: flag_prod_status_20_ku, mask: 65536, name: freeboard_error}
+          reject_bit: &freeboard_error
+            {variable: flag_prod_status_20_ku, mask: 65536, name: freeboard_error}
         - id: unfiltered
           name: "All measurements"
           variable: radar_freeboard_20_ku
@@ -391,7 +396,7 @@ parameters:
       # unflagged values are ~-0.25 to 0.55 m (1st-99th percentile), above -0.3 m
       range: [-0.3, 0.7]
       cmap: viridis
-    grid:
+    grid: &freeboard_grid
       binsize_km: 10
       areas: [north_polar, south_polar]
       modes: [all]
@@ -401,4 +406,62 @@ parameters:
         - {id: max, range: [-0.3, 1.5]}
         - {id: std, range: [0.0, 0.4]}
         # ~1-30 measurements per cell in a week of data
+        - {id: count, range: [1.0, 500.0], log: true}
+
+  sea_ice_freeboard:
+    long_name: "Sea Ice Freeboard"
+    description: >-
+      Sea ice freeboard of each 20 Hz measurement (Baseline-F onwards): the height of the
+      snow-ice interface above the local sea surface, computed as the radar freeboard plus the
+      snow depth correction (for the slower propagation of the radar pulse through the snow
+      layer). Only computed in SAR and SARin modes. Baseline-F products contain 0 rather than the
+      fill value in LRM mode and where the freeboard error flag is set, so these measurements are
+      excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in each
+      cell of a 10 km polar stereographic grid.
+    source: GDR-A
+    type: float
+    units: m
+    variable: sea_ice_freeboard_20_ku
+    reject_bit: *freeboard_error
+    valid_modes: [sar, sarin]
+    first_baseline: F
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged values are ~-0.2 to 0.6 m in SAR mode (1st-99th percentile), to 1.2 m in SARin
+      range: [-0.3, 0.7]
+      cmap: viridis
+    grid: *freeboard_grid
+
+  sea_ice_thickness:
+    long_name: "Sea Ice Thickness"
+    description: >-
+      Sea ice thickness of each 20 Hz measurement (Baseline-F onwards), computed from the sea ice
+      freeboard, the snow depth and density, and the sea water and sea ice densities, assuming
+      hydrostatic equilibrium. Thickness is negative where the sea ice freeboard is negative.
+      Only computed in SAR and SARin modes. Baseline-F products contain 0 rather than the fill
+      value in LRM mode and where the freeboard error flag is set, so these measurements are
+      excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in each
+      cell of a 10 km polar stereographic grid.
+    source: GDR-A
+    type: float
+    units: m
+    variable: sea_ice_thickness_20_ku
+    reject_bit: *freeboard_error
+    valid_modes: [sar, sarin]
+    first_baseline: F
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged Antarctic winter values are ~-1.7 to 7 m in SAR mode (1st-99th percentile),
+      # to 13 m in SARin; ~5% are below -0.6 m
+      range: [-1.0, 5.0]
+      cmap: viridis
+    grid:
+      <<: *freeboard_grid
+      statistics:
+        - {id: median}
+        - {id: mean}
+        - {id: max, range: [-1.0, 10.0]}
+        - {id: std, range: [0.0, 2.0]}
         - {id: count, range: [1.0, 500.0], log: true}

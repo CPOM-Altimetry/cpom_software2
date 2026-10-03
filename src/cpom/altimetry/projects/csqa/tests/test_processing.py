@@ -239,6 +239,36 @@ def test_freeboard_grid(one_file_config):  # pylint: disable=redefined-outer-nam
     }
 
 
+def test_sea_ice_thickness(one_file_config):  # pylint: disable=redefined-outer-name
+    """sea ice thickness: only SAR/SARin values without the freeboard error bit are used (the
+    products contain 0 in LRM mode and where the bit is set)"""
+    cfg = load_config(one_file_config)
+    args = ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "sea_ice_thickness"]
+    assert process_cycles_main(args + ["--no_plots"]) == 0
+
+    with Dataset(GDR_A_FILES[0]) as nc:
+        thk = np.ma.filled(nc["sea_ice_thickness_20_ku"][:].astype(float), np.nan)
+        modes = np.ma.filled(nc["flag_instr_mode_op_20_ku"][:], 0)
+        fb_error = (np.ma.filled(nc["flag_prod_status_20_ku"][:], 0) & 65536) != 0
+    # the zeros excluded
+    assert np.all(thk[modes == 1] == 0.0)
+    assert np.all(thk[fb_error & np.isfinite(thk)] == 0.0)
+    expected = np.isfinite(thk) & ~fb_error & np.isin(modes, [2, 3])
+
+    stats_file = os.path.join(
+        cfg.output_dir, "baseline_F", "cycles", "cycle_193", "stats", "sea_ice_thickness.json"
+    )
+    with open(stats_file, encoding="utf-8") as fh:
+        thk_stats = json.load(fh)
+    rows = {(r["area"], r["mode"]): r for r in thk_stats["rows"]}
+    assert rows[("global", "all")]["n_valid"] == int(np.count_nonzero(expected))
+    assert rows[("global", "all")]["n_valid"] == (
+        rows[("global", "sar")]["n_valid"] + rows[("global", "sarin")]["n_valid"]
+    )
+    assert rows[("global", "all")]["median"] > 0.5
+    assert len(thk_stats["grid_rows"]) == 2 * 5
+
+
 def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name
     """cycles without input files produce no outputs"""
     cfg = load_config(one_file_config)

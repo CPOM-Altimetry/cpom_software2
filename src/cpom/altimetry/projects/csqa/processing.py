@@ -219,7 +219,7 @@ def params_to_process(  # pylint: disable=too-many-arguments,too-many-positional
         cycle_files (dict|None): input files per product, from find_cycle_files()
 
     Returns:
-        list[str]: parameter ids
+        list[str]: parameter ids (excluding parameters not in the baseline's products)
     """
     params = [cfg.parameters[pid] for pid in (param_ids or list(cfg.parameters))]
     if cycle_files is None:
@@ -229,7 +229,7 @@ def params_to_process(  # pylint: disable=too-many-arguments,too-many-positional
     needed = []
     for param in params:
         files = cycle_files.get(param.source, [])
-        if not files:
+        if not files or not param.in_baseline(baseline):
             continue
         if (
             update
@@ -719,7 +719,7 @@ def process_cycle(  # pylint: disable=too-many-arguments,too-many-positional-arg
 
     needed = params_to_process(cfg, cycle, baseline, param_ids, make_plots, update, cycle_files)
     for param in params:
-        if param.id not in needed:
+        if param.id not in needed and param.in_baseline(baseline):
             log.info("cycle %d baseline %s %s: nothing to do", cycle, baseline, param.id)
 
     result = CycleResult(cycle, baseline, "unchanged")
