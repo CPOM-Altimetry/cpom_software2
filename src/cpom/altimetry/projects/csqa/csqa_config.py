@@ -48,6 +48,17 @@ class ProductConfig:
 
 
 @dataclass(frozen=True)
+class ModeSurface:
+    """A selection of an acquisition mode over surface types (ie LRM over ice), used like a
+    mode in a parameter's modes"""
+
+    id: str  # ie 'lrm_ice'
+    mode: str  # acquisition mode id, ie 'lrm'
+    surfaces: tuple[str, ...]  # surface type ids, ie ('ice',)
+    label: str  # ie 'LRM Ice'
+
+
+@dataclass(frozen=True)
 class FlagDef:
     """A flag value of a flag parameter"""
 
@@ -202,12 +213,15 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     areas: dict[str, AreaConfig]
     mode_variable: str
     mode_values: dict[str, int]
-    mode_labels: dict[str, str]
+    mode_labels: dict[str, str]  # of the modes, 'all' and the mode surface selections
     image_format: str
     dpi: int
     webp_quality: int
     max_points: int
     parameters: dict[str, ParameterConfig]
+    surface_variable: str = ""  # surface type mask variable (for mode surface selections)
+    surface_values: dict[str, int] = field(default_factory=dict)
+    mode_surfaces: dict[str, ModeSurface] = field(default_factory=dict)
 
     def calendar(self) -> CycleCalendar:
         """the cycle calendar of this configuration"""
@@ -316,15 +330,23 @@ def _parse_grid(  # pylint: disable=too-many-arguments,too-many-positional-argum
     )
 
 
-def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, products: dict):
+def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    pid: str,
+    pcfg: dict,
+    cfg_areas: dict,
+    mode_labels: dict,
+    products: dict,
+    acquisition_modes: set[str],
+):
     """parse and validate one parameter definition
 
     Args:
         pid (str): parameter id
         pcfg (dict): parameter definition from the yaml file
         cfg_areas (dict): configured areas
-        mode_labels (dict): configured mode labels
+        mode_labels (dict): configured mode selection labels ('all', modes and mode surfaces)
         products (dict): configured products
+        acquisition_modes (set[str]): configured acquisition mode ids (ie lrm, sar, sarin)
 
     Returns:
         ParameterConfig
@@ -407,7 +429,7 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
             raise ValueError(f"{context}: mode {mode} not in configured mode labels")
     for variant in variants:
         for mode in variant.mode_descriptions:
-            if mode not in mode_labels or mode == "all":
+            if mode not in acquisition_modes:
                 raise ValueError(
                     f"{context}: variant {variant.id} mode_descriptions has unknown mode {mode}"
                 )
@@ -472,7 +494,7 @@ def _parse_parameter(pid: str, pcfg: dict, cfg_areas: dict, mode_labels: dict, p
             raise ValueError(f"{context}: map mode {mode} is not one of the parameter's modes")
     valid_modes = [str(m) for m in pcfg.get("valid_modes", [])]
     for mode in valid_modes:
-        if mode not in mode_labels or mode == "all":
+        if mode not in acquisition_modes:
             raise ValueError(f"{context}: valid mode {mode} is not an acquisition mode")
     first_baseline = str(pcfg.get("first_baseline", "")).upper()
     if first_baseline and not re.fullmatch(r"[A-Z]", first_baseline):
@@ -562,6 +584,28 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         if mode != "all" and mode not in mode_values:
             raise ValueError(f"mode {mode} has a label but no value in modes:values")
 
+    # selections of a mode over surface types (ie LRM over ice)
+    surfaces_cfg = cfg.get("surface_types") or {}
+    surface_values = {str(k): int(v) for k, v in (surfaces_cfg.get("values") or {}).items()}
+    mode_surfaces = {}
+    for sel_id, sel in (cfg.get("mode_surfaces") or {}).items():
+        sel_context = f"mode_surfaces {sel_id}"
+        mode = str(_require(sel, "mode", sel_context))
+        surfaces = sel.get("surfaces", sel.get("surface"))
+        surfaces = tuple(str(x) for x in ([surfaces] if isinstance(surfaces, str) else surfaces))
+        if not re.fullmatch(r"[a-z0-9_]+", str(sel_id)) or sel_id in mode_labels:
+            raise ValueError(f"{sel_context}: id must be [a-z0-9_] and not a mode id")
+        if mode not in mode_values:
+            raise ValueError(f"{sel_context}: unknown mode {mode}")
+        if not surfaces or any(x not in surface_values for x in surfaces):
+            raise ValueError(f"{sel_context}: surfaces must be configured surface_types")
+        mode_surfaces[str(sel_id)] = ModeSurface(
+            str(sel_id), mode, surfaces, str(sel.get("label", sel_id))
+        )
+    if mode_surfaces and not surfaces_cfg.get("variable"):
+        raise ValueError("mode_surfaces need surface_types:variable")
+    all_labels = {**mode_labels, **{m.id: m.label for m in mode_surfaces.values()}}
+
     params_file = _expand_path(_require(cfg, "parameters_file", context))
     if not os.path.isabs(params_file):
         params_file = os.path.join(os.path.dirname(config_file), params_file)
@@ -570,7 +614,7 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
 
     parameters = {}
     for pid, pcfg in _require(params_cfg, "parameters", params_file).items():
-        parameters[pid] = _parse_parameter(pid, pcfg, areas, mode_labels, products)
+        parameters[pid] = _parse_parameter(pid, pcfg, areas, all_labels, products, set(mode_values))
     for param in parameters.values():
         # gridded statistics timeseries are saved as <param>_grid.csv
         if param.grid is not None and f"{param.id}_grid" in parameters:
@@ -593,10 +637,13 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         areas=areas,
         mode_variable=str(_require(modes_cfg, "variable", "modes")),
         mode_values=mode_values,
-        mode_labels=mode_labels,
+        mode_labels=all_labels,
         image_format=str(plots_cfg.get("image_format", "webp")),
         dpi=int(plots_cfg.get("dpi", 85)),
         webp_quality=int(plots_cfg.get("webp_quality", 80)),
         max_points=int(plots_cfg.get("max_points", 2_000_000)),
         parameters=parameters,
+        surface_variable=str(surfaces_cfg.get("variable", "")),
+        surface_values=surface_values,
+        mode_surfaces=mode_surfaces,
     )

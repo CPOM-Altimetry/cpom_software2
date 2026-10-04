@@ -2,7 +2,7 @@
 
 Statistics of CSQA parameters for a cycle/area/variant/mode selection.
 
-    float parameters : n_valid, mean, median, std (population), min, max
+    float parameters : n_valid, mean, median, std (population), min, max, rms (root mean square)
     flag parameters  : n_valid, and the count and % of each flag value (% of valid records)
 
 Values are NaN where the product variable is missing or set to its fill value.
@@ -12,7 +12,8 @@ import numpy as np
 
 from cpom.altimetry.projects.csqa.csqa_config import FlagDef
 
-FLOAT_STATS = ("mean", "median", "std", "min", "max")
+# rms last: added later, so csv columns of earlier statistics keep their positions
+FLOAT_STATS = ("mean", "median", "std", "min", "max", "rms")
 
 
 def _round(value: float, sig: int = 7) -> float:
@@ -27,7 +28,7 @@ def float_stats(vals: np.ndarray) -> dict:
         vals (np.ndarray): values (NaN for missing)
 
     Returns:
-        dict: n_valid, mean, median, std, min, max (None if there are no valid values)
+        dict: n_valid, mean, median, std, min, max, rms (None if there are no valid values)
     """
     valid = vals[np.isfinite(vals)]
     stats: dict = {"n_valid": int(valid.size)}
@@ -41,6 +42,7 @@ def float_stats(vals: np.ndarray) -> dict:
     stats["std"] = _round(np.std(valid64))
     stats["min"] = _round(np.min(valid64))
     stats["max"] = _round(np.max(valid64))
+    stats["rms"] = _round(np.sqrt(np.mean(valid64 * valid64)))
     return stats
 
 

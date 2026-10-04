@@ -1,5 +1,6 @@
 """pytests of cpom.altimetry.projects.csqa.csqa_config"""
 
+import os
 from datetime import datetime
 
 import pytest
@@ -253,6 +254,44 @@ def test_invalid_reject_bit(tmp_path, default_config):
     }
     with pytest.raises(ValueError, match="only float parameters"):
         load_config(_config_with_parameters(tmp_path, default_config, params))
+
+
+def test_mode_surfaces(tmp_path, default_config):
+    """mode surface selections (ie LRM over ice) are selectable like modes"""
+    cfg = default_config
+    assert cfg.surface_variable == "surf_type_20_ku"
+    assert cfg.surface_values == {"ocean": 0, "lake": 1, "ice": 2, "land": 3}
+    lrm_ice = cfg.mode_surfaces["lrm_ice"]
+    assert (lrm_ice.mode, lrm_ice.surfaces, lrm_ice.label) == ("lrm", ("ice",), "LRM Ice")
+    assert cfg.mode_labels["sar_ocean"] == "SAR Ocean"
+    qflags = cfg.parameters["quality_flags"]
+    assert qflags.modes[4:] == [
+        "lrm_ice",
+        "lrm_land",
+        "lrm_ocean",
+        "sarin_ice",
+        "sarin_land",
+        "sar_ocean",
+    ]
+    assert qflags.map_modes == ["all"]
+
+    # selections must be of a configured mode and surface types
+    with open(cfg.config_file, encoding="utf-8") as fh:
+        cfg_yaml = yaml.safe_load(fh)
+    cfg_yaml["parameters_file"] = os.path.join(
+        os.path.dirname(cfg.config_file), cfg_yaml["parameters_file"]
+    )
+    cfg_yaml["mode_surfaces"]["bad"] = {"mode": "lrm", "surfaces": ["snow"]}
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.safe_dump(cfg_yaml), encoding="utf-8")
+    with pytest.raises(ValueError, match="surface_types"):
+        load_config(str(config_file))
+    # mode surface selections are not acquisition modes
+    params = {
+        "bad": {"source": "GDR-A", "type": "float", "variable": "x", "valid_modes": ["lrm_ice"]}
+    }
+    with pytest.raises(ValueError, match="valid mode"):
+        load_config(_config_with_parameters(tmp_path, cfg, params))
 
 
 def test_sea_ice_parameters(tmp_path, default_config):

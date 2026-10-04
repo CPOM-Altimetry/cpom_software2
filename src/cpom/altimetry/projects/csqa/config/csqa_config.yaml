@@ -88,6 +88,27 @@ modes:
     sar: "SAR"
     sarin: "SARin"
 
+# Surface types: the 4-state surface type mask at each measurement location, used by the mode
+# and surface type selections below
+surface_types:
+  variable: surf_type_20_ku
+  values:
+    ocean: 0
+    lake: 1  # lake / enclosed sea
+    ice: 2
+    land: 3
+
+# Selections of an acquisition mode over surface types, used like modes in a parameter's modes
+# (ie the quality flag percentages per mode and surface type, as reported in the CryoSat-2
+# quality reports and the previous QA portal)
+mode_surfaces:
+  lrm_ice: {mode: lrm, surfaces: [ice], label: "LRM Ice"}
+  lrm_land: {mode: lrm, surfaces: [land], label: "LRM Land"}
+  lrm_ocean: {mode: lrm, surfaces: [ocean], label: "LRM Ocean"}
+  sarin_ice: {mode: sarin, surfaces: [ice], label: "SARin Ice"}
+  sarin_land: {mode: sarin, surfaces: [land], label: "SARin Land"}
+  sar_ocean: {mode: sar, surfaces: [ocean], label: "SAR Ocean"}
+
 plots:
   image_format: webp
   dpi: 85

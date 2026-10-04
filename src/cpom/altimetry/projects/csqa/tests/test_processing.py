@@ -117,12 +117,26 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert status == 0
     with open(os.path.join(cdir, "stats", "quality_flags.json"), encoding="utf-8") as fh:
         qf_rows = json.load(fh)["rows"]
-    assert len(qf_rows) == 31 * 4
+    # 31 bits x (all + 3 modes + 6 mode surface selections)
+    assert len(qf_rows) == 31 * 10
     for row in qf_rows:
         assert abs(row["pct"]["set"] + row["pct"]["not_set"] - 100.0) < 1e-3
     qf = {(r["variant"], r["mode"]): r for r in qf_rows}
     assert qf[("b21", "sar")]["pct"]["set"] < 100.0  # backscatter (retracker 1) error
     assert qf[("b19", "sar")]["pct"]["set"] == 100.0  # retracker 3 backscatter unused in SAR
+
+    # mode surface selections: % set of the records of a mode over a surface type
+    with Dataset(GDR_A_FILES[0]) as nc:
+        words = np.ma.filled(nc["flag_prod_status_20_ku"][:], -1).astype(np.int64)
+        modes = np.ma.filled(nc["flag_instr_mode_op_20_ku"][:], -1)
+        surfaces = np.ma.filled(nc["surf_type_20_ku"][:], -1)
+        lat = np.ma.filled(nc["lat_poca_20_ku"][:].astype(float), np.nan)
+    for sel_id, mode, surface in (("lrm_land", 1, 3), ("lrm_ocean", 1, 0), ("sar_ocean", 2, 0)):
+        sel = (modes == mode) & (surfaces == surface) & (lat >= 60) & (words >= 0)
+        assert sel.any()
+        expected = 100.0 * np.count_nonzero(words[sel] & 16777216) / np.count_nonzero(sel)
+        assert qf[("b24", sel_id)]["pct"]["set"] == pytest.approx(expected, abs=1e-4)
+        assert qf[("b24", sel_id)]["n_valid"] == np.count_nonzero(sel)
 
     # geophysical corrections (1 Hz): the sea state bias is not in Baseline-F products, which
     # must not stop the other corrections being read
@@ -139,6 +153,11 @@ def test_process_cycle(one_file_config):  # pylint: disable=redefined-outer-name
     assert cors[("global", "ssb")]["n_valid"] == 0
     assert cors[("global", "dry")]["n_valid"] > 0
     assert -2.5 < cors[("global", "dry")]["median"] < -2.0
+    # root mean square of the dry troposphere correction ~ its |mean|
+    assert cors[("global", "dry")]["rms"] == pytest.approx(
+        np.sqrt(cors[("global", "dry")]["mean"] ** 2 + cors[("global", "dry")]["std"] ** 2),
+        rel=1e-5,
+    )
 
     # update mode skips unchanged inputs
     status = process_cycles_main(

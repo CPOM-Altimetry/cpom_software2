@@ -107,7 +107,8 @@ def plot_title(param: ParameterConfig, variant: VariantDef, mode: str, cfg: Csqa
         title += f": {variant.name}"
     if mode:
         label = cfg.mode_labels.get(mode, mode)
-        title += f", {label}" if mode == "all" else f", {label} mode"
+        # ie ', All modes', ', SAR mode', ', LRM Ice'
+        title += f", {label}" if mode == "all" or mode in cfg.mode_surfaces else f", {label} mode"
     return title
 
 

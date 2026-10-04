@@ -20,7 +20,8 @@
 #                     mode_descriptions: *retracker_1_modes
 #                     plot (optional): {range, cmap} of the variant's maps, overriding the
 #                     parameter's (for variants with very different value ranges)
-#   modes       : acquisition mode selections (all, lrm, sar, sarin). Omit for no mode selection
+#   modes       : acquisition mode selections (all, lrm, sar, sarin), and mode surface selections
+#                 (ie lrm_ice, csqa_config.yaml:mode_surfaces). Omit for no mode selection
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
 #   units       : units of float parameters
@@ -186,9 +187,12 @@ parameters:
     description: >-
       The 20 Hz L2 quality flag word: bits giving the ground segment's assessment of the quality
       of each measurement's parameters, and the surface type discriminated by the SAR processing
-      chain. Statistics are the percentage of records with each bit set. An error bit set for a
-      height or backscatter that is not a fill value means the result should typically be
-      rejected.
+      chain. Statistics are the percentage of records with each bit set, per acquisition mode and
+      per mode and surface type (from the surface type mask), as in the CryoSat-2 quality
+      reports. An error bit set for a height or backscatter that is not a fill value means the
+      result should typically be rejected. The retracker 1 height and backscatter errors per mode
+      and surface type are comparable with the Height Error and Backscatter Error statistics of
+      earlier baselines.
     source: GDR-A
     type: flag
     variable: flag_prod_status_20_ku
@@ -230,7 +234,7 @@ parameters:
         - {mask: 536870912, name: sarin_height_unwrap, label: "SARin height unwrap"}
         - {mask: 1073741824, name: sarin_off_nadir_lead, label: "SARin off-nadir lead"}
     default_variant: b24  # height error (retracker 1)
-    modes: [all, lrm, sar, sarin]
+    modes: [all, lrm, sar, sarin, lrm_ice, lrm_land, lrm_ocean, sarin_ice, sarin_land, sar_ocean]
     # maps (set / not set) only for all modes, and only where a bit is set
     map_modes: [all]
     areas: [global, north_polar, south_polar]

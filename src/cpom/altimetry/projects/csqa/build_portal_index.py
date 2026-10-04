@@ -268,7 +268,22 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
         "data_latency_days": cfg.data_latency_days,
         "image_format": cfg.image_format,
         "areas": [{"id": a.id, "long_name": a.long_name} for a in cfg.areas.values()],
-        "modes": [{"id": k, "label": v} for k, v in cfg.mode_labels.items()],
+        # modes, 'all' and the mode surface selections (with their mode and surface types)
+        "modes": [
+            {
+                "id": k,
+                "label": v,
+                **(
+                    {
+                        "mode": cfg.mode_surfaces[k].mode,
+                        "surfaces": list(cfg.mode_surfaces[k].surfaces),
+                    }
+                    if k in cfg.mode_surfaces
+                    else {}
+                ),
+            }
+            for k, v in cfg.mode_labels.items()
+        ],
         "products": {p.id: p.long_name for p in cfg.products.values()},
         "parameters": [parameter_manifest(p, cfg) for p in cfg.parameters.values()],
         # newest baseline first

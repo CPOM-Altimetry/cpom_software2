@@ -50,6 +50,8 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     lats: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
     lons: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
     modes: np.ndarray | None = None  # acquisition mode flag per record (MODE_FILL if unknown)
+    # surface type mask per record (MODE_FILL if unknown), for mode surface selections
+    surfaces: np.ndarray | None = None
     files_used: list[str] = field(default_factory=list)  # files containing cycle records
     bad_files: list[str] = field(default_factory=list)  # files that could not be read
     missing_variables: dict[str, int] = field(default_factory=dict)  # var -> n files missing
@@ -236,6 +238,8 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     lons: dict[tuple[str, str], list[np.ndarray]] = {}
     modes: list[np.ndarray] = []
     need_modes = bool(param.modes or param.valid_modes)
+    surfaces: list[np.ndarray] = []
+    need_surfaces = any(m in cfg.mode_surfaces for m in param.modes)
 
     # coordinates of each variant, from the first file containing the variant's variable
     for pfile in files:
@@ -348,6 +352,17 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                     else:
                         modes.append(_read(nc, cfg.mode_variable, sel, np.int8, MODE_FILL))
 
+                # surface types (for mode surface selections, ie LRM over ice)
+                if need_surfaces:
+                    surf_var = nc.variables.get(cfg.surface_variable)
+                    if surf_var is None or surf_var.dimensions[0] != time_name:
+                        data.missing_variables[cfg.surface_variable] = (
+                            data.missing_variables.get(cfg.surface_variable, 0) + 1
+                        )
+                        surfaces.append(np.full(n_sel, MODE_FILL, dtype=np.int8))
+                    else:
+                        surfaces.append(_read(nc, cfg.surface_variable, sel, np.int8, MODE_FILL))
+
                 data.n_records += n_sel
                 data.files_used.append(pfile.name)
         except (OSError, RuntimeError, KeyError, IndexError, ValueError) as exc:
@@ -367,6 +382,8 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
         data.lons[key] = np.concatenate(lons[key]) if lons.get(key) else np.array([], np.float32)
     if need_modes:
         data.modes = np.concatenate(modes) if modes else np.array([], dtype=np.int8)
+    if need_surfaces:
+        data.surfaces = np.concatenate(surfaces) if surfaces else np.array([], dtype=np.int8)
     if param.valid_modes and data.modes is not None:
         # values of other acquisition modes are rejected (ie 0 rather than fill in LRM mode)
         other_mode = ~np.isin(data.modes, [cfg.mode_values[m] for m in param.valid_modes])

@@ -443,7 +443,15 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
         if key not in selections:
             lats = data.lat(variant.id)
             sel = (lats >= area.lat_min) & (lats <= area.lat_max)
-            if mode not in ("", "all") and data.modes is not None:
+            mode_surface = cfg.mode_surfaces.get(mode)
+            if mode_surface is not None and data.modes is not None:
+                # an acquisition mode over surface types (ie LRM over ice)
+                sel &= data.modes == cfg.mode_values[mode_surface.mode]
+                if data.surfaces is not None:
+                    sel &= np.isin(
+                        data.surfaces, [cfg.surface_values[s] for s in mode_surface.surfaces]
+                    )
+            elif mode not in ("", "all") and data.modes is not None:
                 sel &= data.modes == cfg.mode_values[mode]
             selections[key] = sel
         return selections[key]

@@ -15,13 +15,16 @@ def test_float_stats():
     assert stats["median"] == 2.5
     assert stats["min"] == 1.0 and stats["max"] == 10.0
     assert abs(stats["std"] - np.std([1.0, 2.0, 3.0, 10.0])) < 1e-6
+    assert abs(stats["rms"] - np.sqrt(np.mean(np.square([1.0, 2.0, 3.0, 10.0])))) < 1e-6
+    # rms of values around 0 is ~ their std, not their (near 0) mean
+    assert float_stats(np.array([-2.0, 2.0]))["rms"] == 2.0
 
 
 def test_float_stats_empty():
     """statistics of no valid values are None"""
     stats = float_stats(np.array([np.nan, np.nan]))
     assert stats["n_valid"] == 0
-    assert stats["mean"] is None and stats["std"] is None
+    assert stats["mean"] is None and stats["std"] is None and stats["rms"] is None
 
 
 def test_flag_stats():
