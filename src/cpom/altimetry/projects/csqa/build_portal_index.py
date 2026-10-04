@@ -73,6 +73,10 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "variable": v.display_variable,
                 # input variables of a derived variant (ie the mispointing angle)
                 "inputs": list(v.inputs),
+                "units": param.variant_units(v),
+                "valid_modes": list(v.valid_modes),
+                "invalid_values": list(v.invalid_values),
+                "plot_log": v.plot_log,
                 "mode_descriptions": v.mode_descriptions,
                 "bit_mask": v.bit_mask,
                 "bit_name": v.bit_name,

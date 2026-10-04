@@ -328,6 +328,44 @@ def test_mispointing(tmp_path, default_config):
             load_config(_config_with_parameters(tmp_path, cfg, params))
 
 
+def test_l2i_parameters(default_config):
+    """L2i parameters, with per variant valid modes, invalid values, scales and units"""
+    cfg = default_config
+    l2i = [p for p in cfg.parameters.values() if p.source == "L2I"]
+    assert [p.id for p in l2i] == [
+        "l2i_retracker_correction",
+        "l2i_retracker_flags",
+        "l2i_surface_class",
+        "l2i_sarin_discriminator",
+        "l2i_sarin_ambiguity",
+        "l2i_stack",
+        "l2i_doppler_correction",
+        "l2i_slope_attitude",
+    ]
+    rtk = {v.id: v for v in cfg.parameters["l2i_retracker_correction"].variants}
+    assert rtk["rtk1"].valid_modes == () and rtk["rtk1"].reject_mask == 4
+    assert rtk["rtk2"].valid_modes == ("lrm",) and rtk["rtk2"].reject_mask == 2
+    assert rtk["rtk3"].reject_variable == "flag_retracker_20_ku"
+
+    disc = {v.id: v for v in cfg.parameters["l2i_sarin_discriminator"].variants}
+    # parameter settings apply to every variant, unless overridden
+    assert all(v.valid_modes == ("sarin",) and v.invalid_values == (0.0,) for v in disc.values())
+    assert disc["totalpower"].plot_log and disc["totalpower"].value_scale == 1.0
+    assert disc["maxpowerbin"].value_scale == 0.001
+    disc_param = cfg.parameters["l2i_sarin_discriminator"]
+    assert disc_param.variant_units(disc["maxpowerbin"]) == "bin"
+    assert disc_param.variant_units(disc["totalpower"]) == ""
+
+    stack = cfg.parameters["l2i_stack"]
+    assert stack.modes == stack.map_modes == ["sar", "sarin"]
+    assert stack.variant_units(stack.variants[0]) == "beams"
+    doppler = {v.id: v for v in cfg.parameters["l2i_doppler_correction"].variants}
+    assert doppler["doppler"].valid_modes == () and doppler["doppler"].invalid_values == ()
+    assert doppler["slope"].valid_modes == ("lrm",) and doppler["slope"].invalid_values == (0.0,)
+    flags = cfg.parameters["l2i_retracker_flags"]
+    assert flags.is_bit_flag and len(flags.variants) == 18 and flags.default_variant == "b2"
+
+
 def test_sea_ice_parameters(tmp_path, default_config):
     """sea ice freeboard and thickness are Baseline-F onwards, SAR/SARin only, without values
     with the freeboard error bit set, and gridded like the radar freeboard"""

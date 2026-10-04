@@ -219,7 +219,7 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         "lats": np.ascontiguousarray(lats[points]),
         "lons": np.ascontiguousarray(lons[points]),
         "vals": np.ascontiguousarray(vals[points]),
-        "units": param.units if param.units else "no units",
+        "units": param.variant_units(variant) or "no units",
     }
     if vals.size and missing_step > 1:
         # % of all records (the missing values plotted are a sparser subsample)
@@ -240,7 +240,7 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         # a variant's own colour range / colormap override the parameter's
         plot_range = variant.plot_range or scale.range
         data_set["cmap_name"] = variant.cmap or scale.cmap
-        data_set["cmap_log"] = scale.log
+        data_set["cmap_log"] = scale.log if variant.plot_log is None else variant.plot_log
         if plot_range is not None:
             data_set["min_plot_range"] = plot_range[0]
             data_set["max_plot_range"] = plot_range[1]

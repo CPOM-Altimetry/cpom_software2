@@ -9,6 +9,7 @@ The config file used is, in order of precedence:
     - config/csqa_config.yaml in this package
 """
 
+import dataclasses
 import os
 import re
 from dataclasses import dataclass, field
@@ -108,6 +109,13 @@ class VariantDef:  # pylint: disable=too-many-instance-attributes
     # The variant's variable is then its first input (giving its dimension and coordinates)
     derived: str = ""
     inputs: tuple[str, ...] = ()
+    # the following override the parameter's settings for this variant (None / empty: use
+    # the parameter's), and are given their effective values when the config is loaded
+    valid_modes: tuple[str, ...] = ()  # acquisition modes with valid values
+    invalid_values: tuple[float, ...] = ()  # product values meaning missing (ie 0 = unused)
+    value_scale: float | None = None  # factor applied to the product values
+    units: str | None = None
+    plot_log: bool | None = None  # logarithmic colour scale of the variant's maps
 
     @property
     def display_variable(self) -> str:
@@ -193,6 +201,12 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     first_baseline: str = ""
     # factor applied to the product values, ie 1000 for degrees -> millidegrees
     value_scale: float = 1.0
+    # product values meaning missing / not computed (ie 0 in modes where a variable is unused)
+    invalid_values: list[float] = field(default_factory=list)
+
+    def variant_units(self, variant: VariantDef) -> str:
+        """units of a variant's values"""
+        return self.units if variant.units is None else variant.units
 
     def in_baseline(self, baseline: str) -> bool:
         """True if the parameter is processed for a product baseline"""
@@ -327,6 +341,30 @@ def _derived(variant_cfg: dict, context: str) -> dict:
             f"{context}: {derived} needs {DERIVED_VARIABLES[derived][0]} input variables"
         )
     return {"derived": str(derived), "inputs": inputs}
+
+
+def _variant_cfg(pcfg: dict, variant: VariantDef) -> dict:
+    """the yaml definition of a parameter's variant ({} if the parameter has no variants)"""
+    for vcfg in (pcfg.get("variants") or {}).get("options") or []:
+        if str(vcfg.get("id")) == variant.id:
+            return vcfg
+    return {}
+
+
+def _variant_overrides(variant_cfg: dict) -> dict:
+    """VariantDef fields overriding the parameter's settings for a variant"""
+    fields: dict = {}
+    if "valid_modes" in variant_cfg:
+        fields["valid_modes"] = tuple(str(m) for m in variant_cfg["valid_modes"] or [])
+    if "invalid_values" in variant_cfg:
+        fields["invalid_values"] = tuple(float(x) for x in variant_cfg["invalid_values"] or [])
+    if variant_cfg.get("value_scale") is not None:
+        fields["value_scale"] = float(variant_cfg["value_scale"])
+    if variant_cfg.get("units") is not None:
+        fields["units"] = str(variant_cfg["units"])
+    if (variant_cfg.get("plot") or {}).get("log") is not None:
+        fields["plot_log"] = bool(variant_cfg["plot"]["log"])
+    return fields
 
 
 def _variant_variable(variant_cfg: dict, context: str) -> str:
@@ -467,6 +505,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
                 cmap=(v.get("plot") or {}).get("cmap"),
                 **_reject_bit(v, context),
                 **_derived(v, context),
+                **_variant_overrides(v),
             )
             for v in _require(vcfg, "options", context)
         ]
@@ -562,8 +601,31 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
     if first_baseline and not re.fullmatch(r"[A-Z]", first_baseline):
         raise ValueError(f"{context}: first_baseline must be a baseline letter")
     value_scale = float(pcfg.get("value_scale", 1.0))
-    if value_scale == 0:
-        raise ValueError(f"{context}: value_scale must not be 0")
+    invalid_values = [float(x) for x in pcfg.get("invalid_values") or []]
+    # effective settings of each variant: its own, or the parameter's
+    variants = [
+        dataclasses.replace(
+            v,
+            valid_modes=(
+                v.valid_modes if "valid_modes" in _variant_cfg(pcfg, v) else tuple(valid_modes)
+            ),
+            invalid_values=(
+                v.invalid_values
+                if "invalid_values" in _variant_cfg(pcfg, v)
+                else tuple(invalid_values)
+            ),
+            value_scale=value_scale if v.value_scale is None else v.value_scale,
+        )
+        for v in variants
+    ]
+    for variant in variants:
+        if variant.value_scale == 0:
+            raise ValueError(f"{context}: value_scale must not be 0")
+        for mode in variant.valid_modes:
+            if mode not in acquisition_modes:
+                raise ValueError(f"{context}: valid mode {mode} is not an acquisition mode")
+        if variant.plot_log and not (variant.plot_range and variant.plot_range[0] > 0):
+            raise ValueError(f"{context}: log colour scale of {variant.id} needs a range above 0")
     units = str(pcfg.get("units", ""))
     grid = _parse_grid(pcfg, context, cfg_areas, modes, units, colour_scales[0])
     if grid is not None and (ptype != "float" or variants[0].bit_mask is not None):
@@ -594,6 +656,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
         valid_modes=valid_modes,
         first_baseline=first_baseline,
         value_scale=value_scale,
+        invalid_values=invalid_values,
     )
 
 

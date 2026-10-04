@@ -37,7 +37,7 @@ from cpom.altimetry.projects.csqa.csqa_config import (
 )
 from cpom.altimetry.projects.csqa.gridding import grid_measurements
 from cpom.altimetry.projects.csqa.loader import bit_values, load_parameter_data
-from cpom.altimetry.projects.csqa.log_setup import current_logging_config, setup_logging
+from cpom.altimetry.projects.csqa.log_setup import current_logging_config, init_worker
 from cpom.altimetry.projects.csqa.outputs import (
     cycle_dir,
     plots_dir,
@@ -666,7 +666,7 @@ def plot_pool(plot_workers: int) -> ProcessPoolExecutor:
         max_workers=plot_workers,
         # spawn: fresh processes (safe with matplotlib/netCDF threads on all platforms)
         mp_context=multiprocessing.get_context("spawn"),
-        initializer=setup_logging,
+        initializer=init_worker,
         initargs=current_logging_config(),
     )
 

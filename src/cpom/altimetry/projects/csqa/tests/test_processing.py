@@ -17,6 +17,11 @@ from cpom.altimetry.projects.csqa.tests.conftest import write_test_config
 
 GDR_A_DIR = "/raid6/cpdata/SATS/RA/CRY/L2/GDR-A"
 GDR_A_FILES = sorted(glob.glob(f"{GDR_A_DIR}/2026/08/CS_*_SIR_GDR_2__20260801T*_F001.nc"))
+L2I_DIR = "/raid6/cpdata/SATS/RA/CRY/L2I"
+L2I_FILES = {
+    mode: sorted(glob.glob(f"{L2I_DIR}/{mode}/2026/08/CS_*_SIR_*I2__20260801T01*_F001.nc"))[:3]
+    for mode in ("LRM", "SIN")
+}
 
 pytestmark = [
     pytest.mark.requires_external_data,
@@ -326,6 +331,77 @@ def test_mispointing(one_file_config):  # pylint: disable=redefined-outer-name
     assert glob_asc["n_valid"] == np.count_nonzero(ascending)
     assert glob_asc["n_valid"] + glob_desc["n_valid"] <= glob_all["n_valid"]
     assert glob_asc["median"] == pytest.approx(np.median(mis_mdeg[ascending]), abs=1e-3)
+
+
+@pytest.mark.skipif(not all(L2I_FILES.values()), reason="L2i test products not available")
+def test_l2i_parameters(tmp_path):
+    """L2i parameters: failed retracks, unused modes and 0 (not computed) values are excluded"""
+    l2i_dirs = []
+    for mode, files in L2I_FILES.items():
+        month_dir = tmp_path / "L2I" / mode / "2026" / "08"
+        month_dir.mkdir(parents=True)
+        for path in files:
+            os.symlink(path, month_dir / os.path.basename(path))
+        l2i_dirs.append(str(tmp_path / "L2I" / mode))
+    config_file = write_test_config(tmp_path, {"L2I": l2i_dirs, "GDR-A": [str(tmp_path / "none")]})
+    cfg = load_config(config_file)
+    params = ["l2i_retracker_correction", "l2i_sarin_ambiguity", "l2i_sarin_discriminator"]
+    status = process_cycles_main(
+        ["-c", "193", "-b", "F", "--config", config_file, "--no_plots", "-p", *params]
+    )
+    assert status == 0
+
+    # expected values, read directly from the products
+    data: dict[str, list] = {
+        k: [] for k in ("cor1", "cor2", "flags", "mode", "ambiguity", "maxpower", "maxbin")
+    }
+    names = {
+        "cor1": "retracker_1_cor_20_ku",
+        "cor2": "retracker_2_cor_20_ku",
+        "flags": "flag_retracker_20_ku",
+        "mode": "flag_instr_mode_op_20_ku",
+        "ambiguity": "flag_sarin_ambiguity_warning_20_ku",
+        "maxpower": "sarin_output_2_20_ku",
+        "maxbin": "sarin_output_4_20_ku",
+    }
+    for path in [p for files in L2I_FILES.values() for p in files]:
+        with Dataset(path) as nc:
+            for key, name in names.items():
+                data[key].append(np.ma.filled(nc[name][:].astype(float), np.nan))
+    d = {k: np.concatenate(v) for k, v in data.items()}
+    flags = d["flags"].astype(np.int64)
+    sarin = d["mode"] == 3
+
+    stats_dir = os.path.join(cfg.output_dir, "baseline_F", "cycles", "cycle_193", "stats")
+
+    def global_rows(param_id):
+        with open(os.path.join(stats_dir, f"{param_id}.json"), encoding="utf-8") as fh:
+            return {
+                (r["variant"], r["mode"]): r for r in json.load(fh)["rows"] if r["area"] == "global"
+            }
+
+    rtk = global_rows("l2i_retracker_correction")
+    assert rtk[("rtk1", "all")]["n_valid"] == np.count_nonzero(
+        np.isfinite(d["cor1"]) & ((flags & 4) == 0)
+    )
+    # retracker 2 is only used in LRM mode (0 in SARin)
+    lrm_ok = (d["mode"] == 1) & np.isfinite(d["cor2"]) & ((flags & 2) == 0)
+    assert rtk[("rtk2", "all")]["n_valid"] == np.count_nonzero(lrm_ok) > 0
+    assert rtk[("rtk2", "sarin")]["n_valid"] == 0
+
+    # SARin only flag
+    amb = global_rows("l2i_sarin_ambiguity")[("", "")]
+    assert amb["n_valid"] == np.count_nonzero(sarin)
+    expected = 100.0 * np.count_nonzero(sarin & (d["ambiguity"] == 1)) / np.count_nonzero(sarin)
+    assert amb["pct"]["warning"] == pytest.approx(expected, abs=1e-4)
+
+    # SARin discriminator: 0 values excluded, bins scaled from 1/1000 bin
+    disc = global_rows("l2i_sarin_discriminator")
+    valid = sarin & (d["maxpower"] != 0)
+    assert disc[("maxpower", "")]["n_valid"] == np.count_nonzero(valid)
+    maxbin = d["maxbin"][sarin & (d["maxbin"] != 0)] / 1000.0
+    assert disc[("maxpowerbin", "")]["median"] == pytest.approx(np.median(maxbin), abs=1e-3)
+    assert 0 < disc[("maxpowerbin", "")]["max"] <= 1024
 
 
 def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name

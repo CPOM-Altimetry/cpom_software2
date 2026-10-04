@@ -46,7 +46,7 @@ from datetime import datetime
 from cpom.altimetry.projects.csqa.build_portal_index import build_portal_index
 from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, load_config
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
-from cpom.altimetry.projects.csqa.log_setup import setup_logging
+from cpom.altimetry.projects.csqa.log_setup import init_worker, setup_logging
 from cpom.altimetry.projects.csqa.processing import (
     CycleResult,
     find_cycle_files,
@@ -353,7 +353,13 @@ def main(args: list[str] | None = None) -> int:
     if n_cycle_procs > 1:
         # spawn: fresh worker processes (safe with matplotlib/netCDF on all platforms)
         ctx = multiprocessing.get_context("spawn")
-        with ProcessPoolExecutor(max_workers=n_cycle_procs, mp_context=ctx) as pool:
+        with ProcessPoolExecutor(
+            max_workers=n_cycle_procs,
+            mp_context=ctx,
+            # workers log like this process, and end if it is killed
+            initializer=init_worker,
+            initargs=(log_level, parsed.log_file),
+        ) as pool:
             futures = {
                 pool.submit(run_task, cfg.config_file, cycle, baseline, *task_args): (
                     cycle,

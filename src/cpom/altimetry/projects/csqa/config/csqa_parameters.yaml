@@ -26,6 +26,9 @@
 #                 variant derived: a variant computed from several variables: the name of a
 #                 function in derived.py and its inputs: [variables] (ie mispointing_angle)
 #   value_scale : factor applied to the product values, ie 1000 for degrees -> millidegrees
+#   invalid_values : product values meaning missing, ie [0] where a variable is unused
+#                 variants may override valid_modes, invalid_values, value_scale and units, and
+#                 set plot: {log: true} for a logarithmic colour scale
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
 #   units       : units of float parameters
@@ -513,3 +516,321 @@ parameters:
         - {id: max, range: [-1.0, 10.0]}
         - {id: std, range: [0.0, 2.0]}
         - {id: count, range: [1.0, 500.0], log: true}
+
+  # ----------------------------------------------------------------------------------------------
+  # L2i parameters: the L2 in-depth products of each mode (LRM, SAR and SARin), giving lower
+  # level parameters of the L2 processing. L2i variables are generally 0 (not the fill value) in
+  # the modes where they are unused, which valid_modes / invalid_values exclude
+  # ----------------------------------------------------------------------------------------------
+
+  l2i_retracker_correction:
+    long_name: "Retracker Range Correction"
+    description: >-
+      Correction to the range computed by each L2 retracker (the offset of the retracking point
+      from the tracking point), used to compute the L2 heights. Measurements where the
+      retracker failed (flag_retracker_20_ku), which have default values (ie 46.374 m for LRM
+      retracker 1), are excluded. Retrackers 2 and 3 are only used in LRM mode.
+    source: L2I
+    type: float
+    units: m
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: retracker_1_cor_20_ku
+          mode_descriptions: *retracker_1_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 4, name: retracker_1_fail}
+        - id: rtk2
+          name: "Retracker 2"
+          variable: retracker_2_cor_20_ku
+          mode_descriptions: *retracker_2_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 2, name: retracker_2_fail}
+          valid_modes: [lrm]
+        - id: rtk3
+          name: "Retracker 3"
+          variable: retracker_3_cor_20_ku
+          mode_descriptions: *retracker_3_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 1, name: retracker_3_fail}
+          valid_modes: [lrm]
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: RdYlBu_r
+      # median ~-14 m in LRM, ~-18 m in SAR and ~-60 m in SARin (larger range window)
+      scales:
+        - {id: wide, name: "All modes", range: [-100.0, 100.0]}
+        - {id: lrmsar, name: "LRM / SAR", range: [-30.0, 10.0]}
+
+  l2i_retracker_flags:
+    long_name: "Retracker Flags"
+    description: >-
+      The 20 Hz retracker flag word: failures of each L2 retracker, and the waveform quality
+      checks of each mode. Statistics are the percentage of records with each bit set. The
+      retracker failure percentages per mode correspond to the Retracker Failure statistics of
+      the previous portal (LRM: CFI = retracker 1, LIRT = retracker 2, OCOG = retracker 3).
+    source: L2I
+    type: flag
+    variable: flag_retracker_20_ku
+    bits:
+      label: "Flag bit"
+      options:
+        - {mask: 4, name: retracker_1_fail, label: "Retracker 1 failure"}
+        - {mask: 2, name: retracker_2_fail, label: "Retracker 2 failure"}
+        - {mask: 1, name: retracker_3_fail, label: "Retracker 3 failure"}
+        - {mask: 131072, name: sea_ice_retracker_fail, label: "Sea ice retracker failure"}
+        - {mask: 8, name: poor_phase_fit, label: "Poor phase fit"}
+        - {mask: 16, name: poor_power_fit, label: "Poor power fit"}
+        - {mask: 32, name: fdm_ocog_fail, label: "FDM / OCOG failure"}
+        - {mask: 64, name: fit_failed, label: "Fit failed"}
+        - {mask: 128, name: sarin_low_coherence, label: "SARin low coherence"}
+        - {mask: 256, name: sarin_interp_fail, label: "SARin interpolation failure"}
+        - {mask: 512, name: abnormal_bb_param, label: "Abnormal beam behaviour parameter"}
+        - {mask: 1024, name: out_of_range, label: "Out of range"}
+        - {mask: 2048, name: bad_leading_edge, label: "Bad leading edge"}
+        - {mask: 4096, name: low_variance, label: "Low variance"}
+        - {mask: 8192, name: high_noise, label: "High noise"}
+        - {mask: 16384, name: high_peakiness, label: "High peakiness"}
+        - {mask: 32768, name: low_peakiness, label: "Low peakiness"}
+        - {mask: 65536, name: low_power, label: "Low power"}
+    default_variant: b2  # retracker 1 failure
+    modes: [all, lrm, sar, sarin]
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  l2i_surface_class:
+    long_name: "Discriminated Surface Type"
+    description: >-
+      Surface type discriminated by analysis of the waveform and auxiliary data (the
+      discrimination result), as bits of a flag word: the LRM and SARin classes, and the SAR sea
+      ice discriminator classes, which are also used over ocean in SARin mode. Statistics are the
+      percentage of records with each class bit set.
+    source: L2I
+    type: flag
+    variable: flag_surf_type_class_20_ku
+    bits:
+      label: "Surface class"
+      options:
+        - {mask: 2, name: lrm_ocean, label: "LRM ocean"}
+        - {mask: 4, name: lrm_land_ice, label: "LRM land ice"}
+        - {mask: 1, name: lrm_undefined, label: "LRM undefined"}
+        - {mask: 16, name: sarin_valid, label: "SARin valid"}
+        - {mask: 8, name: sarin_undefined, label: "SARin undefined"}
+        - {mask: 64, name: sar_ocean, label: "Sea ice discrimination: ocean"}
+        - {mask: 128, name: sar_sea_ice, label: "Sea ice discrimination: sea ice"}
+        - {mask: 256, name: sar_lead, label: "Sea ice discrimination: lead"}
+        - {mask: 32, name: sar_undefined, label: "Sea ice discrimination: undefined"}
+    default_variant: b7  # sea ice
+    modes: [all, lrm, sar, sarin]
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  l2i_sarin_discriminator:
+    long_name: "SARin Discriminator Parameters"
+    description: >-
+      Waveform parameters computed by the SARin surface type discriminator (sarin_output_1-10).
+      Only used in SARin mode. Zero values (not computed, ~2% of SARin records, and sea ice
+      peakiness outside sea ice areas) are excluded. Bin values are in waveform range bins.
+    source: L2I
+    type: float
+    valid_modes: [sarin]
+    invalid_values: [0]
+    variants:
+      label: "Parameter"
+      options:
+        - id: totalpower
+          name: "Total power"
+          variable: sarin_output_1_20_ku
+          plot: {range: [1000.0, 1.0e9], log: true}
+        - id: maxpower
+          name: "Maximum power"
+          variable: sarin_output_2_20_ku
+          plot: {range: [10.0, 1.0e9], log: true}
+        - id: meanpower
+          name: "Mean power"
+          variable: sarin_output_3_20_ku
+          plot: {range: [1.0, 1.0e7], log: true}
+        - id: maxpowerbin
+          name: "Bin of maximum power"
+          variable: sarin_output_4_20_ku
+          # stored in 1/1000 bin
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: halfpowerbin
+          name: "Bin of half maximum power"
+          variable: sarin_output_5_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: maxcoherence
+          name: "Maximum coherence"
+          variable: sarin_output_6_20_ku
+          value_scale: 0.001
+          plot: {range: [0.5, 1.0]}
+        - id: maxcoherencebin
+          name: "Bin of maximum coherence"
+          variable: sarin_output_7_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: firstpowerbin
+          name: "First power bin"
+          variable: sarin_output_8_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 200.0]}
+        - id: lastpowerbin
+          name: "Last power bin"
+          variable: sarin_output_9_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [300.0, 512.0]}
+        - id: seaicepeakiness
+          name: "Sea ice peakiness"
+          variable: sarin_output_10_20_ku
+          plot: {range: [0.0, 80.0]}
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+
+  l2i_sarin_ambiguity:
+    long_name: "SARin Ambiguity Warning"
+    description: >-
+      Flag indicating whether the SARin height may be affected by positional ambiguity due to
+      phase wrapping of the interferometric phase. Only used in SARin mode (0 in LRM and SAR
+      modes, which are excluded).
+    source: L2I
+    type: flag
+    variable: flag_sarin_ambiguity_warning_20_ku
+    valid_modes: [sarin]
+    flags:
+      - {value: 0, name: "No warning", color: "#009e73"}
+      - {value: 1, name: "Warning", color: "#d55e00"}
+      - {value: 2, name: "Not checked", color: "#b8bfc8"}
+      - {value: 3, name: "Unwrapped", color: "#0072b2"}
+    areas: [global, north_polar, south_polar]
+
+  l2i_stack:
+    long_name: "Stack Beam Behaviour"
+    description: >-
+      Parameters of the Gaussian fitted to the range integrated power of the single look echoes
+      of each SAR / SARin stack (the beam behaviour parameters), and the number of beams in the
+      stack. SAR and SARin stacks differ (ie ~245 beams in SAR mode, ~58 in SARin), so modes are
+      shown separately. Unused (0) in LRM mode. Angles are converted from radians to millidegrees.
+    source: L2I
+    type: float
+    valid_modes: [sar, sarin]
+    variants:
+      label: "Stack parameter"
+      options:
+        - id: std
+          name: "Standard deviation"
+          variable: stack_std_20_ku
+          units: beams
+          plot: {range: [0.0, 60.0]}
+        - id: centre
+          name: "Centre"
+          variable: stack_centre_20_ku
+          units: beam
+          plot: {range: [0.0, 120.0]}
+        - id: amplitude
+          name: "Scaled amplitude"
+          variable: stack_scaled_amplitude_20_ku
+          units: dB
+          plot: {range: [-175.0, -100.0]}
+        - id: skewness
+          name: "Skewness"
+          variable: stack_skewness_20_ku
+          plot: {range: [-1.0, 12.0]}
+        - id: kurtosis
+          name: "Kurtosis"
+          variable: stack_kurtosis_20_ku
+          plot: {range: [-2.0, 100.0]}
+        - id: peakiness
+          name: "Peakiness"
+          variable: stack_peakiness_20_ku
+          plot: {range: [0.5, 200.0], log: true}
+        - id: stdangle
+          name: "Standard deviation (angle)"
+          variable: stack_std_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [0.0, 600.0]}
+        - id: centreangle
+          name: "Centre (boresight angle)"
+          variable: stack_centre_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [-800.0, 800.0], cmap: coolwarm}
+        - id: lookangle
+          name: "Centre (look angle)"
+          variable: stack_centre_look_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [-250.0, 250.0], cmap: coolwarm}
+        - id: residuals
+          name: "Fit residuals"
+          variable: stack_gaussian_fitting_residuals_20_ku
+          units: dBW
+          plot: {range: [-95.0, -50.0]}
+        - id: nbefore
+          name: "Beams before weighting"
+          variable: stack_number_before_weighting_20_ku
+          units: beams
+          plot: {range: [0.0, 260.0]}
+        - id: nafter
+          name: "Beams after weighting"
+          variable: stack_number_after_weighting_20_ku
+          units: beams
+          plot: {range: [0.0, 200.0]}
+    modes: [sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+
+  l2i_doppler_correction:
+    long_name: "Doppler Range Correction"
+    description: >-
+      The Doppler range correction for the satellite altitude rate (dop_cor_20_ku, applied to the
+      window delay in the L1 processing), and the slope Doppler correction that replaces it in
+      LRM mode to account for sloping terrain (slope_dop_cor_20_ku; 0 where not applied, ie over
+      ocean, which is excluded).
+    source: L2I
+    type: float
+    units: m
+    variants:
+      label: "Correction"
+      options:
+        - id: doppler
+          name: "Doppler"
+          variable: dop_cor_20_ku
+        - id: slope
+          name: "Slope Doppler (LRM)"
+          variable: slope_dop_cor_20_ku
+          valid_modes: [lrm]
+          invalid_values: [0]
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [-0.06, 0.06]
+      cmap: coolwarm
+
+  l2i_slope_attitude:
+    long_name: "LRM Slope Correction Attitude"
+    description: >-
+      The echo attitude in LRM mode: the angle between the nadir vector and the echo point
+      vector, from the slope correction of the LRM heights over ice sheets. 0 where no slope
+      correction is applied (ie over ocean), which is excluded. Note: the product gives the units
+      as radians, but the values (median ~0.1 over the flat Antarctic interior, where surface
+      slopes are ~0.1 degrees) are consistent with degrees.
+    source: L2I
+    type: float
+    units: rad
+    variable: offset_attitude_20_ku
+    valid_modes: [lrm]
+    invalid_values: [0]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 0.5]
+      cmap: viridis

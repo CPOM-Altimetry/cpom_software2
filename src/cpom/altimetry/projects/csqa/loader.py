@@ -11,11 +11,15 @@ boundary may be assigned to the adjacent cycle.
 Locations are taken from the variable's 'coordinates' attribute (ie "lon_poca_20_ku
 lat_poca_20_ku"), or the configured default coordinates when that is missing or unusable.
 
+Product files are read with ncreader.NcDataset (h5py), which opens files ~10x faster than
+netCDF4 while masking and scaling values in the same way.
+
 For bit flag parameters the flag word is read once and each bit's values (1 set, 0 not set)
 are derived from it on demand (ParameterData.variant_values).
 
-Derived variants (ie the mispointing angle) are computed from their input variables, and the
-values of parameters with a value_scale are scaled (ie degrees to millidegrees).
+Derived variants (ie the mispointing angle) are computed from their input variables. Values
+equal to a variant's invalid_values (ie 0 where a variable is unused) are set to NaN, and
+values of variants with a value_scale are then scaled (ie degrees to millidegrees).
 
 Variants with a reject bit (ie freeboard_error of flag_prod_status_20_ku) have their values set
 to NaN where the bit is set, so only unflagged values are counted, mapped and gridded. Likewise
@@ -28,7 +32,7 @@ from datetime import datetime
 from typing import cast
 
 import numpy as np
-from netCDF4 import Dataset, date2num, num2date  # pylint: disable=no-name-in-module
+from netCDF4 import date2num, num2date  # pylint: disable=no-name-in-module
 
 from cpom.altimetry.projects.csqa.csqa_config import (
     CsqaConfig,
@@ -36,6 +40,7 @@ from cpom.altimetry.projects.csqa.csqa_config import (
     VariantDef,
 )
 from cpom.altimetry.projects.csqa.derived import DERIVED_VARIABLES
+from cpom.altimetry.projects.csqa.ncreader import NcDataset
 from cpom.altimetry.projects.csqa.product_files import ProductFile
 
 log = logging.getLogger(__name__)
@@ -103,11 +108,11 @@ def pass_directions(lats: np.ndarray) -> np.ndarray:
     return directions
 
 
-def resolve_coordinates(nc: Dataset, var_name: str, cfg: CsqaConfig) -> tuple[str, str]:
+def resolve_coordinates(nc: NcDataset, var_name: str, cfg: CsqaConfig) -> tuple[str, str]:
     """Find the latitude and longitude variables used as a variable's coordinates
 
     Args:
-        nc (Dataset): open netCDF dataset
+        nc (NcDataset): open netCDF dataset
         var_name (str): variable name
         cfg (CsqaConfig): CSQA config (for the default coordinates)
 
@@ -130,7 +135,7 @@ def resolve_coordinates(nc: Dataset, var_name: str, cfg: CsqaConfig) -> tuple[st
     return lat_name, lon_name
 
 
-def _read(nc: Dataset, name: str, sel: np.ndarray, dtype, fill) -> np.ndarray:
+def _read(nc: NcDataset, name: str, sel: np.ndarray, dtype, fill) -> np.ndarray:
     """read the selected records of a variable, replacing missing/fill values with fill"""
     data = np.ma.asarray(nc.variables[name][:])[sel]
     return np.ma.filled(data.astype(dtype), fill)
@@ -164,7 +169,7 @@ def bit_values(words: np.ndarray, mask: int) -> np.ndarray:
     return vals
 
 
-def check_bit_meanings(nc: Dataset, param: ParameterConfig, file_name: str):
+def check_bit_meanings(nc: NcDataset, param: ParameterConfig, file_name: str):
     """warn when a configured bit's name differs from the flag_meanings of the product"""
     var = nc.variables.get(param.variants[0].variable)
     if var is None or not hasattr(var, "flag_masks") or not hasattr(var, "flag_meanings"):
@@ -184,7 +189,7 @@ def check_bit_meanings(nc: Dataset, param: ParameterConfig, file_name: str):
 
 
 def _read_variant(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    nc: Dataset,
+    nc: NcDataset,
     variant: VariantDef,
     sel: np.ndarray,
     time_name: str,
@@ -194,7 +199,7 @@ def _read_variant(  # pylint: disable=too-many-arguments,too-many-positional-arg
     """Read (or derive from its input variables) the selected records of a variant's values
 
     Args:
-        nc (Dataset): open product file
+        nc (NcDataset): open product file
         variant (VariantDef): variant (not a flag word bit)
         sel (np.ndarray): selected records of the file
         time_name (str): time dimension of the parameter
@@ -221,7 +226,7 @@ def _read_variant(  # pylint: disable=too-many-arguments,too-many-positional-arg
 
 
 def _reject(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    nc: Dataset,
+    nc: NcDataset,
     variant: VariantDef,
     vals: np.ndarray,
     sel: np.ndarray,
@@ -234,7 +239,7 @@ def _reject(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     word variable is missing)
 
     Args:
-        nc (Dataset): open product file
+        nc (NcDataset): open product file
         variant (VariantDef): variant with a reject bit
         vals (np.ndarray): the variant's values of the selected records, updated in place
         sel (np.ndarray): selected records of the file
@@ -305,7 +310,7 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     lons: dict[tuple[str, str], list[np.ndarray]] = {}
     modes: list[np.ndarray] = []
     # acquisition modes are needed for mode (and mode surface) selections and valid modes
-    need_modes = bool(param.valid_modes) or any(
+    need_modes = any(v.valid_modes for v in param.variants) or any(
         m in cfg.mode_values or m in cfg.mode_surfaces for m in param.modes
     )
     surfaces: list[np.ndarray] = []
@@ -320,7 +325,7 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
         if not unresolved:
             break
         try:
-            with Dataset(pfile.path) as nc:
+            with NcDataset(pfile.path) as nc:
                 for variant in unresolved:
                     if variant.variable in nc.variables:
                         data.coord_names[variant.id] = resolve_coordinates(
@@ -337,7 +342,7 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
 
     for pfile in files:
         try:
-            with Dataset(pfile.path) as nc:
+            with NcDataset(pfile.path) as nc:
                 # the time coordinate is the dimension of the first available variant
                 ref_var = next(
                     (nc.variables[v] for v in param.variables if v in nc.variables), None
@@ -390,8 +395,10 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                     if vals is None:
                         values[variant.id].append(np.full(n_sel, np.nan, dtype=dtype))
                         continue
-                    if param.value_scale != 1.0:
-                        vals *= param.value_scale
+                    if variant.invalid_values:
+                        vals[np.isin(vals, variant.invalid_values)] = np.nan
+                    if variant.value_scale not in (None, 1.0):
+                        vals *= variant.value_scale
                     if variant.reject_mask is not None:
                         _reject(nc, variant, vals, sel, time_name, reject_words, data, pfile.name)
                     values[variant.id].append(vals)
@@ -461,11 +468,11 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
         data.modes = np.concatenate(modes) if modes else np.array([], dtype=np.int8)
     if need_surfaces:
         data.surfaces = np.concatenate(surfaces) if surfaces else np.array([], dtype=np.int8)
-    if param.valid_modes and data.modes is not None:
-        # values of other acquisition modes are rejected (ie 0 rather than fill in LRM mode)
-        other_mode = ~np.isin(data.modes, [cfg.mode_values[m] for m in param.valid_modes])
-        for vals in data.values.values():
-            vals[other_mode] = np.nan
+    for variant in param.variants:
+        if variant.valid_modes and data.modes is not None and variant.id in data.values:
+            # values of other acquisition modes are rejected (ie 0 rather than fill where unused)
+            other_mode = ~np.isin(data.modes, [cfg.mode_values[m] for m in variant.valid_modes])
+            data.values[variant.id][other_mode] = np.nan
 
     for var_name, n_missing in data.missing_variables.items():
         log.warning("%s missing in %d of %d files", var_name, n_missing, len(files))
