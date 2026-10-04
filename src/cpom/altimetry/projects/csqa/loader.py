@@ -14,6 +14,9 @@ lat_poca_20_ku"), or the configured default coordinates when that is missing or 
 For bit flag parameters the flag word is read once and each bit's values (1 set, 0 not set)
 are derived from it on demand (ParameterData.variant_values).
 
+Derived variants (ie the mispointing angle) are computed from their input variables, and the
+values of parameters with a value_scale are scaled (ie degrees to millidegrees).
+
 Variants with a reject bit (ie freeboard_error of flag_prod_status_20_ku) have their values set
 to NaN where the bit is set, so only unflagged values are counted, mapped and gridded. Likewise
 the values of parameters with valid_modes are set to NaN in the other acquisition modes.
@@ -32,6 +35,7 @@ from cpom.altimetry.projects.csqa.csqa_config import (
     ParameterConfig,
     VariantDef,
 )
+from cpom.altimetry.projects.csqa.derived import DERIVED_VARIABLES
 from cpom.altimetry.projects.csqa.product_files import ProductFile
 
 log = logging.getLogger(__name__)
@@ -52,6 +56,8 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     modes: np.ndarray | None = None  # acquisition mode flag per record (MODE_FILL if unknown)
     # surface type mask per record (MODE_FILL if unknown), for mode surface selections
     surfaces: np.ndarray | None = None
+    # pass direction per record of each coordinate pair: 1 ascending, -1 descending, 0 unknown
+    directions: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
     files_used: list[str] = field(default_factory=list)  # files containing cycle records
     bad_files: list[str] = field(default_factory=list)  # files that could not be read
     missing_variables: dict[str, int] = field(default_factory=dict)  # var -> n files missing
@@ -71,6 +77,30 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     def lon(self, variant: str) -> np.ndarray:
         """longitudes of a variant's values"""
         return self.lons[self.coord_names[variant]]
+
+    def direction(self, variant: str) -> np.ndarray:
+        """pass directions of a variant's values (1 ascending, -1 descending, 0 unknown)"""
+        return self.directions[self.coord_names[variant]]
+
+
+def pass_directions(lats: np.ndarray) -> np.ndarray:
+    """Pass direction of time ordered records of a product file, from the rate of change of
+    their latitude: 1 ascending (latitude increasing), -1 descending, 0 unknown (ie a single
+    record, or a missing latitude; missing latitudes are skipped when taking the rate). Meant
+    for nadir latitudes (ie lat_01): POCA latitudes of sloping surfaces can jump between
+    neighbouring records
+
+    Args:
+        lats (np.ndarray): latitudes of consecutive records (in time order)
+
+    Returns:
+        np.ndarray: int8 direction of each record
+    """
+    directions = np.zeros(lats.size, dtype=np.int8)
+    finite = np.flatnonzero(np.isfinite(lats))
+    if finite.size >= 2:
+        directions[finite] = np.sign(np.gradient(lats[finite].astype(np.float64)))
+    return directions
 
 
 def resolve_coordinates(nc: Dataset, var_name: str, cfg: CsqaConfig) -> tuple[str, str]:
@@ -151,6 +181,43 @@ def check_bit_meanings(nc: Dataset, param: ParameterConfig, file_name: str):
                 file_name,
                 variant.bit_name,
             )
+
+
+def _read_variant(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    nc: Dataset,
+    variant: VariantDef,
+    sel: np.ndarray,
+    time_name: str,
+    dtype,
+    data: "ParameterData",
+) -> np.ndarray | None:
+    """Read (or derive from its input variables) the selected records of a variant's values
+
+    Args:
+        nc (Dataset): open product file
+        variant (VariantDef): variant (not a flag word bit)
+        sel (np.ndarray): selected records of the file
+        time_name (str): time dimension of the parameter
+        dtype: numpy dtype of the values
+        data (ParameterData): loaded data (for the missing variable counts)
+
+    Returns:
+        np.ndarray|None: values (NaN where missing or fill), or None if a variable is missing
+    """
+    names = variant.inputs if variant.derived else (variant.variable,)
+    missing = [
+        name
+        for name in names
+        if name not in nc.variables or nc.variables[name].dimensions[0] != time_name
+    ]
+    for name in missing:
+        data.missing_variables[name] = data.missing_variables.get(name, 0) + 1
+    if missing:
+        return None
+    if not variant.derived:
+        return _read(nc, variant.variable, sel, dtype, np.nan)
+    inputs = [_read(nc, name, sel, np.float64, np.nan) for name in names]
+    return DERIVED_VARIABLES[variant.derived][1](*inputs).astype(dtype)
 
 
 def _reject(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -237,9 +304,15 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     lats: dict[tuple[str, str], list[np.ndarray]] = {}
     lons: dict[tuple[str, str], list[np.ndarray]] = {}
     modes: list[np.ndarray] = []
-    need_modes = bool(param.modes or param.valid_modes)
+    # acquisition modes are needed for mode (and mode surface) selections and valid modes
+    need_modes = bool(param.valid_modes) or any(
+        m in cfg.mode_values or m in cfg.mode_surfaces for m in param.modes
+    )
     surfaces: list[np.ndarray] = []
     need_surfaces = any(m in cfg.mode_surfaces for m in param.modes)
+    # pass directions of each coordinate pair (for ascending/descending pass selections)
+    directions: dict[tuple[str, str], list[np.ndarray]] = {}
+    need_directions = any(m in cfg.pass_selections for m in param.modes)
 
     # coordinates of each variant, from the first file containing the variant's variable
     for pfile in files:
@@ -313,14 +386,12 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                 for variant in param.variants:
                     if variant.bit_mask is not None:
                         continue
-                    var = nc.variables.get(variant.variable)
-                    if var is None or var.dimensions[0] != time_name:
-                        data.missing_variables[variant.variable] = (
-                            data.missing_variables.get(variant.variable, 0) + 1
-                        )
+                    vals = _read_variant(nc, variant, sel, time_name, dtype, data)
+                    if vals is None:
                         values[variant.id].append(np.full(n_sel, np.nan, dtype=dtype))
                         continue
-                    vals = _read(nc, variant.variable, sel, dtype, np.nan)
+                    if param.value_scale != 1.0:
+                        vals *= param.value_scale
                     if variant.reject_mask is not None:
                         _reject(nc, variant, vals, sel, time_name, reject_words, data, pfile.name)
                     values[variant.id].append(vals)
@@ -340,6 +411,8 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
                         lat_name, lon_name = cfg.default_lat, cfg.default_lon
                     lats.setdefault(key, []).append(_read(nc, lat_name, sel, np.float32, np.nan))
                     lons.setdefault(key, []).append(_read(nc, lon_name, sel, np.float32, np.nan))
+                    if need_directions:
+                        directions.setdefault(key, []).append(pass_directions(lats[key][-1]))
 
                 # acquisition modes
                 if need_modes:
@@ -380,6 +453,10 @@ def load_parameter_data(  # pylint: disable=too-many-locals,too-many-branches,to
     for key in coord_keys:
         data.lats[key] = np.concatenate(lats[key]) if lats.get(key) else np.array([], np.float32)
         data.lons[key] = np.concatenate(lons[key]) if lons.get(key) else np.array([], np.float32)
+        if need_directions:
+            data.directions[key] = (
+                np.concatenate(directions[key]) if directions.get(key) else np.array([], np.int8)
+            )
     if need_modes:
         data.modes = np.concatenate(modes) if modes else np.array([], dtype=np.int8)
     if need_surfaces:

@@ -288,6 +288,46 @@ def test_sea_ice_thickness(one_file_config):  # pylint: disable=redefined-outer-
     assert len(thk_stats["grid_rows"]) == 2 * 5
 
 
+def test_mispointing(one_file_config):  # pylint: disable=redefined-outer-name
+    """mispointing angle (derived from the roll and pitch angles) and attitude angles in
+    millidegrees, for all, ascending and descending passes"""
+    cfg = load_config(one_file_config)
+    args = ["-c", "193", "-b", "F", "--config", one_file_config, "-p", "mispointing"]
+    assert process_cycles_main(args + ["--no_plots"]) == 0
+    with open(
+        os.path.join(
+            cfg.output_dir, "baseline_F", "cycles", "cycle_193", "stats", "mispointing.json"
+        ),
+        encoding="utf-8",
+    ) as fh:
+        mis_stats = json.load(fh)
+    # the 20 Hz acquisition mode variable is not needed (pass selections only)
+    assert not mis_stats["missing_variables"] and not mis_stats["bad_files"]
+    rows = {(r["area"], r["variant"], r["mode"]): r for r in mis_stats["rows"]}
+    assert len(rows) == 3 * 4 * 3
+
+    with Dataset(GDR_A_FILES[0]) as nc:
+        roll = np.ma.filled(nc["off_nadir_roll_angle_str_01"][:].astype(float), np.nan)
+        pitch = np.ma.filled(nc["off_nadir_pitch_angle_str_01"][:].astype(float), np.nan)
+        lat = np.ma.filled(nc["lat_01"][:].astype(float), np.nan)
+    mis_mdeg = 1000.0 * np.degrees(np.arccos(np.cos(np.radians(roll)) * np.cos(np.radians(pitch))))
+    glob_all = rows[("global", "mispointing", "all")]
+    assert glob_all["n_valid"] == roll.size
+    assert glob_all["median"] == pytest.approx(np.median(mis_mdeg), abs=1e-3)
+    assert 20.0 < glob_all["min"] and glob_all["max"] < 300.0
+    assert rows[("global", "roll", "all")]["mean"] == pytest.approx(
+        1000.0 * np.mean(roll), rel=1e-5
+    )
+
+    # ascending passes: latitude increasing (latitudes are held as float32)
+    ascending = np.gradient(lat.astype(np.float32).astype(np.float64)) > 0
+    glob_asc = rows[("global", "mispointing", "asc")]
+    glob_desc = rows[("global", "mispointing", "desc")]
+    assert glob_asc["n_valid"] == np.count_nonzero(ascending)
+    assert glob_asc["n_valid"] + glob_desc["n_valid"] <= glob_all["n_valid"]
+    assert glob_asc["median"] == pytest.approx(np.median(mis_mdeg[ascending]), abs=1e-3)
+
+
 def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name
     """cycles without input files produce no outputs"""
     cfg = load_config(one_file_config)

@@ -17,6 +17,7 @@ from datetime import datetime
 import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
+from cpom.altimetry.projects.csqa.derived import DERIVED_VARIABLES
 from cpom.altimetry.projects.csqa.gridding import GRID_STATISTICS
 
 DEFAULT_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config", "csqa_config.yaml")
@@ -59,6 +60,16 @@ class ModeSurface:
 
 
 @dataclass(frozen=True)
+class PassSelection:
+    """A selection of the ascending or descending passes (records with increasing or decreasing
+    latitude), used like a mode in a parameter's modes"""
+
+    id: str  # ie 'asc'
+    ascending: bool
+    label: str  # ie 'Ascending passes'
+
+
+@dataclass(frozen=True)
 class FlagDef:
     """A flag value of a flag parameter"""
 
@@ -92,6 +103,16 @@ class VariantDef:  # pylint: disable=too-many-instance-attributes
     reject_variable: str = ""
     reject_mask: int | None = None
     reject_name: str = ""
+    # a variant derived from several variables (ie the mispointing angle from the roll and
+    # pitch angles): the name of a derived.DERIVED_VARIABLES function and its input variables.
+    # The variant's variable is then its first input (giving its dimension and coordinates)
+    derived: str = ""
+    inputs: tuple[str, ...] = ()
+
+    @property
+    def display_variable(self) -> str:
+        """the variable, or the derived variable's name"""
+        return self.derived if self.derived else self.variable
 
 
 @dataclass(frozen=True)
@@ -170,6 +191,8 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     # first product baseline containing the parameter (ie 'F'): earlier baselines are not
     # processed for it. Empty: every baseline
     first_baseline: str = ""
+    # factor applied to the product values, ie 1000 for degrees -> millidegrees
+    value_scale: float = 1.0
 
     def in_baseline(self, baseline: str) -> bool:
         """True if the parameter is processed for a product baseline"""
@@ -192,7 +215,7 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
 
     @property
     def variables(self) -> list[str]:
-        """netCDF variables read for this parameter"""
+        """netCDF variables of the parameter's variants (the first input of derived variants)"""
         return [v.variable for v in self.variants]
 
 
@@ -222,6 +245,22 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     surface_variable: str = ""  # surface type mask variable (for mode surface selections)
     surface_values: dict[str, int] = field(default_factory=dict)
     mode_surfaces: dict[str, ModeSurface] = field(default_factory=dict)
+    pass_selections: dict[str, PassSelection] = field(default_factory=dict)
+
+    def mode_text(self, param: ParameterConfig, mode: str) -> str:
+        """a parameter's mode selection as text, ie 'All modes', 'SAR mode', 'LRM Ice',
+        'Ascending passes', or 'All passes' for a parameter selecting passes ('' if none)"""
+        if mode == "":
+            return ""
+        if mode == "all":
+            others = [m for m in param.modes if m != "all"]
+            if others and all(m in self.pass_selections for m in others):
+                return "All passes"
+            return self.mode_labels["all"]
+        label = self.mode_labels.get(mode, mode)
+        if mode in self.mode_surfaces or mode in self.pass_selections:
+            return label
+        return f"{label} mode"
 
     def calendar(self) -> CycleCalendar:
         """the cycle calendar of this configuration"""
@@ -273,6 +312,28 @@ def _reject_bit(variant_cfg: dict, context: str) -> dict:
         "reject_mask": mask,
         "reject_name": str(reject.get("name", "")),
     }
+
+
+def _derived(variant_cfg: dict, context: str) -> dict:
+    """VariantDef fields of a derived variant (derived and inputs), if configured"""
+    derived = variant_cfg.get("derived")
+    if not derived:
+        return {}
+    if derived not in DERIVED_VARIABLES:
+        raise ValueError(f"{context}: unknown derived variable {derived}")
+    inputs = tuple(str(x) for x in _require(variant_cfg, "inputs", context))
+    if len(inputs) != DERIVED_VARIABLES[derived][0]:
+        raise ValueError(
+            f"{context}: {derived} needs {DERIVED_VARIABLES[derived][0]} input variables"
+        )
+    return {"derived": str(derived), "inputs": inputs}
+
+
+def _variant_variable(variant_cfg: dict, context: str) -> str:
+    """a variant's variable: its first input if it is derived"""
+    if variant_cfg.get("derived"):
+        return str((_require(variant_cfg, "inputs", context) or [""])[0])
+    return str(_require(variant_cfg, "variable", context))
 
 
 def _parse_grid(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -397,7 +458,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
             VariantDef(
                 id=str(_require(v, "id", context)),
                 name=str(v.get("name", v["id"])),
-                variable=str(_require(v, "variable", context)),
+                variable=_variant_variable(v, context),
                 mode_descriptions={
                     str(mode): (None if desc is None else str(desc))
                     for mode, desc in (v.get("mode_descriptions") or {}).items()
@@ -405,6 +466,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
                 plot_range=_variant_plot_range(v),
                 cmap=(v.get("plot") or {}).get("cmap"),
                 **_reject_bit(v, context),
+                **_derived(v, context),
             )
             for v in _require(vcfg, "options", context)
         ]
@@ -499,6 +561,9 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
     first_baseline = str(pcfg.get("first_baseline", "")).upper()
     if first_baseline and not re.fullmatch(r"[A-Z]", first_baseline):
         raise ValueError(f"{context}: first_baseline must be a baseline letter")
+    value_scale = float(pcfg.get("value_scale", 1.0))
+    if value_scale == 0:
+        raise ValueError(f"{context}: value_scale must not be 0")
     units = str(pcfg.get("units", ""))
     grid = _parse_grid(pcfg, context, cfg_areas, modes, units, colour_scales[0])
     if grid is not None and (ptype != "float" or variants[0].bit_mask is not None):
@@ -528,6 +593,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
         grid=grid,
         valid_modes=valid_modes,
         first_baseline=first_baseline,
+        value_scale=value_scale,
     )
 
 
@@ -604,7 +670,28 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         )
     if mode_surfaces and not surfaces_cfg.get("variable"):
         raise ValueError("mode_surfaces need surface_types:variable")
-    all_labels = {**mode_labels, **{m.id: m.label for m in mode_surfaces.values()}}
+
+    # selections of the ascending or descending passes
+    pass_selections = {}
+    for sel_id, sel in (cfg.get("pass_selections") or {}).items():
+        sel_context = f"pass_selections {sel_id}"
+        direction = str(_require(sel, "direction", sel_context))
+        if direction not in ("ascending", "descending"):
+            raise ValueError(f"{sel_context}: direction must be ascending or descending")
+        if (
+            not re.fullmatch(r"[a-z0-9_]+", str(sel_id))
+            or sel_id in mode_labels
+            or sel_id in mode_surfaces
+        ):
+            raise ValueError(f"{sel_context}: id must be [a-z0-9_] and not a mode id")
+        pass_selections[str(sel_id)] = PassSelection(
+            str(sel_id), direction == "ascending", str(sel.get("label", sel_id))
+        )
+    all_labels = {
+        **mode_labels,
+        **{m.id: m.label for m in mode_surfaces.values()},
+        **{p.id: p.label for p in pass_selections.values()},
+    }
 
     params_file = _expand_path(_require(cfg, "parameters_file", context))
     if not os.path.isabs(params_file):
@@ -646,4 +733,5 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         surface_variable=str(surfaces_cfg.get("variable", "")),
         surface_values=surface_values,
         mode_surfaces=mode_surfaces,
+        pass_selections=pass_selections,
     )

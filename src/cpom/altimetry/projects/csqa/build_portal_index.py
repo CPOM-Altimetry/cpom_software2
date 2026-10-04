@@ -70,7 +70,9 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
             {
                 "id": v.id,
                 "name": v.name,
-                "variable": v.variable,
+                "variable": v.display_variable,
+                # input variables of a derived variant (ie the mispointing angle)
+                "inputs": list(v.inputs),
                 "mode_descriptions": v.mode_descriptions,
                 "bit_mask": v.bit_mask,
                 "bit_name": v.bit_name,
@@ -106,9 +108,27 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
         ],
         "grid": grid_manifest(param),
         "valid_modes": param.valid_modes,
+        "value_scale": param.value_scale,
         "first_baseline": param.first_baseline,
         "image_format": cfg.image_format,
     }
+
+
+def mode_manifest(cfg: CsqaConfig, mode: str, label: str) -> dict:
+    """portal description of a mode selection: its kind (mode, mode_surface or pass), and the
+    mode and surface types of mode surface selections"""
+    if mode in cfg.mode_surfaces:
+        sel = cfg.mode_surfaces[mode]
+        return {
+            "id": mode,
+            "label": label,
+            "kind": "mode_surface",
+            "mode": sel.mode,
+            "surfaces": list(sel.surfaces),
+        }
+    if mode in cfg.pass_selections:
+        return {"id": mode, "label": label, "kind": "pass"}
+    return {"id": mode, "label": label, "kind": "mode"}
 
 
 def grid_manifest(param: ParameterConfig) -> dict | None:
@@ -269,21 +289,7 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
         "image_format": cfg.image_format,
         "areas": [{"id": a.id, "long_name": a.long_name} for a in cfg.areas.values()],
         # modes, 'all' and the mode surface selections (with their mode and surface types)
-        "modes": [
-            {
-                "id": k,
-                "label": v,
-                **(
-                    {
-                        "mode": cfg.mode_surfaces[k].mode,
-                        "surfaces": list(cfg.mode_surfaces[k].surfaces),
-                    }
-                    if k in cfg.mode_surfaces
-                    else {}
-                ),
-            }
-            for k, v in cfg.mode_labels.items()
-        ],
+        "modes": [mode_manifest(cfg, k, v) for k, v in cfg.mode_labels.items()],
         "products": {p.id: p.long_name for p in cfg.products.values()},
         "parameters": [parameter_manifest(p, cfg) for p in cfg.parameters.values()],
         # newest baseline first

@@ -106,9 +106,8 @@ def plot_title(param: ParameterConfig, variant: VariantDef, mode: str, cfg: Csqa
     if param.has_variants:
         title += f": {variant.name}"
     if mode:
-        label = cfg.mode_labels.get(mode, mode)
-        # ie ', All modes', ', SAR mode', ', LRM Ice'
-        title += f", {label}" if mode == "all" or mode in cfg.mode_surfaces else f", {label} mode"
+        # ie ', All modes', ', SAR mode', ', LRM Ice', ', Ascending passes'
+        title += f", {cfg.mode_text(param, mode)}"
     return title
 
 
@@ -215,7 +214,7 @@ def prepare_plot_job(  # pylint: disable=too-many-arguments,too-many-positional-
         )
 
     data_set: dict = {
-        "name": variant.variable,
+        "name": variant.display_variable,
         # compact copies, so a job does not keep the full resolution arrays alive
         "lats": np.ascontiguousarray(lats[points]),
         "lons": np.ascontiguousarray(lons[points]),
@@ -309,7 +308,8 @@ def prepare_grid_plot_job(  # pylint: disable=too-many-arguments,too-many-positi
     lats, lons = cell_centres_latlon(gridded)
     vals = gridded.values[stat.id].astype(np.float32)
     data_set: dict = {
-        "name": f"{variant.variable} cell {stat.id}",  # ie radar_freeboard_20_ku cell median
+        # ie radar_freeboard_20_ku cell median
+        "name": f"{variant.display_variable} cell {stat.id}",
         "lats": lats.astype(np.float32),
         "lons": lons.astype(np.float32),
         "vals": vals,

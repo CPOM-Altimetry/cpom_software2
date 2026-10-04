@@ -109,6 +109,12 @@ mode_surfaces:
   sarin_land: {mode: sarin, surfaces: [land], label: "SARin Land"}
   sar_ocean: {mode: sar, surfaces: [ocean], label: "SAR Ocean"}
 
+# Selections of the ascending or descending passes, used like modes in a parameter's modes. The
+# pass direction of each record is from the rate of change of its (nadir) latitude
+pass_selections:
+  asc: {direction: ascending, label: "Ascending passes"}
+  desc: {direction: descending, label: "Descending passes"}
+
 plots:
   image_format: webp
   dpi: 85

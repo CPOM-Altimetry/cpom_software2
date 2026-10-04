@@ -20,8 +20,12 @@
 #                     mode_descriptions: *retracker_1_modes
 #                     plot (optional): {range, cmap} of the variant's maps, overriding the
 #                     parameter's (for variants with very different value ranges)
-#   modes       : acquisition mode selections (all, lrm, sar, sarin), and mode surface selections
-#                 (ie lrm_ice, csqa_config.yaml:mode_surfaces). Omit for no mode selection
+#   modes       : acquisition mode selections (all, lrm, sar, sarin), mode surface selections
+#                 (ie lrm_ice, csqa_config.yaml:mode_surfaces) and pass selections (asc, desc,
+#                 csqa_config.yaml:pass_selections). Omit for no mode selection
+#                 variant derived: a variant computed from several variables: the name of a
+#                 function in derived.py and its inputs: [variables] (ie mispointing_angle)
+#   value_scale : factor applied to the product values, ie 1000 for degrees -> millidegrees
 #   areas       : area ids from csqa_config.yaml:areas
 #   flags       : list of {value, name, color} for flag parameters
 #   units       : units of float parameters
@@ -301,6 +305,46 @@ parameters:
           name: "Geocentric pole tide"
           variable: pole_tide_01
           plot: {range: [-0.015, 0.015], cmap: coolwarm}
+    areas: [global, north_polar, south_polar]
+
+  mispointing:
+    long_name: "Mispointing Angle"
+    description: >-
+      Antenna mispointing angle at 1 Hz: the angle between the antenna boresight and the nadir
+      direction, which should nominally be zero. It is derived from the antenna bench roll and
+      pitch angles, measured by the star trackers and post-processed by the ground facility, as
+      sin^2(mispointing) = sin^2(roll) + cos^2(roll) sin^2(pitch) (yaw does not change the
+      boresight direction). The roll, pitch and yaw angles are also shown. Ascending and
+      descending passes (from the rate of change of latitude) are also shown separately, as the
+      attitude differs between them.
+    source: GDR-A
+    type: float
+    units: mdeg
+    # product angles are in degrees
+    value_scale: 1000
+    variants:
+      label: "Angle"
+      # unsigned mispointing ~60-220 mdeg; roll ~-200 to -10, pitch ~-120 to -25 and yaw
+      # ~-120 to 125 mdeg in Baseline-E/F
+      options:
+        - id: mispointing
+          name: "Mispointing"
+          derived: mispointing_angle
+          inputs: [off_nadir_roll_angle_str_01, off_nadir_pitch_angle_str_01]
+          plot: {range: [50.0, 220.0], cmap: viridis}
+        - id: roll
+          name: "Roll"
+          variable: off_nadir_roll_angle_str_01
+          plot: {range: [-200.0, 0.0], cmap: viridis}
+        - id: pitch
+          name: "Pitch"
+          variable: off_nadir_pitch_angle_str_01
+          plot: {range: [-125.0, 0.0], cmap: viridis}
+        - id: yaw
+          name: "Yaw"
+          variable: off_nadir_yaw_angle_str_01
+          plot: {range: [-125.0, 125.0], cmap: coolwarm}
+    modes: [all, asc, desc]
     areas: [global, north_polar, south_polar]
 
   peakiness:

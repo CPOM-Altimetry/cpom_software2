@@ -444,7 +444,11 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
             lats = data.lat(variant.id)
             sel = (lats >= area.lat_min) & (lats <= area.lat_max)
             mode_surface = cfg.mode_surfaces.get(mode)
-            if mode_surface is not None and data.modes is not None:
+            pass_selection = cfg.pass_selections.get(mode)
+            if pass_selection is not None:
+                # ascending or descending passes
+                sel &= data.direction(variant.id) == (1 if pass_selection.ascending else -1)
+            elif mode_surface is not None and data.modes is not None:
                 # an acquisition mode over surface types (ie LRM over ice)
                 sel &= data.modes == cfg.mode_values[mode_surface.mode]
                 if data.surfaces is not None:

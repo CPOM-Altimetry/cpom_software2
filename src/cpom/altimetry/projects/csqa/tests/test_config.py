@@ -294,6 +294,40 @@ def test_mode_surfaces(tmp_path, default_config):
         load_config(_config_with_parameters(tmp_path, cfg, params))
 
 
+def test_mispointing(tmp_path, default_config):
+    """the mispointing angle is derived from the roll and pitch angles, in millidegrees, and
+    selectable by pass direction"""
+    cfg = default_config
+    mis = cfg.parameters["mispointing"]
+    assert [v.id for v in mis.variants] == ["mispointing", "roll", "pitch", "yaw"]
+    derived = mis.variants[0]
+    assert derived.derived == "mispointing_angle"
+    assert derived.inputs == ("off_nadir_roll_angle_str_01", "off_nadir_pitch_angle_str_01")
+    assert derived.variable == "off_nadir_roll_angle_str_01"  # its dimension and coordinates
+    assert derived.display_variable == "mispointing_angle"
+    assert mis.variants[1].display_variable == "off_nadir_roll_angle_str_01"
+    assert mis.value_scale == 1000.0 and mis.units == "mdeg"
+    assert mis.modes == mis.map_modes == ["all", "asc", "desc"]
+    assert cfg.pass_selections["asc"].ascending and not cfg.pass_selections["desc"].ascending
+    assert [cfg.mode_text(mis, m) for m in mis.modes] == [
+        "All passes",
+        "Ascending passes",
+        "Descending passes",
+    ]
+    assert cfg.mode_text(cfg.parameters["height"], "all") == "All modes"
+    assert cfg.mode_text(cfg.parameters["height"], "sar") == "SAR mode"
+    assert cfg.mode_text(cfg.parameters["quality_flags"], "lrm_ice") == "LRM Ice"
+
+    # derived variables must be known, with the right number of inputs
+    for variant, message in (
+        ({"id": "a", "derived": "unknown", "inputs": ["x", "y"]}, "unknown derived"),
+        ({"id": "a", "derived": "mispointing_angle", "inputs": ["x"]}, "needs 2 input"),
+    ):
+        params = {"bad": {"source": "GDR-A", "type": "float", "variants": {"options": [variant]}}}
+        with pytest.raises(ValueError, match=message):
+            load_config(_config_with_parameters(tmp_path, cfg, params))
+
+
 def test_sea_ice_parameters(tmp_path, default_config):
     """sea ice freeboard and thickness are Baseline-F onwards, SAR/SARin only, without values
     with the freeboard error bit set, and gridded like the radar freeboard"""
