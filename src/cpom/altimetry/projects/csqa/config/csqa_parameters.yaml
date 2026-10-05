@@ -47,7 +47,8 @@
 #                 are not processed for it. Default: every baseline
 #   crossover   : single cycle crossover differences of a float parameter (ie heights) instead of
 #                 its values: {lat, lon (crossover locations, default POCA), max_arc_length_m,
-#                 min_time_separation_s, max_abs_difference, nadir_lat, nadir_time}. Areas must have a mask and grid_area. See crossovers.py
+#                 min_time_separation_s, one_per_pass_pair, max_abs_difference, nadir_lat,
+#                 nadir_time}. Areas must have a mask and grid_area. See crossovers.py
 #   record_name : what each value is, ie crossover (default: measurement), for the portal
 #   default_variant : variant shown first in the portal (default the first), or {mode: variant}
 #                 for a default per mode (ie the OCOG retracker in LRM mode)
@@ -534,11 +535,12 @@ parameters:
       minus descending), interpolated between consecutive 20 Hz measurements of each track.
       Crossovers are found separately in LRM and SARin modes and for each retracker, using
       heights without the retracker's height error flag, along tracks of the measurement (POCA)
-      locations. Over time intervals without surface
-      change the differences measure the height precision of the altimeter and processing
-      chain. Differences larger than 10 m are counted as outliers, but excluded from the
-      statistics (the Valid column) and maps. The maps show the mean crossover difference within
-      20 km of each 10 km grid cell.
+      locations. A pair of passes gives one crossover (the median of their crossings, as tracks
+      of POCA locations can cross more than once). Over time intervals without surface change
+      the differences measure the height precision of the altimeter and processing chain.
+      Differences larger than 5 m are counted as outliers, but excluded from the statistics (the
+      Valid column) and maps. The maps show the mean crossover difference within 20 km of each
+      10 km grid cell.
     source: GDR-A
     type: float
     units: m
@@ -576,7 +578,11 @@ parameters:
       max_arc_length_m: 1000
       # crossings of the same orbit, near its turning latitude, are not crossovers
       min_time_separation_s: 1800
-      max_abs_difference: 10.0
+      # one crossover per pair of passes (zig-zagging POCA tracks can cross several times), and
+      # an outlier limit of 5 m: in a week of Baseline-F LRM Antarctic crossovers these give an
+      # OCOG r.m.s. of 0.42 m, close to the previous portal's Baseline-D values (0.41-0.43 m)
+      one_per_pass_pair: true
+      max_abs_difference: 5.0
     plot:
       range: [-0.5, 0.5]
       cmap: RdBu_r

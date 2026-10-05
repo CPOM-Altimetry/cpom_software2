@@ -334,7 +334,8 @@ def test_crossover_parameter(tmp_path, default_config):
     cfg = default_config
     xo = cfg.parameters["crossovers"]
     assert xo.crossover is not None and xo.record_name == "crossover"
-    assert xo.crossover.max_abs_difference == 10.0 and xo.crossover.nadir_lat == "lat_01"
+    assert xo.crossover.max_abs_difference == 5.0 and xo.crossover.nadir_lat == "lat_01"
+    assert xo.crossover.one_per_pass_pair
     # crossovers of the POCA locations; OCOG is the default LRM retracker
     assert (xo.crossover.lat, xo.crossover.lon) == ("lat_poca_20_ku", "lon_poca_20_ku")
     assert xo.default_variant == "rtk3"

@@ -432,10 +432,10 @@ def test_crossovers(tmp_path):
         xo_stats = json.load(fh)
     rows = {(r["area"], r["variant"], r["mode"]): r for r in xo_stats["rows"]}
     lrm = rows[("antarctica", "rtk3", "lrm")]
-    # outliers (|dh| > 10 m) are counted but not valid
+    # outliers (|dh| > 5 m) are counted but not valid
     assert 0 < lrm["n_valid"] <= lrm["n_records"]
-    assert abs(lrm["median"]) < 0.5 and lrm["std"] < 3.0
-    assert -10.0 <= lrm["min"] and lrm["max"] <= 10.0
+    assert abs(lrm["median"]) < 0.5 and lrm["std"] < 2.0
+    assert -5.0 <= lrm["min"] and lrm["max"] <= 5.0
     assert rows[("antarctica", "rtk2", "sarin")]["n_records"] == 0  # retracker 2: LRM only
     # gridded (smoothed) maps only
     grid_rows = {(r["variant"], r["mode"], r["statistic"]): r for r in xo_stats["grid_rows"]}

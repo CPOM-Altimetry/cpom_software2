@@ -121,6 +121,7 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
                 "max_abs_difference": param.crossover.max_abs_difference,
                 "max_arc_length_m": param.crossover.max_arc_length_m,
                 "location": [param.crossover.lat, param.crossover.lon],
+                "one_per_pass_pair": param.crossover.one_per_pass_pair,
             }
             if param.crossover is not None
             else None

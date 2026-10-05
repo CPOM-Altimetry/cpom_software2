@@ -44,14 +44,16 @@ class AreaConfig:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass(frozen=True)
-class CrossoverConfig:
+class CrossoverConfig:  # pylint: disable=too-many-instance-attributes
     """Crossover processing of a parameter: the differences of its values (heights) where the
     ascending and descending ground tracks of the cycle cross, in each of its areas (which must
     have a mask and grid_area) and modes"""
 
     max_arc_length_m: float = 1000.0  # longest track segment between consecutive measurements
     min_time_separation_s: float = 1800.0  # excludes near-tangent crossings of the same orbit
-    max_abs_difference: float = 10.0  # larger differences are counted but not valid (outliers)
+    max_abs_difference: float = 5.0  # larger differences are counted but not valid (outliers)
+    # one crossover per pair of ascending and descending passes (the median of their crossings)
+    one_per_pass_pair: bool = True
     # crossover locations: the measurement locations (POCA), joined into tracks
     lat: str = "lat_poca_20_ku"
     lon: str = "lon_poca_20_ku"
@@ -434,6 +436,7 @@ def _parse_crossover(  # pylint: disable=too-many-arguments,too-many-positional-
             xcfg.get("min_time_separation_s", defaults.min_time_separation_s)
         ),
         max_abs_difference=float(xcfg.get("max_abs_difference", defaults.max_abs_difference)),
+        one_per_pass_pair=bool(xcfg.get("one_per_pass_pair", defaults.one_per_pass_pair)),
         lat=str(xcfg.get("lat", defaults.lat)),
         lon=str(xcfg.get("lon", defaults.lon)),
         nadir_lat=str(xcfg.get("nadir_lat", defaults.nadir_lat)),

@@ -5,12 +5,18 @@ import numpy as np
 from cpom.altimetry.projects.csqa.crossovers import Arcs, find_crossovers, track_arcs
 
 
-def _track(x0, y0, dx, dy, n, h0, dh, t0, ascending):
+def _track(x0, y0, dx, dy, n, h0, dh, t0, ascending, track_id=0):
     """a straight track of n measurements with linearly changing heights"""
     i = np.arange(n, dtype=float)
     nadir_lat = (i if ascending else -i) * 0.001
     return track_arcs(
-        x0 + i * dx, y0 + i * dy, h0 + i * dh, t0 + i * 0.05, nadir_lat, max_arc_length=1000.0
+        x0 + i * dx,
+        y0 + i * dy,
+        h0 + i * dh,
+        t0 + i * 0.05,
+        nadir_lat,
+        max_arc_length=1000.0,
+        track_id=track_id,
     )
 
 
@@ -44,6 +50,66 @@ def test_crossing_at_a_measurement():
     xo = find_crossovers(Arcs.concatenate([asc, desc]))
     assert xo.x.size == 1
     assert np.isclose(xo.difference[0], -1.0)
+
+
+def test_one_crossover_per_pass_pair():
+    """a zig-zagging (POCA) track crossing another track several times gives one crossover:
+    the median of the crossings"""
+    # ascending track zig-zagging across y = 0 three times, heights 10, 11, 12, 13
+    x = np.array([0.0, 50.0, 100.0, 150.0])
+    y = np.array([-200.0, 100.0, -100.0, 200.0])
+    asc = track_arcs(
+        x,
+        y,
+        np.array([10.0, 11.0, 12.0, 13.0]),
+        np.arange(4.0) * 0.05,
+        np.arange(4.0),
+        1000.0,
+        track_id=0,
+    )
+    desc = _track(-1000.0, 0.0, 200.0, 0.0, 11, 0.0, 0.0, 7200.0, False, track_id=1)
+    arcs = Arcs.concatenate([asc, desc])
+    # crossings at 2/3, 1/2 and 1/3 along the zig-zag arcs: 10.667, 11.5, 12.333
+    all_xo = find_crossovers(arcs, 1800.0)
+    assert np.allclose(np.sort(all_xo.difference), [10 + 2 / 3, 11.5, 12 + 1 / 3])
+    one = find_crossovers(arcs, 1800.0, one_per_pass_pair=True)
+    assert one.difference.size == 1 and np.isclose(one.difference[0], 11.5)
+    assert np.isclose(one.y[0], 0.0)
+
+    # an even number of crossings: the mean of the two middle crossings
+    two = find_crossovers(
+        Arcs.concatenate(
+            [
+                track_arcs(
+                    x[:3],
+                    y[:3],
+                    np.array([10.0, 11.0, 12.0]),
+                    np.arange(3.0) * 0.05,
+                    np.arange(3.0),
+                    1000.0,
+                ),
+                desc,
+            ]
+        ),
+        1800.0,
+        one_per_pass_pair=True,
+    )
+    assert two.difference.size == 1 and np.isclose(two.difference[0], (10 + 2 / 3 + 11.5) / 2)
+
+    # different pass pairs keep their own crossovers
+    desc2 = _track(-1000.0, 50.0, 200.0, 0.0, 11, 0.0, 0.0, 9000.0, False, track_id=2)
+    xo = find_crossovers(Arcs.concatenate([asc, desc, desc2]), 1800.0, one_per_pass_pair=True)
+    assert xo.difference.size == 2
+
+
+def test_pass_ids():
+    """the passes of a track (runs of arcs in one direction) have their own ids"""
+    lat = np.array([0.0, 1.0, 2.0, 1.5, 1.0, 0.5])
+    arcs = track_arcs(
+        np.arange(6.0) * 100, np.zeros(6), np.zeros(6), np.arange(6.0), lat, 1000.0, track_id=7
+    )
+    assert list(arcs.ascending) == [True, True, False, False, False]
+    assert list(arcs.pass_id) == [7000, 7000, 7001, 7001, 7001]
 
 
 def test_track_arcs_gaps():

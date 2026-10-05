@@ -16,8 +16,12 @@ grid_area), variant (ie retracker height) and acquisition mode:
    the values and times at each intersection are interpolated linearly along both arcs
 3. intersections of the same orbit (less than min_time_separation_s apart, near the orbit's
    turning latitude) and outside the area's mask are removed
-4. the crossover difference is the ascending minus the descending value. Differences larger
-   than max_abs_difference are outliers: counted, but not valid (NaN)
+4. the crossover difference is the ascending minus the descending value
+5. a pair of ascending and descending passes gives one crossover (one_per_pass_pair): tracks
+   of POCA locations zig-zag (ie LRM slope corrected POCAs move independently), so can cross
+   the other pass several times, giving several noisy crossovers. The median crossing of a
+   pass pair is kept (for an even number, the mean of the two middle crossings)
+6. differences larger than max_abs_difference are outliers: counted, but not valid (NaN)
 
 This is a vectorised version of the cpom (v1) xo_process.py single cycle crossover search.
 The crossovers are returned as a loader.ParameterData whose values (per variant) are the
@@ -69,15 +73,15 @@ class Arcs:  # pylint: disable=too-many-instance-attributes
     t1: np.ndarray
     t2: np.ndarray
     ascending: np.ndarray
+    pass_id: np.ndarray  # pass (track and direction) of each arc, unique within a search
 
     @classmethod
     def concatenate(cls, arcs: list["Arcs"]) -> "Arcs":
         """arcs of several tracks"""
-        names = ("x1", "y1", "x2", "y2", "v1", "v2", "t1", "t2", "ascending")
+        names = ("x1", "y1", "x2", "y2", "v1", "v2", "t1", "t2", "ascending", "pass_id")
+        dtypes = {"ascending": bool, "pass_id": np.int64}
         if not arcs:
-            return cls(
-                **{n: np.array([], dtype=bool if n == "ascending" else float) for n in names}
-            )
+            return cls(**{n: np.array([], dtype=dtypes.get(n, float)) for n in names})
         return cls(**{n: np.concatenate([getattr(a, n) for a in arcs]) for n in names})
 
 
@@ -100,6 +104,7 @@ def track_arcs(  # pylint: disable=too-many-arguments,too-many-positional-argume
     times: np.ndarray,
     nadir_lat: np.ndarray,
     max_arc_length: float,
+    track_id: int = 0,
 ) -> Arcs:
     """Arcs between consecutive measurements of a track (in time order)
 
@@ -110,13 +115,17 @@ def track_arcs(  # pylint: disable=too-many-arguments,too-many-positional-argume
         times (np.ndarray): measurement times (s)
         nadir_lat (np.ndarray): nadir latitude of each measurement (gives the pass direction)
         max_arc_length (float): longest arc (m): longer arcs (data gaps) are omitted
+        track_id (int): identifier of the track (ie product file) in a crossover search
 
     Returns:
-        Arcs
+        Arcs: the passes of the track (runs of arcs in the same direction) have pass_id
+              track_id * 1000 + their number in the track
     """
     length = np.hypot(np.diff(x), np.diff(y))
     dlat = np.diff(nadir_lat)
     keep = (length > 0) & (length <= max_arc_length) & (dlat != 0)
+    ascending = dlat[keep] > 0
+    pass_number = np.concatenate(([0], np.cumsum(ascending[1:] != ascending[:-1])))
     return Arcs(
         x1=x[:-1][keep],
         y1=y[:-1][keep],
@@ -126,7 +135,8 @@ def track_arcs(  # pylint: disable=too-many-arguments,too-many-positional-argume
         v2=values[1:][keep],
         t1=times[:-1][keep],
         t2=times[1:][keep],
-        ascending=dlat[keep] > 0,
+        ascending=ascending,
+        pass_id=track_id * 1000 + pass_number[: ascending.size].astype(np.int64),
     )
 
 
@@ -137,12 +147,16 @@ def _lines(arcs: Arcs, index: np.ndarray) -> np.ndarray:
     return shapely.linestrings(np.stack([start, end], axis=1))
 
 
-def find_crossovers(arcs: Arcs, min_time_separation: float = 0.0) -> Crossovers:
+def find_crossovers(
+    arcs: Arcs, min_time_separation: float = 0.0, one_per_pass_pair: bool = False
+) -> Crossovers:
     """Crossovers of the ascending and descending arcs
 
     Args:
         arcs (Arcs): track arcs
         min_time_separation (float): minimum time between the crossing measurements (s)
+        one_per_pass_pair (bool): one crossover for each pair of ascending and descending
+                                  passes: the median of their crossings
 
     Returns:
         Crossovers (an intersection at an arc end point is only counted once)
@@ -175,12 +189,41 @@ def find_crossovers(arcs: Arcs, min_time_separation: float = 0.0) -> Crossovers:
     i, j, s, u = i[keep], j[keep], s[keep], u[keep]
     v_asc = arcs.v1[i] + s * (arcs.v2[i] - arcs.v1[i])
     v_desc = arcs.v1[j] + u * (arcs.v2[j] - arcs.v1[j])
-    return Crossovers(
+    crossovers = Crossovers(
         x=arcs.x1[i] + s * (arcs.x2[i] - arcs.x1[i]),
         y=arcs.y1[i] + s * (arcs.y2[i] - arcs.y1[i]),
         difference=v_asc - v_desc,
         t_asc=t_asc[keep],
         t_desc=t_desc[keep],
+    )
+    if one_per_pass_pair:
+        crossovers = _median_per_pass_pair(crossovers, arcs.pass_id[i], arcs.pass_id[j])
+    return crossovers
+
+
+def _median_per_pass_pair(
+    crossovers: Crossovers, pass_asc: np.ndarray, pass_desc: np.ndarray
+) -> Crossovers:
+    """one crossover per pair of passes: the crossing with the median difference (for an even
+    number of crossings, the mean of the two middle crossings)"""
+    if crossovers.difference.size == 0:
+        return crossovers
+    pair = np.unique(np.stack([pass_asc, pass_desc], axis=1), axis=0, return_inverse=True)[1]
+    pair = np.asarray(pair).ravel()
+    order = np.lexsort((crossovers.difference, pair))
+    _, starts, counts = np.unique(pair[order], return_index=True, return_counts=True)
+    lower = order[starts + (counts - 1) // 2]
+    upper = order[starts + counts // 2]
+
+    def middle(values: np.ndarray) -> np.ndarray:
+        return 0.5 * (values[lower] + values[upper])
+
+    return Crossovers(
+        x=middle(crossovers.x),
+        y=middle(crossovers.y),
+        difference=middle(crossovers.difference),
+        t_asc=middle(crossovers.t_asc),
+        t_desc=middle(crossovers.t_desc),
     )
 
 
@@ -295,7 +338,7 @@ def _area_crossovers(  # pylint: disable=too-many-arguments,too-many-positional-
     epsg = grid_epsg(get_grid_area(area.grid_area, 10000))
     to_xy = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
     arcs = []
-    for track in tracks:
+    for track_id, track in enumerate(tracks):
         ok = (
             (track.modes == mode_value)
             & np.isfinite(track.values[variant_id])
@@ -313,9 +356,12 @@ def _area_crossovers(  # pylint: disable=too-many-arguments,too-many-positional-
                 track.times[ok],
                 track.nadir_lat[ok],
                 xcfg.max_arc_length_m,
+                track_id,
             )
         )
-    xovers = find_crossovers(Arcs.concatenate(arcs), xcfg.min_time_separation_s)
+    xovers = find_crossovers(
+        Arcs.concatenate(arcs), xcfg.min_time_separation_s, xcfg.one_per_pass_pair
+    )
     lons, lats = to_xy.transform(xovers.x, xovers.y, direction="INVERSE")
     lats, lons = np.asarray(lats), np.mod(np.asarray(lons), 360.0)
     if lats.size:
