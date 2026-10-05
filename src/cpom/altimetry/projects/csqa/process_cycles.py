@@ -19,6 +19,7 @@ Examples:
     # (the latest being the cycle containing today - data_latency_days) if their input files
     # changed, using up to 64 processes
     python process_cycles.py --latest 3 --update --workers 64
+    # (csqa_daily.sh runs this from cron, with logging: see the script's header)
 
     # full mission reprocessing using 128 processes
     python process_cycles.py --all --workers 128
