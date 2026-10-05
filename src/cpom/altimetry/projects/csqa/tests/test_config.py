@@ -21,7 +21,7 @@ def test_default_config(default_config):
     assert cfg.cycle_length_days == 30
     assert cfg.data_latency_days == 35
     assert cfg.calendar().data_latency.days == 35
-    assert set(cfg.areas) == {"global", "north_polar", "south_polar"}
+    assert set(cfg.areas) == {"global", "north_polar", "south_polar", "antarctica", "greenland"}
     assert {"acquisition_mode", "surface_type", "backscatter"} <= set(cfg.parameters)
 
     mode = cfg.parameters["acquisition_mode"]
@@ -326,6 +326,58 @@ def test_mispointing(tmp_path, default_config):
         params = {"bad": {"source": "GDR-A", "type": "float", "variants": {"options": [variant]}}}
         with pytest.raises(ValueError, match=message):
             load_config(_config_with_parameters(tmp_path, cfg, params))
+
+
+def test_crossover_parameter(tmp_path, default_config):
+    """crossovers of the retracker heights over the ice sheet areas (with masks), with only
+    smoothed gridded maps"""
+    cfg = default_config
+    xo = cfg.parameters["crossovers"]
+    assert xo.crossover is not None and xo.record_name == "crossover"
+    assert xo.crossover.max_abs_difference == 10.0 and xo.crossover.nadir_lat == "lat_01"
+    # crossovers of the POCA locations; OCOG is the default LRM retracker
+    assert (xo.crossover.lat, xo.crossover.lon) == ("lat_poca_20_ku", "lon_poca_20_ku")
+    assert xo.default_variant == "rtk3"
+    assert xo.mode_default_variants == {"lrm": "rtk3", "sarin": "rtk1"}
+    assert cfg.parameters["height"].mode_default_variants == {}
+    assert xo.modes == ["lrm", "sarin"] and xo.map_modes == []
+    assert xo.areas == ["antarctica", "greenland"]
+    assert cfg.areas["antarctica"].mask_name == "antarctica_bedmachine_v2_grid_mask"
+    assert cfg.areas["antarctica"].mask_basins == (2, 4)
+    assert cfg.areas["greenland"].grid_area == "greenland"
+    assert xo.variants[1].valid_modes == ("lrm",) and xo.variants[1].reject_mask == 8388608
+    assert xo.grid is not None and xo.grid.smooth_radius_km == 20.0
+    assert xo.grid.cell_text == "within 20 km of each cell"
+    assert [s.id for s in xo.grid.statistics] == ["mean", "std", "count"]
+
+    # crossover areas need a mask, smoothed grids only mean / std / count
+    params = {
+        "bad": {"source": "GDR-A", "type": "float", "variable": "x", "areas": ["global"]}
+        | {"crossover": {}}
+    }
+    with pytest.raises(ValueError, match="needs a mask"):
+        load_config(_config_with_parameters(tmp_path, cfg, params))
+    grid = {"binsize_km": 10, "smooth_radius_km": 20, "areas": ["antarctica"]}
+    params = {
+        "bad": {"source": "GDR-A", "type": "float", "variable": "x", "areas": ["antarctica"]}
+        | {"grid": {**grid, "statistics": [{"id": "median"}]}}
+    }
+    with pytest.raises(ValueError, match="smoothed grids"):
+        load_config(_config_with_parameters(tmp_path, cfg, params))
+
+    # a mode's default variant must be used in the mode
+    variants = {
+        "options": [
+            {"id": "a", "variable": "x"},
+            {"id": "b", "variable": "y", "valid_modes": ["lrm"]},
+        ]
+    }
+    params = {
+        "bad": {"source": "GDR-A", "type": "float", "variants": variants}
+        | {"modes": ["lrm", "sarin"], "default_variant": {"lrm": "b", "sarin": "b"}}
+    }
+    with pytest.raises(ValueError, match="b is not used in sarin"):
+        load_config(_config_with_parameters(tmp_path, cfg, params))
 
 
 def test_l2i_parameters(default_config):

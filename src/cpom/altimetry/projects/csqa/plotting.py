@@ -308,8 +308,11 @@ def prepare_grid_plot_job(  # pylint: disable=too-many-arguments,too-many-positi
     lats, lons = cell_centres_latlon(gridded)
     vals = gridded.values[stat.id].astype(np.float32)
     data_set: dict = {
-        # ie radar_freeboard_20_ku cell median
-        "name": f"{variant.display_variable} cell {stat.id}",
+        # ie radar_freeboard_20_ku cell median, height_1_20_ku crossover dh cell mean
+        "name": (
+            f"{variant.display_variable}{' crossover dh' if param.crossover else ''} "
+            f"cell {stat.id}"
+        ),
         "lats": lats.astype(np.float32),
         "lons": lons.astype(np.float32),
         "vals": vals,
@@ -331,10 +334,11 @@ def prepare_grid_plot_job(  # pylint: disable=too-many-arguments,too-many-positi
         else f"{stat.name.lower()} of the measurements"
     )
     min_count = param.grid.min_count
+    records = f"{param.record_name or 'measurement'}s"
     note = (
-        f"{param.grid.label}: {what} in each cell"
+        f"{param.grid.label}: {what.replace('measurements', records)} {param.grid.cell_text}"
         f"{f' (cells with {min_count}+)' if min_count > 1 else ''}. "
-        f"{stats['n_cells']:,} cells, {gridded.n_records:,} measurements"
+        f"{stats['n_cells']:,} cells, {gridded.n_records:,} {records}"
     )
     return PlotJob(
         out_path=out_path,

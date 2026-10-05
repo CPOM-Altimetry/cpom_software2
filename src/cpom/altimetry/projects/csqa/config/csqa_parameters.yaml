@@ -45,6 +45,12 @@
 #                 are rejected. Default: every mode
 #   first_baseline : first product baseline containing the parameter (ie F). Earlier baselines
 #                 are not processed for it. Default: every baseline
+#   crossover   : single cycle crossover differences of a float parameter (ie heights) instead of
+#                 its values: {lat, lon (crossover locations, default POCA), max_arc_length_m,
+#                 min_time_separation_s, max_abs_difference, nadir_lat, nadir_time}. Areas must have a mask and grid_area. See crossovers.py
+#   record_name : what each value is, ie crossover (default: measurement), for the portal
+#   default_variant : variant shown first in the portal (default the first), or {mode: variant}
+#                 for a default per mode (ie the OCOG retracker in LRM mode)
 #   grid        : gridded maps and statistics of a float parameter, in addition to the along-
 #                 track maps. The measurements of each selection are gridded into cells of
 #                 binsize_km of the area's grid_area (csqa_config.yaml), and a statistic of the
@@ -53,6 +59,8 @@
 #                   areas      : areas gridded (with a grid_area)
 #                   modes      : mode selections gridded (default: the first of modes)
 #                   min_count  : minimum number of measurements in a cell (default 1)
+#                   smooth_radius_km : statistics of the measurements within this radius of each
+#                                cell (mean, std, count only), ie for sparse crossovers
 #                   statistics : list of {id, name, range, cmap, log} of the cell statistics
 #                                mapped (median, mean, max, min, std, count; the first is the
 #                                default). range/cmap/log default to the parameter's default
@@ -516,6 +524,73 @@ parameters:
         - {id: max, range: [-1.0, 10.0]}
         - {id: std, range: [0.0, 2.0]}
         - {id: count, range: [1.0, 500.0], log: true}
+
+  crossovers:
+    long_name: "Crossover Height Differences"
+    description: >-
+      Single cycle crossover height differences over the Antarctic and Greenland ice sheets
+      (grounded ice of the BedMachine masks): the difference between the heights of the
+      ascending and descending passes of the cycle where their ground tracks cross (ascending
+      minus descending), interpolated between consecutive 20 Hz measurements of each track.
+      Crossovers are found separately in LRM and SARin modes and for each retracker, using
+      heights without the retracker's height error flag, along tracks of the measurement (POCA)
+      locations. Over time intervals without surface
+      change the differences measure the height precision of the altimeter and processing
+      chain. Differences larger than 10 m are counted as outliers, but excluded from the
+      statistics (the Valid column) and maps. The maps show the mean crossover difference within
+      20 km of each 10 km grid cell.
+    source: GDR-A
+    type: float
+    units: m
+    record_name: crossover
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: height_1_20_ku
+          mode_descriptions: *retracker_1_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 16777216, name: height_1_error}
+        - id: rtk2
+          name: "Retracker 2"
+          variable: height_2_20_ku
+          mode_descriptions: *retracker_2_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 8388608, name: height_2_error}
+          valid_modes: [lrm]
+        - id: rtk3
+          name: "Retracker 3"
+          variable: height_3_20_ku
+          mode_descriptions: *retracker_3_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 4194304, name: height_3_error}
+          valid_modes: [lrm]
+    # OCOG in LRM mode (as the previous portal), UCL margins retracker in SARin mode
+    default_variant: {lrm: rtk3, sarin: rtk1}
+    modes: [lrm, sarin]
+    # gridded maps only
+    map_modes: []
+    areas: [antarctica, greenland]
+    crossover:
+      # crossovers of the tracks of POCA locations (the pass direction is from the nadir)
+      lat: lat_poca_20_ku
+      lon: lon_poca_20_ku
+      max_arc_length_m: 1000
+      # crossings of the same orbit, near its turning latitude, are not crossovers
+      min_time_separation_s: 1800
+      max_abs_difference: 10.0
+    plot:
+      range: [-0.5, 0.5]
+      cmap: RdBu_r
+    grid:
+      binsize_km: 10
+      # statistics of the crossovers within 20 km of each 10 km cell (as the previous portal):
+      # crossovers are too sparse for continuous maps of the crossovers in each cell
+      smooth_radius_km: 20
+      areas: [antarctica, greenland]
+      modes: [lrm, sarin]
+      statistics:
+        - {id: mean}
+        - {id: std, range: [0.0, 2.0], cmap: viridis}
+        - {id: count, range: [1.0, 100.0], log: true, cmap: viridis}
 
   # ----------------------------------------------------------------------------------------------
   # L2i parameters: the L2 in-depth products of each mode (LRM, SAR and SARin), giving lower

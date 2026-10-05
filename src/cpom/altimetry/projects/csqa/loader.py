@@ -63,6 +63,9 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     surfaces: np.ndarray | None = None
     # pass direction per record of each coordinate pair: 1 ascending, -1 descending, 0 unknown
     directions: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
+    # modes of the records of a coordinate pair, when its records are not those of 'modes'
+    # (ie the crossovers of each variant)
+    modes_by_key: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
     files_used: list[str] = field(default_factory=list)  # files containing cycle records
     bad_files: list[str] = field(default_factory=list)  # files that could not be read
     missing_variables: dict[str, int] = field(default_factory=dict)  # var -> n files missing
@@ -82,6 +85,10 @@ class ParameterData:  # pylint: disable=too-many-instance-attributes
     def lon(self, variant: str) -> np.ndarray:
         """longitudes of a variant's values"""
         return self.lons[self.coord_names[variant]]
+
+    def mode_array(self, variant: str) -> np.ndarray | None:
+        """acquisition modes of a variant's values (None if not loaded)"""
+        return self.modes_by_key.get(self.coord_names[variant], self.modes)
 
     def direction(self, variant: str) -> np.ndarray:
         """pass directions of a variant's values (1 ascending, -1 descending, 0 unknown)"""

@@ -91,6 +91,7 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
             for v in param.variants
         ],
         "default_variant": param.default_variant,
+        "mode_default_variants": param.mode_default_variants,
         "bit_flag": param.is_bit_flag,
         "map_modes": param.map_modes,
         "modes": param.modes,
@@ -113,6 +114,17 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
         "grid": grid_manifest(param),
         "valid_modes": param.valid_modes,
         "value_scale": param.value_scale,
+        # what each value is (ie crossover), and the crossover settings
+        "record_name": param.record_name,
+        "crossover": (
+            {
+                "max_abs_difference": param.crossover.max_abs_difference,
+                "max_arc_length_m": param.crossover.max_arc_length_m,
+                "location": [param.crossover.lat, param.crossover.lon],
+            }
+            if param.crossover is not None
+            else None
+        ),
         "first_baseline": param.first_baseline,
         "image_format": cfg.image_format,
     }
@@ -144,6 +156,8 @@ def grid_manifest(param: ParameterConfig) -> dict | None:
         "label": grid.label,
         "binsize_km": grid.binsize_km,
         "min_count": grid.min_count,
+        "smooth_radius_km": grid.smooth_radius_km,
+        "cell_text": grid.cell_text,
         "areas": grid.areas,
         "modes": grid.modes,
         # each statistic's maps have the file name suffix <file_suffix> (the first statistic is

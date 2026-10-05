@@ -56,6 +56,8 @@ parameters_file: csqa_parameters.yaml
 #   lat_min, lat_max : measurement latitude range selected for the area's statistics and plots
 #   grid_area : cpom.gridding.gridareas.GridArea used for the area's gridded maps (parameters
 #               with a grid). The polar stereographic grid must cover the area
+#   mask : {name, basins}: cpom.masks.masks.Mask (and its values inside the area) selecting the
+#          area's measurements, ie an ice sheet's grounded ice (used by crossover parameters)
 areas:
   global:
     long_name: "Global"
@@ -74,6 +76,22 @@ areas:
     lat_min: -90.0
     lat_max: -60.0
     grid_area: antarctic_ocean  # EPSG:3031
+  antarctica:
+    long_name: "Antarctic Ice Sheet"
+    polarplot_area: antarctica_is
+    lat_min: -90.0
+    lat_max: -60.0
+    grid_area: antarctica  # EPSG:3031
+    # grounded ice (and Lake Vostok) of the BedMachine v2 mask
+    mask: {name: antarctica_bedmachine_v2_grid_mask, basins: [2, 4]}
+  greenland:
+    long_name: "Greenland Ice Sheet"
+    polarplot_area: greenland_is
+    lat_min: 58.0
+    lat_max: 85.0
+    grid_area: greenland  # EPSG:3413
+    # grounded ice of the BedMachine v3 mask
+    mask: {name: greenland_bedmachine_v3_grid_mask, basins: [2]}
 
 # SIRAL acquisition modes, used to select parameter values per mode
 modes:

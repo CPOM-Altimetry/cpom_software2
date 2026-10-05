@@ -404,6 +404,47 @@ def test_l2i_parameters(tmp_path):
     assert 0 < disc[("maxpowerbin", "")]["max"] <= 1024
 
 
+@pytest.mark.skipif(
+    not os.path.isfile(
+        os.path.join(
+            os.environ.get("CPDATA_DIR", "/cpdata"),
+            "RESOURCES/surface_discrimination_masks/antarctica/bedmachine_v2",
+            "BedMachineAntarctica_2020-07-15_v02.nc",
+        )
+    ),
+    reason="BedMachine masks not available",
+)
+def test_crossovers(tmp_path):
+    """single cycle crossovers of a day of products over the ice sheets"""
+    month_dir = tmp_path / "GDR-A" / "2026" / "08"
+    month_dir.mkdir(parents=True)
+    for path in GDR_A_FILES:
+        os.symlink(path, month_dir / os.path.basename(path))
+    config_file = write_test_config(tmp_path, {"GDR-A": [str(tmp_path / "GDR-A")]})
+    cfg = load_config(config_file)
+    status = process_cycles_main(
+        ["-c", "193", "-b", "F", "--config", config_file, "-p", "crossovers"]
+        + ["--areas", "antarctica", "--plot_workers", "2"]
+    )
+    assert status == 0
+    cdir = os.path.join(cfg.output_dir, "baseline_F", "cycles", "cycle_193")
+    with open(os.path.join(cdir, "stats", "crossovers.json"), encoding="utf-8") as fh:
+        xo_stats = json.load(fh)
+    rows = {(r["area"], r["variant"], r["mode"]): r for r in xo_stats["rows"]}
+    lrm = rows[("antarctica", "rtk3", "lrm")]
+    # outliers (|dh| > 10 m) are counted but not valid
+    assert 0 < lrm["n_valid"] <= lrm["n_records"]
+    assert abs(lrm["median"]) < 0.5 and lrm["std"] < 3.0
+    assert -10.0 <= lrm["min"] and lrm["max"] <= 10.0
+    assert rows[("antarctica", "rtk2", "sarin")]["n_records"] == 0  # retracker 2: LRM only
+    # gridded (smoothed) maps only
+    grid_rows = {(r["variant"], r["mode"], r["statistic"]): r for r in xo_stats["grid_rows"]}
+    mean = grid_rows[("rtk3", "lrm", "mean")]
+    assert mean["n_records"] == lrm["n_valid"] and mean["n_cells"] > lrm["n_valid"]
+    assert os.path.isfile(os.path.join(cdir, "plots", "crossovers", mean["plot"]))
+    assert all(r["plot"] is None for r in xo_stats["rows"])
+
+
 def test_no_data(one_file_config):  # pylint: disable=redefined-outer-name
     """cycles without input files produce no outputs"""
     cfg = load_config(one_file_config)

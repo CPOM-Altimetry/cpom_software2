@@ -29,6 +29,7 @@ from typing import Callable
 import numpy as np
 
 from cpom.altimetry.projects.csqa import __version__
+from cpom.altimetry.projects.csqa.crossovers import load_crossover_data
 from cpom.altimetry.projects.csqa.csqa_config import (
     AreaConfig,
     CsqaConfig,
@@ -307,6 +308,7 @@ def _grid_selection(  # pylint: disable=too-many-arguments,too-many-positional-a
         vals,
         [s.id for s in grid.statistics],
         grid.min_count,
+        grid.smooth_radius_km * 1000.0,
     )
     for stat in grid.statistics:
         cell_stats = float_stats(gridded.values[stat.id])
@@ -374,7 +376,10 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
     # pylint: disable=too-many-locals
     t_start = time.time()
     bounds = cfg.calendar().cycle_bounds(cycle)
-    data = load_parameter_data(files, param, cfg, *bounds)
+    if param.crossover is not None:
+        data = load_crossover_data(files, param, cfg, *bounds)
+    else:
+        data = load_parameter_data(files, param, cfg, *bounds)
     log.info(
         "cycle %d baseline %s %s: %d records from %d files",
         cycle,
@@ -445,18 +450,19 @@ def _prepare_parameter(  # pylint: disable=too-many-arguments,too-many-positiona
             sel = (lats >= area.lat_min) & (lats <= area.lat_max)
             mode_surface = cfg.mode_surfaces.get(mode)
             pass_selection = cfg.pass_selections.get(mode)
+            modes = data.mode_array(variant.id)
             if pass_selection is not None:
                 # ascending or descending passes
                 sel &= data.direction(variant.id) == (1 if pass_selection.ascending else -1)
-            elif mode_surface is not None and data.modes is not None:
+            elif mode_surface is not None and modes is not None:
                 # an acquisition mode over surface types (ie LRM over ice)
-                sel &= data.modes == cfg.mode_values[mode_surface.mode]
+                sel &= modes == cfg.mode_values[mode_surface.mode]
                 if data.surfaces is not None:
                     sel &= np.isin(
                         data.surfaces, [cfg.surface_values[s] for s in mode_surface.surfaces]
                     )
-            elif mode not in ("", "all") and data.modes is not None:
-                sel &= data.modes == cfg.mode_values[mode]
+            elif mode not in ("", "all") and modes is not None:
+                sel &= modes == cfg.mode_values[mode]
             selections[key] = sel
         return selections[key]
 

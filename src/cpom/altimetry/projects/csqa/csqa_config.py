@@ -19,7 +19,7 @@ import yaml  # type: ignore[import-untyped]
 
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
 from cpom.altimetry.projects.csqa.derived import DERIVED_VARIABLES
-from cpom.altimetry.projects.csqa.gridding import GRID_STATISTICS
+from cpom.altimetry.projects.csqa.gridding import GRID_STATISTICS, SMOOTHED_STATISTICS
 
 DEFAULT_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config", "csqa_config.yaml")
 
@@ -27,7 +27,7 @@ PARAM_TYPES = ("flag", "float")
 
 
 @dataclass(frozen=True)
-class AreaConfig:
+class AreaConfig:  # pylint: disable=too-many-instance-attributes
     """An area for which plots and statistics are produced"""
 
     id: str
@@ -37,6 +37,27 @@ class AreaConfig:
     lat_max: float
     # cpom.gridding.gridareas.GridArea of the area's gridded maps ('' if the area has none)
     grid_area: str = ""
+    # cpom.masks.masks.Mask selecting the area's measurements (ie an ice sheet's grounded ice),
+    # and the mask values (basin numbers) inside the area. Used by crossover parameters
+    mask_name: str = ""
+    mask_basins: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class CrossoverConfig:
+    """Crossover processing of a parameter: the differences of its values (heights) where the
+    ascending and descending ground tracks of the cycle cross, in each of its areas (which must
+    have a mask and grid_area) and modes"""
+
+    max_arc_length_m: float = 1000.0  # longest track segment between consecutive measurements
+    min_time_separation_s: float = 1800.0  # excludes near-tangent crossings of the same orbit
+    max_abs_difference: float = 10.0  # larger differences are counted but not valid (outliers)
+    # crossover locations: the measurement locations (POCA), joined into tracks
+    lat: str = "lat_poca_20_ku"
+    lon: str = "lon_poca_20_ku"
+    # 1 Hz nadir latitudes and times, giving the pass direction (ascending / descending)
+    nadir_lat: str = "lat_01"
+    nadir_time: str = "time_cor_01"
 
 
 @dataclass(frozen=True)
@@ -160,11 +181,21 @@ class GridConfig:
     modes: list[str]  # mode selections gridded ([''] when the parameter has no modes)
     statistics: list[GridStatistic]  # the first is the default
     min_count: int = 1  # minimum number of measurements in a cell
+    # statistics of each cell are of the measurements within this radius (0: in the cell)
+    smooth_radius_km: float = 0.0
 
     @property
     def label(self) -> str:
         """display name, ie '10 km grid'"""
         return f"{self.binsize_km:g} km grid"
+
+    @property
+    def cell_text(self) -> str:
+        """the measurements of each cell's statistics, ie 'in each cell' or 'within 20 km of each
+        cell'"""
+        if self.smooth_radius_km > 0:
+            return f"within {self.smooth_radius_km:g} km of each cell"
+        return "in each cell"
 
     def file_suffix(self, stat_id: str) -> str:
         """plot file name suffix of a statistic's maps, ie 'grid10km_median'"""
@@ -192,7 +223,11 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     colour_scales: list[ColourScale] = field(default_factory=list)  # default scale first
     map_modes: list[str] = field(default_factory=list)  # modes with maps (default all modes)
     default_variant: str = ""  # variant shown first in the portal (default the first)
+    # variant shown first for each mode, ie the OCOG retracker in LRM mode (optional)
+    mode_default_variants: dict[str, str] = field(default_factory=dict)
     grid: GridConfig | None = None  # gridded maps and statistics (None: not gridded)
+    crossover: CrossoverConfig | None = None  # crossover differences of the values
+    record_name: str = ""  # what each value is, ie 'crossover' (default: measurement)
     # acquisition modes with valid values: values of other modes are rejected (ie LRM values
     # of parameters only computed in SAR and SARin modes). Empty: every mode
     valid_modes: list[str] = field(default_factory=list)
@@ -374,6 +409,63 @@ def _variant_variable(variant_cfg: dict, context: str) -> str:
     return str(_require(variant_cfg, "variable", context))
 
 
+def _parse_crossover(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    pcfg: dict,
+    context: str,
+    cfg_areas: dict,
+    areas: list[str],
+    ptype: str,
+    variants: list[VariantDef],
+) -> CrossoverConfig | None:
+    """parse and validate a parameter's crossover definition (None if it has none)"""
+    xcfg = pcfg.get("crossover")
+    if xcfg is None:
+        return None
+    if ptype != "float" or variants[0].bit_mask is not None or any(v.derived for v in variants):
+        raise ValueError(f"{context}: crossovers need a float parameter of product variables")
+    for area in areas:
+        if not (cfg_areas[area].mask_name and cfg_areas[area].grid_area):
+            raise ValueError(f"{context}: crossover area {area} needs a mask and grid_area")
+    xcfg = xcfg or {}
+    defaults = CrossoverConfig()
+    return CrossoverConfig(
+        max_arc_length_m=float(xcfg.get("max_arc_length_m", defaults.max_arc_length_m)),
+        min_time_separation_s=float(
+            xcfg.get("min_time_separation_s", defaults.min_time_separation_s)
+        ),
+        max_abs_difference=float(xcfg.get("max_abs_difference", defaults.max_abs_difference)),
+        lat=str(xcfg.get("lat", defaults.lat)),
+        lon=str(xcfg.get("lon", defaults.lon)),
+        nadir_lat=str(xcfg.get("nadir_lat", defaults.nadir_lat)),
+        nadir_time=str(xcfg.get("nadir_time", defaults.nadir_time)),
+    )
+
+
+def _default_variants(
+    pcfg: dict, context: str, variants: list[VariantDef], modes: list[str]
+) -> tuple[str, dict[str, str]]:
+    """the default variant, and the default variant of each mode, of a parameter.
+    default_variant is a variant id, or {mode: variant id} (the first mode's is the default)"""
+    cfg_default = pcfg.get("default_variant", variants[0].id)
+    by_id = {v.id: v for v in variants}
+    mode_defaults: dict[str, str] = {}
+    if isinstance(cfg_default, dict):
+        mode_defaults = {str(m): str(v) for m, v in cfg_default.items()}
+        for mode, variant_id in mode_defaults.items():
+            if mode not in modes:
+                raise ValueError(f"{context}: default_variant mode {mode} is not a parameter mode")
+            if variant_id not in by_id:
+                raise ValueError(f"{context}: default_variant {variant_id} is not a variant id")
+            if by_id[variant_id].valid_modes and mode not in by_id[variant_id].valid_modes:
+                raise ValueError(f"{context}: default_variant {variant_id} is not used in {mode}")
+        default = mode_defaults.get(modes[0] if modes else "", variants[0].id)
+    else:
+        default = str(cfg_default)
+        if default not in by_id:
+            raise ValueError(f"{context}: default_variant {default} is not a variant id")
+    return default, mode_defaults
+
+
 def _parse_grid(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     pcfg: dict,
     context: str,
@@ -420,12 +512,16 @@ def _parse_grid(  # pylint: disable=too-many-arguments,too-many-positional-argum
             raise ValueError(f"{context}: log colour scale of {stat_id} needs a range above 0")
     if not statistics or len({s.id for s in statistics}) != len(statistics):
         raise ValueError(f"{context}: statistics must be unique and not empty")
+    smooth_radius_km = float(gcfg.get("smooth_radius_km", 0.0))
+    if smooth_radius_km > 0 and any(s.id not in SMOOTHED_STATISTICS for s in statistics):
+        raise ValueError(f"{context}: smoothed grids only have statistics {SMOOTHED_STATISTICS}")
     return GridConfig(
         binsize_km=binsize_km,
         areas=areas,
         modes=grid_modes,
         statistics=statistics,
         min_count=int(gcfg.get("min_count", 1)),
+        smooth_radius_km=smooth_radius_km,
     )
 
 
@@ -630,9 +726,8 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
     grid = _parse_grid(pcfg, context, cfg_areas, modes, units, colour_scales[0])
     if grid is not None and (ptype != "float" or variants[0].bit_mask is not None):
         raise ValueError(f"{context}: only float parameters can be gridded")
-    default_variant = str(pcfg.get("default_variant", variants[0].id))
-    if default_variant not in [v.id for v in variants]:
-        raise ValueError(f"{context}: default_variant {default_variant} is not a variant id")
+    crossover = _parse_crossover(pcfg, context, cfg_areas, areas, ptype, variants)
+    default_variant, mode_default_variants = _default_variants(pcfg, context, variants, modes)
 
     return ParameterConfig(
         id=pid,
@@ -652,11 +747,14 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
         colour_scales=colour_scales,
         map_modes=map_modes,
         default_variant=default_variant,
+        mode_default_variants=mode_default_variants,
         grid=grid,
         valid_modes=valid_modes,
         first_baseline=first_baseline,
         value_scale=value_scale,
         invalid_values=invalid_values,
+        crossover=crossover,
+        record_name=str(pcfg.get("record_name", "")),
     )
 
 
@@ -704,6 +802,8 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
             lat_min=float(area.get("lat_min", -90.0)),
             lat_max=float(area.get("lat_max", 90.0)),
             grid_area=str(area.get("grid_area", "")),
+            mask_name=str((area.get("mask") or {}).get("name", "")),
+            mask_basins=tuple(int(b) for b in (area.get("mask") or {}).get("basins") or []),
         )
 
     modes_cfg = _require(cfg, "modes", context)

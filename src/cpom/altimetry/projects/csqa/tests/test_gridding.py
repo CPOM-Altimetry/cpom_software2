@@ -61,6 +61,36 @@ def test_grid_statistics():
         grid_measurements("arctic", 10000, lats, lons, vals, ["mode"])
 
 
+def test_smoothed_grid():
+    """smoothed grids: statistics of the measurements within a radius of each cell"""
+    grid = get_grid_area("antarctica", 10000)
+    lats, lons = _cell_points(grid, 200, 200, 1)
+    lats2, lons2 = _cell_points(grid, 202, 200, 1)  # 20 km away
+    lats3, lons3 = _cell_points(grid, 230, 230, 1)  # far away
+    gridded = grid_measurements(
+        "antarctica",
+        10000,
+        np.concatenate((lats, lats2, lats3)),
+        np.concatenate((lons, lons2, lons3)),
+        np.array([1.0, 3.0, 10.0]),
+        ["mean", "count", "std"],
+        smooth_radius_m=20000,
+    )
+    ncols = grid.get_ncols_nrows()[0]
+    by_cell = dict(zip(gridded.cells, range(gridded.cells.size)))
+    # the cell between the first two measurements has both within 20 km
+    mid = by_cell[200 * ncols + 201]
+    assert gridded.values["count"][mid] == 2 and gridded.values["mean"][mid] == 2.0
+    assert np.isclose(gridded.values["std"][mid], 1.0)
+    # 13 cells (centres within 2 cells) around the isolated measurement
+    far = [c for c in gridded.cells if abs(c // ncols - 230) <= 2 and abs(c % ncols - 230) <= 2]
+    assert len(far) == 13
+    assert np.all(gridded.values["mean"][[by_cell[c] for c in far]] == 10.0)
+    assert gridded.n_records == 3
+    with pytest.raises(ValueError, match="smoothed"):
+        grid_measurements("antarctica", 10000, lats, lons, np.ones(1), ["median"], 1, 20000)
+
+
 def test_no_measurements():
     """a selection without valid measurements has no cells"""
     gridded = grid_measurements(
