@@ -27,6 +27,8 @@ products:
     dirs:
       - /raid6/cpdata/SATS/RA/CRY/L2/GDR-A
     file_glob: "CS_*_SIR_GDR_2__*.nc"
+    file_types:
+      SIR_GDR_2_: "GDR-A"
   L2I:
     long_name: "L2i (LRM, SAR, SARin)"
     dirs:
@@ -34,6 +36,18 @@ products:
       - /raid6/cpdata/SATS/RA/CRY/L2I/SAR-A
       - /raid6/cpdata/SATS/RA/CRY/L2I/SIN
     file_glob: "CS_*_SIR_*I2__*.nc"
+    # display names of the file types (one per SIRAL mode)
+    file_types:
+      SIR_LRMI2_: "LRM"
+      SIR_SARI2_: "SAR"
+      SIR_SINI2_: "SARin"
+
+# Availability of the most recent input products (portal Data Availability page): files per
+# acquisition day over the most recent <days> days of data, ending with the latest data found
+# in the last <search_days> days
+availability:
+  days: 30
+  search_days: 120
 
 # When the same product granule exists more than once for a baseline, the highest version is
 # used, and for equal versions the processing stage listed first here is preferred

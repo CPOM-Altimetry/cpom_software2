@@ -70,6 +70,8 @@ class ProductConfig:
     long_name: str
     dirs: list[str]
     file_glob: str
+    # display names of the product's file types, ie {SIR_LRMI2_: LRM} (data availability)
+    file_type_labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -297,6 +299,10 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     surface_values: dict[str, int] = field(default_factory=dict)
     mode_surfaces: dict[str, ModeSurface] = field(default_factory=dict)
     pass_selections: dict[str, PassSelection] = field(default_factory=dict)
+    # data availability page: files per day of the most recent days of data, searched for in
+    # the last search_days days
+    availability_days: int = 30
+    availability_search_days: int = 120
 
     def mode_text(self, param: ParameterConfig, mode: str) -> str:
         """a parameter's mode selection as text, ie 'All modes', 'SAR mode', 'LRM Ice',
@@ -794,6 +800,7 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
             long_name=str(prod.get("long_name", prod_id)),
             dirs=[_expand_path(d) for d in _require(prod, "dirs", f"product {prod_id}")],
             file_glob=str(prod.get("file_glob", "*.nc")),
+            file_type_labels={str(k): str(v) for k, v in (prod.get("file_types") or {}).items()},
         )
 
     areas = {}
@@ -895,6 +902,8 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         dpi=int(plots_cfg.get("dpi", 85)),
         webp_quality=int(plots_cfg.get("webp_quality", 80)),
         max_points=int(plots_cfg.get("max_points", 2_000_000)),
+        availability_days=int((cfg.get("availability") or {}).get("days", 30)),
+        availability_search_days=int((cfg.get("availability") or {}).get("search_days", 120)),
         parameters=parameters,
         surface_variable=str(surfaces_cfg.get("variable", "")),
         surface_values=surface_values,

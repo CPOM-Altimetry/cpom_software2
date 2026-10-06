@@ -7,6 +7,8 @@ Build the CSQA portal index from the processed cycle outputs:
         parameter definitions, areas, modes and the processed cycles of each baseline
     <output_dir>/baseline_<B>/timeseries/<param>.csv
         statistics of every processed cycle, one row per cycle/area/variant/mode
+    <output_dir>/availability.json
+        files per acquisition day of the most recent input products (Data Availability page)
     <output_dir>/baseline_<B>/timeseries/<param>_grid.csv
         gridded statistics (of parameters with a grid), one row per
         cycle/area/variant/mode/grid statistic
@@ -26,6 +28,7 @@ import re
 import sys
 
 from cpom.altimetry.projects.csqa import __version__
+from cpom.altimetry.projects.csqa.availability import availability
 from cpom.altimetry.projects.csqa.csqa_config import (
     CsqaConfig,
     ParameterConfig,
@@ -224,6 +227,13 @@ def grid_timeseries_csv(stats_files: list[dict]) -> str:
     return out.getvalue()
 
 
+def write_availability(cfg: CsqaConfig):
+    """write the availability of the most recent input products (portal Data Availability
+    page) to <output_dir>/availability.json"""
+    write_json_atomic(os.path.join(cfg.output_dir, "availability.json"), availability(cfg))
+    log.info("wrote %s", os.path.join(cfg.output_dir, "availability.json"))
+
+
 def build_portal_index(cfg: CsqaConfig) -> dict:
     """Build the portal manifest and statistics timeseries files
 
@@ -316,6 +326,7 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
     }
     write_json_atomic(os.path.join(cfg.output_dir, "manifest.json"), manifest)
     log.info("wrote %s", os.path.join(cfg.output_dir, "manifest.json"))
+    write_availability(cfg)
     return manifest
 
 

@@ -44,7 +44,10 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 
-from cpom.altimetry.projects.csqa.build_portal_index import build_portal_index
+from cpom.altimetry.projects.csqa.build_portal_index import (
+    build_portal_index,
+    write_availability,
+)
 from cpom.altimetry.projects.csqa.csqa_config import CsqaConfig, load_config
 from cpom.altimetry.projects.csqa.cycles import CycleCalendar
 from cpom.altimetry.projects.csqa.log_setup import init_worker, setup_logging
@@ -406,8 +409,12 @@ def main(args: list[str] | None = None) -> int:
             ),
         )
 
-    if not parsed.no_index and (n_status["processed"] > 0 or not parsed.update):
-        build_portal_index(cfg)
+    if not parsed.no_index:
+        if n_status["processed"] > 0 or not parsed.update:
+            build_portal_index(cfg)
+        else:
+            # no outputs changed: only the availability of the input data may have
+            write_availability(cfg)
 
     return 1 if n_status["error"] > 0 else 0
 
