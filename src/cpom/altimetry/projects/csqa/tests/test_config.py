@@ -6,6 +6,7 @@ from datetime import datetime
 import pytest
 import yaml  # type: ignore[import-untyped]
 
+from cpom.altimetry.projects.csqa.build_portal_index import ordered_parameters
 from cpom.altimetry.projects.csqa.csqa_config import load_config, sanitize_key
 from cpom.altimetry.projects.csqa.plotting import plot_filename
 from cpom.altimetry.projects.csqa.processing import has_maps, params_to_process
@@ -378,6 +379,25 @@ def test_crossover_parameter(tmp_path, default_config):
         | {"modes": ["lrm", "sarin"], "default_variant": {"lrm": "b", "sarin": "b"}}
     }
     with pytest.raises(ValueError, match="b is not used in sarin"):
+        load_config(_config_with_parameters(tmp_path, cfg, params))
+
+
+def test_parameter_groups(tmp_path, default_config):
+    """parameters are grouped by theme in the portal menu: by product, theme, then config"""
+    cfg = default_config
+    assert list(cfg.parameter_groups) == ["general", "land_ice", "sea_ice", "derived"]
+    assert cfg.parameters["freeboard"].group == "sea_ice"
+    assert cfg.parameters["crossovers"].group == "derived"
+    ordered = [p.id for p in ordered_parameters(cfg)]
+    l2 = [pid for pid in ordered if cfg.parameters[pid].source == "GDR-A"]
+    groups = [cfg.parameters[pid].group for pid in l2]
+    assert groups == sorted(groups, key=list(cfg.parameter_groups).index)
+    assert l2[0] == "acquisition_mode" and l2[-1] == "crossovers"
+    # GDR-A parameters before L2i ones
+    assert {cfg.parameters[pid].source for pid in ordered[len(l2) :]} == {"L2I"}
+
+    params = {"bad": {"source": "GDR-A", "type": "float", "variable": "x", "group": "ocean"}}
+    with pytest.raises(ValueError, match="group ocean"):
         load_config(_config_with_parameters(tmp_path, cfg, params))
 
 

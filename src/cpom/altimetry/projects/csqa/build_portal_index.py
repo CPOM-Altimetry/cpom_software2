@@ -66,6 +66,8 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
         "long_name": param.long_name,
         "description": param.description,
         "source": param.source,
+        # theme of the parameter in the portal menu
+        "group": param.group,
         "type": param.type,
         "units": param.units,
         "variant_label": param.variant_label,
@@ -132,6 +134,20 @@ def parameter_manifest(param: ParameterConfig, cfg: CsqaConfig) -> dict:
         "first_baseline": param.first_baseline,
         "image_format": cfg.image_format,
     }
+
+
+def ordered_parameters(cfg: CsqaConfig) -> list[ParameterConfig]:
+    """the parameters in portal menu order: by input product, then theme (both in their
+    configured orders; parameters without a theme last), then in the configured order"""
+    products = list(cfg.products)
+    groups = list(cfg.parameter_groups)
+    params = list(cfg.parameters.values())
+
+    def key(param: ParameterConfig) -> tuple[int, int, int]:
+        group = groups.index(param.group) if param.group in groups else len(groups)
+        return products.index(param.source), group, params.index(param)
+
+    return sorted(params, key=key)
 
 
 def mode_manifest(cfg: CsqaConfig, mode: str, label: str) -> dict:
@@ -320,7 +336,9 @@ def build_portal_index(cfg: CsqaConfig) -> dict:
         # modes, 'all' and the mode surface selections (with their mode and surface types)
         "modes": [mode_manifest(cfg, k, v) for k, v in cfg.mode_labels.items()],
         "products": {p.id: p.long_name for p in cfg.products.values()},
-        "parameters": [parameter_manifest(p, cfg) for p in cfg.parameters.values()],
+        "parameter_groups": [{"id": k, "label": v} for k, v in cfg.parameter_groups.items()],
+        # by input product, theme (in the configured orders), then as configured
+        "parameters": [parameter_manifest(p, cfg) for p in ordered_parameters(cfg)],
         # newest baseline first
         "baselines": sorted(baselines, key=lambda b: b["id"], reverse=True),
     }

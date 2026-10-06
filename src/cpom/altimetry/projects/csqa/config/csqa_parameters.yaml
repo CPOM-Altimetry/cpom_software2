@@ -5,6 +5,7 @@
 # variant and acquisition mode where configured) plus statistics per area/variant/mode.
 #
 #   long_name   : display name (portal menu and plot titles)
+#   group       : theme of the parameter in the portal menu (csqa_config.yaml:parameter_groups)
 #   description : text shown on the portal parameter page
 #   source      : input product id, as in csqa_config.yaml:products
 #   type        : flag  -> statistics are the % of each flag value
@@ -71,6 +72,7 @@
 parameters:
   acquisition_mode:
     long_name: "SIRAL Acquisition Mode"
+    group: general
     description: >-
       Instrument measurement mode of each 20 Hz measurement, derived from the configuration bits
       in the L0 data: Low Resolution Mode (LRM), Synthetic Aperture Radar mode (SAR) and SAR
@@ -87,6 +89,7 @@ parameters:
 
   surface_type:
     long_name: "Surface Type"
+    group: general
     description: >-
       Four-state surface type mask at the measurement location, computed by combining data from
       GMT, GlobCover, the MODIS Mosaic of Antarctica and water body outlines from LEGOS.
@@ -102,6 +105,7 @@ parameters:
 
   height:
     long_name: "Surface Height"
+    group: general
     description: >-
       Surface height above the WGS84 ellipsoid of each 20 Hz measurement for each L2 retracker,
       at the estimated echo location (POCA), with instrumental and geophysical corrections and
@@ -147,6 +151,7 @@ parameters:
 
   ssha:
     long_name: "Sea Surface Height Anomaly"
+    group: sea_ice
     description: >-
       Interpolated sea surface height anomaly (SSHA) of each 20 Hz measurement, computed using
       the sea surface height interpolated to the measurement location. Unused (fill value) in
@@ -169,6 +174,7 @@ parameters:
 
   backscatter:
     long_name: "Backscatter (Sigma0)"
+    group: general
     description: >-
       Backscatter coefficient of each 20 Hz measurement for each L2 retracker, corrected for
       instrument effects and including a system bias. In SAR and SARin modes the retracker 1
@@ -200,6 +206,7 @@ parameters:
 
   quality_flags:
     long_name: "Quality Flags"
+    group: general
     description: >-
       The 20 Hz L2 quality flag word: bits giving the ground segment's assessment of the quality
       of each measurement's parameters, and the surface type discriminated by the SAR processing
@@ -257,6 +264,7 @@ parameters:
 
   geophysical_corrections:
     long_name: "Geophysical Corrections"
+    group: general
     description: >-
       The atmospheric and geophysical range corrections at 1 Hz. These are 1-way corrections that
       are added to the range (or subtracted from the height); flag_cor_applied_20_ku shows which
@@ -321,6 +329,7 @@ parameters:
 
   mispointing:
     long_name: "Mispointing Angle"
+    group: general
     description: >-
       Antenna mispointing angle at 1 Hz: the angle between the antenna boresight and the nadir
       direction, which should nominally be zero. It is derived from the antenna bench roll and
@@ -361,6 +370,7 @@ parameters:
 
   peakiness:
     long_name: "Waveform Peakiness"
+    group: general
     description: >-
       Waveform peakiness of each 20 Hz measurement: the ratio of the maximum power in the
       waveform to the average power of the waveform to the right of the expected leading edge
@@ -384,6 +394,7 @@ parameters:
 
   snow_depth:
     long_name: "Snow Depth"
+    group: sea_ice
     description: >-
       Snow depth at 1 Hz. Baseline-E: modified Warren climatology (Arctic only). Baseline-F:
       computed from CryoTEMPO Baseline-C radar freeboard and ICESat-2 ATL10 lidar freeboard.
@@ -399,6 +410,7 @@ parameters:
 
   snow_density:
     long_name: "Snow Density"
+    group: sea_ice
     description: >-
       Snow density at 1 Hz. Baseline-E: a fixed average value for all records. Baseline-F:
       interpolated from a monthly model file. Unused (fill value) in LRM mode.
@@ -413,6 +425,7 @@ parameters:
 
   sea_ice_concentration:
     long_name: "Sea Ice Concentration"
+    group: sea_ice
     description: >-
       Sea ice concentration (sea ice area fraction) at 1 Hz. Baseline-E: derived from NSIDC
       SSM/I data. Baseline-F: derived from NSIDC-0081 (before July 2025) or OSI-408-a data.
@@ -428,6 +441,7 @@ parameters:
 
   freeboard:
     long_name: "Radar Freeboard"
+    group: sea_ice
     description: >-
       Radar freeboard of each 20 Hz measurement: the height of the radar scattering horizon above
       the local sea surface, from the sea ice processing of SAR and SARin mode measurements (fill
@@ -470,6 +484,7 @@ parameters:
 
   sea_ice_freeboard:
     long_name: "Sea Ice Freeboard"
+    group: sea_ice
     description: >-
       Sea ice freeboard of each 20 Hz measurement (Baseline-F onwards): the height of the
       snow-ice interface above the local sea surface, computed as the radar freeboard plus the
@@ -495,6 +510,7 @@ parameters:
 
   sea_ice_thickness:
     long_name: "Sea Ice Thickness"
+    group: sea_ice
     description: >-
       Sea ice thickness of each 20 Hz measurement (Baseline-F onwards), computed from the sea ice
       freeboard, the snow depth and density, and the sea water and sea ice densities, assuming
@@ -528,6 +544,7 @@ parameters:
 
   crossovers:
     long_name: "Crossover Height Differences"
+    group: derived
     description: >-
       Single cycle crossover height differences over the Antarctic and Greenland ice sheets
       (grounded ice of the BedMachine masks): the difference between the heights of the

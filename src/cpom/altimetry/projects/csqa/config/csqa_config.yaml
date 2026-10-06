@@ -62,6 +62,14 @@ default_coordinates:
 # Output directory for plots, statistics and the portal index (outside the web root)
 output_dir: /raid6/www/csqa_data
 
+# Themes grouping the parameters of each input product in the portal menu, in display order
+# (parameters:<id>:group). Themes without parameters are not shown
+parameter_groups:
+  general: "General"
+  land_ice: "Land Ice"
+  sea_ice: "Sea Ice"
+  derived: "Derived"
+
 # Parameter definitions (path relative to this file's directory, or absolute)
 parameters_file: csqa_parameters.yaml
 

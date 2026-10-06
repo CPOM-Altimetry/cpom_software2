@@ -232,6 +232,7 @@ class ParameterConfig:  # pylint: disable=too-many-instance-attributes
     grid: GridConfig | None = None  # gridded maps and statistics (None: not gridded)
     crossover: CrossoverConfig | None = None  # crossover differences of the values
     record_name: str = ""  # what each value is, ie 'crossover' (default: measurement)
+    group: str = ""  # theme of the parameter in the portal menu ('' for none)
     # acquisition modes with valid values: values of other modes are rejected (ie LRM values
     # of parameters only computed in SAR and SARin modes). Empty: every mode
     valid_modes: list[str] = field(default_factory=list)
@@ -299,6 +300,8 @@ class CsqaConfig:  # pylint: disable=too-many-instance-attributes
     surface_values: dict[str, int] = field(default_factory=dict)
     mode_surfaces: dict[str, ModeSurface] = field(default_factory=dict)
     pass_selections: dict[str, PassSelection] = field(default_factory=dict)
+    # themes grouping the parameters in the portal menu (id -> label, in display order)
+    parameter_groups: dict[str, str] = field(default_factory=dict)
     # data availability page: files per day of the most recent days of data, searched for in
     # the last search_days days
     availability_days: int = 30
@@ -764,6 +767,7 @@ def _parse_parameter(  # pylint: disable=too-many-arguments,too-many-positional-
         invalid_values=invalid_values,
         crossover=crossover,
         record_name=str(pcfg.get("record_name", "")),
+        group=str(pcfg.get("group", "")),
     )
 
 
@@ -875,7 +879,10 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
     parameters = {}
     for pid, pcfg in _require(params_cfg, "parameters", params_file).items():
         parameters[pid] = _parse_parameter(pid, pcfg, areas, all_labels, products, set(mode_values))
+    parameter_groups = {str(k): str(v) for k, v in (cfg.get("parameter_groups") or {}).items()}
     for param in parameters.values():
+        if param.group and param.group not in parameter_groups:
+            raise ValueError(f"parameter {param.id}: group {param.group} not in parameter_groups")
         # gridded statistics timeseries are saved as <param>_grid.csv
         if param.grid is not None and f"{param.id}_grid" in parameters:
             raise ValueError(f"parameter id {param.id}_grid clashes with {param.id}'s grid")
@@ -902,6 +909,7 @@ def load_config(config_file: str | None = None) -> CsqaConfig:
         dpi=int(plots_cfg.get("dpi", 85)),
         webp_quality=int(plots_cfg.get("webp_quality", 80)),
         max_points=int(plots_cfg.get("max_points", 2_000_000)),
+        parameter_groups=parameter_groups,
         availability_days=int((cfg.get("availability") or {}).get("days", 30)),
         availability_search_days=int((cfg.get("availability") or {}).get("search_days", 120)),
         parameters=parameters,
