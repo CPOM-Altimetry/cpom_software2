@@ -1,9 +1,9 @@
 #
-mission : cs2
-long_name : "CryoTEMPO Land Ice Dataset"
+mission: cs2
+long_name: "CryoTEMPO Land Ice Dataset"
 file_backend: "netcdf4"
-dataset_epoch : "2000-01-01T00:00:00"
-search_pattern :  "**/CS_OFFL_SIR_TDP_LI*.nc"
+dataset_epoch: "2000-01-01T00:00:00"
+search_pattern: "**/CS_OFFL_SIR_TDP_LI*.nc"
 yyyymm_str_fname_indices: [-48, -40]
 latitude_param: "latitude"
 longitude_param: "longitude"
