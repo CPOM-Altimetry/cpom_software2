@@ -34,9 +34,13 @@ log = logging.getLogger(__name__)
 #   - add to this list if you add a new slopes in the slopes class
 slope_list = [
     "rema_100m_900ws_slopes_zarr",  # slope calculated from REMA 100m
-    # (900m width) [J.Phillips,Lancs]
+    # (900m width) using std [J.Phillips,Lancs],
+    "rema_100m_slope_svd_9x9_zarr",  # slope calculated from REMA 100m
+    # (900m width) V2 using range(min-max)[J.Phillips,Lancs],
     "arcticdem_100m_900ws_slopes_zarr",  # slope calculated from ArcticDEM 100m
-    # (900m width) [J.Phillips,Lancs]
+    # (900m width) using std [J.Phillips,Lancs],
+    "arcticdem_cropped_100m_slope_svd_9x9_zarr",  # slope calculated from ArcticDEM 100m
+    # (900m width) V2 using range(min-max) [J.Phillips,Lancs],
     "awi_grn_2013_1km_slopes",  # Greenland slopes from AWI/CryoSat at 1km
     "cpom_ant_2018_1km_slopes",  # Antarctic slope at 1km from Slater (2018)/CPOM
 ]
@@ -375,7 +379,7 @@ class Slopes:
 
         # --------------------------------------------------------------------------------
         if self.name == "rema_100m_900ws_slopes_zarr":
-            # Slopes calculated from REMA DEM by J.Phillips (CPOM/Lancs),
+            # Slopes calculated from REMA DEM using std by J.Phillips (CPOM/Lancs),
             # converted to Zarr (A.Muir)
             filename = "REMA_Slope_100m_900ws.zarr"
             filled_filename = "REMA_Slope_100m_900ws.zarr"
@@ -392,8 +396,25 @@ class Slopes:
             self.dtype = np.float32
             self.reference_year = 2010  # YYYY, the year the slopes's elevations are referenced to
             self.zarr_type = True  # from a Zarr file type
+        elif self.name == "rema_100m_slope_svd_9x9_zarr":
+            # Slopes calculated from REMA DEM V2 using range(min-max) by J.Phillips (CPOM/Lancs).
+            filename = "rema_100m_roughness_range_svd_9x9.zarr"
+            filled_filename = "rema_100m_roughness_range_svd_9x9.zarr"
+            # default_dir can be modified in class init
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness/V2'
+            self.src_url = "TBD"  # Add REMA src URL
+            self.src_url_filled = "TBD"  # Add REMA src URL
+            self.slopes_version = "2.0"
+            self.src_institute = "CPOM/PGC"
+            self.long_name = "Surface slope at 100m from REMA with SVD smoothing"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = -9999
+            self.dtype = np.float32
+            self.reference_year = 2010  # YYYY, the year the slopes's elevations are referenced to
+            self.zarr_type = True
         elif self.name == "arcticdem_100m_900ws_slopes_zarr":
-            # Slopes calculated from ArcticDEM by J.Phillips (CPOM/Lancs),
+            # Slopes calculated from ArcticDEM using std by J.Phillips (CPOM/Lancs),
             # converted to Zarr (A.Muir)
             filename = "ArcticDEM_Slope_100m_900ws.zarr"
             filled_filename = "ArcticDEM_Slope_100m_900ws.zarr"
@@ -409,6 +430,23 @@ class Slopes:
             self.void_value = -9999
             self.dtype = np.float32
             self.reference_year = 2010  # YYYY, the year the slopes's elevations are referenced to
+            self.zarr_type = True
+        elif self.name == "arcticdem_cropped_100m_slope_svd_9x9_zarr":
+            # Slopes calculated from ArcticDEM using range(min-max) by J.Phillips (CPOM/Lancs),
+            # converted to Zarr (A.Muir)
+            filename = "arcticdem_cropped_100m_slope_svd_9x9.zarr"
+            filled_filename = "arcticdem_cropped_100m_slope_svd_9x9.zarr"
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness/V2'
+            self.src_url = "TBD"
+            self.src_url_filled = "TBD"
+            self.slopes_version = "2.0"
+            self.src_institute = "PGC"
+            self.long_name = "slopes from cropped ArcticDEM with SVD smoothing"
+            self.crs_bng = CRS("epsg:3413")
+            self.southern_hemisphere = False
+            self.void_value = -9999
+            self.dtype = np.float32
+            self.reference_year = 2010
             self.zarr_type = True
         elif self.name == "cpom_ant_2018_1km_slopes":
             filename = "Antarctica_Cryosat2_1km_DEMv1.0_slope.unpacked.tif"

@@ -33,8 +33,12 @@ log = logging.getLogger(__name__)
 #   - add to this list if you add a new roughness in the roughness class
 roughness_list = [
     "rema_100m_900ws_roughness_zarr",  # Roughness calculated from REMA 100m
-    # (900m width) [J.Phillips,Lancs]
+    # (900m width) using std  [J.Phillips,Lancs]
+    "rema_100m_roughness_range_svd_9x9_zarr",  # Roughness calculated from REMA 100m
+    # (900m width) using range(min-max) [J.Phillips,Lancs],
     "arcticdem_100m_900ws_roughness_zarr",  # Roughness calculated from ArcticDEM 100m
+    "arcticdem_cropped_100m_roughness_range_svd_9x9_zarr",
+    # Roughness calculated from ArcticDEM 100m
 ]
 
 
@@ -357,6 +361,26 @@ class Roughness:
                 2010  # YYYY, the year the roughness's elevations are referenced to
             )
             self.zarr_type = True  # from a Zarr file type
+        elif self.name == "rema_100m_roughness_range_svd_9x9_zarr":
+            # roughness calculated from REMA DEM by J.Phillips (CPOM/Lancs),
+            # V2 using range(min-max), converted to Zarr (A.Muir)
+            filename = "rema_100m_roughness_range_svd_9x9.zarr"
+            filled_filename = "rema_100m_roughness_range_svd_9x9.zarr"
+            # default_dir can be modified in class init
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness/V2'
+            self.src_url = "TBD"  # Add REMA src URL
+            self.src_url_filled = "TBD"  # Add REMA src URL
+            self.roughness_version = "2.0"
+            self.src_institute = "CPOM/PGC"
+            self.long_name = "Surface Roughness at 100m from REMA using SVD of slope"
+            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
+            self.southern_hemisphere = True
+            self.void_value = -9999
+            self.dtype = np.float32
+            self.reference_year = (
+                2010  # YYYY, the year the roughness's elevations are referenced to
+            )
+            self.zarr_type = True
         elif self.name == "arcticdem_100m_900ws_roughness_zarr":
             # roughness calculated from ArcticDEM by J.Phillips (CPOM/Lancs),
             # converted to Zarr (A.Muir)
@@ -377,7 +401,25 @@ class Roughness:
                 2010  # YYYY, the year the roughness's elevations are referenced to
             )
             self.zarr_type = True
-
+        elif self.name == "arcticdem_cropped_100m_roughness_range_svd_9x9_zarr":
+            # roughness calculated from cropped ArcticDEM by J.Phillips (CPOM/Lancs),
+            # V2, converted to Zarr (A.Muir)
+            filename = "arcticdem_cropped_100m_roughness_range_svd_9x9.zarr"
+            filled_filename = "arcticdem_cropped_100m_roughness_range_svd_9x9.zarr"
+            default_dir = f'{os.environ["CPDATA_DIR"]}/SATS/RA/DEMS/slope_and_roughness/V2'
+            self.src_url = "TBD"
+            self.src_url_filled = "TBD"
+            self.roughness_version = "2.0"
+            self.src_institute = "PGC"
+            self.long_name = "roughness from ArcticDEM"
+            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -lat of origin 70N, 45
+            self.southern_hemisphere = False
+            self.void_value = -9999
+            self.dtype = np.float32
+            self.reference_year = (
+                2010  # YYYY, the year the roughness's elevations are referenced to
+            )
+            self.zarr_type = True
         else:
             raise ValueError(f"{self.name} does not have load support")
 
