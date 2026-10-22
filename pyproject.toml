@@ -37,7 +37,6 @@ statsmodels = "^0.14.6"
 envyaml = "^1.10.211231"
 cmocean = "^4.0.3"
 global-land-mask = "^1.0.0"
-tifffile = ">=2024.1.30"
 imagecodecs = ">=2024.1.1"
 
 [tool.poetry.group.dev.dependencies]
