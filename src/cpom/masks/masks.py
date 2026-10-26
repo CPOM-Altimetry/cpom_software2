@@ -120,6 +120,8 @@ class Mask:
         self.minxm = 0
         self.xlimits: list[float] = []
         self.ylimits: list[float] = []
+        self.shapefile_path = None
+        self.shapefile_column_name = None
 
         self.crs_wgs = CRS("epsg:4326")  # assuming you're using WGS84 geographic
 
