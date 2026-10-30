@@ -8,6 +8,7 @@ TODO: grid support
 
 import io
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import List, Tuple, Union
@@ -90,6 +91,54 @@ def calculate_mad(values: np.ndarray):
     absolute_deviations = np.abs(values_np - mean_value)
     mad = np.mean(absolute_deviations)
     return mad
+
+
+def log_scale_ticks(vmin: float, vmax: float, decades_only: bool = False) -> list[float]:
+    """Ticks of a logarithmic scale: 1, 2 and 5 x 10^n (or only 10^n) within [vmin, vmax]
+
+    Args:
+        vmin (float): minimum of the scale (> 0)
+        vmax (float): maximum of the scale
+        decades_only (bool): only 10^n ticks (for small axes)
+
+    Returns:
+        list[float]: tick values, ie [0.5, 1, 2, 5, 10, 20, 50, 100, 200]
+    """
+    first, last = math.floor(math.log10(vmin)), math.ceil(math.log10(vmax))
+    mantissas = (1,) if decades_only else (1, 2, 5)
+    ticks = [round(m * 10.0**e, 12) for e in range(first, last + 1) for m in mantissas]
+    return [t for t in ticks if vmin <= t <= vmax]
+
+
+def positive_log_min(vmin: float, vals: np.ndarray) -> float:
+    """minimum of a logarithmic colour scale: vmin, or if vmin <= 0 the smallest positive value"""
+    if vmin > 0:
+        return vmin
+    positive = vals[vals > 0]
+    new_min = float(np.nanmin(positive)) if positive.size else 1.0
+    log.warning("log colour scale minimum %s <= 0: using %s", vmin, new_min)
+    return new_min
+
+
+def calculate_display_stats(values: np.ndarray) -> dict:
+    """Calculate the statistics drawn by Polarplot.draw_stats()
+
+    Args:
+        values (np.ndarray): values (after NaN and fill value filtering)
+
+    Returns:
+        dict: nvals, min, max, mean, median, std, mad
+    """
+    values_np = np.asarray(values)
+    return {
+        "nvals": int(values_np.size),
+        "min": float(np.min(values_np)),
+        "max": float(np.max(values_np)),
+        "mean": float(np.mean(values_np)),
+        "median": float(np.median(values_np)),
+        "std": float(np.std(values_np)),
+        "mad": float(calculate_mad(values_np)),
+    }
 
 
 @dataclass
@@ -193,8 +242,28 @@ class Polarplot:
                                                 # colorbar : {'neither', 'both', 'min', 'max'}
               "min_plot_range": None,           # Optional: Min range for colorbar
               "max_plot_range": None,           # Optional: Max range for colorbar
+              "cmap_log": False,                # Optional: logarithmic colour scale (the plot
+                                                # range must be > 0). Values <= 0 are drawn in
+                                                # the under colour
               "plot_size_scale_factor": 1.0,    # Optional: Marker size scale factor
               "plot_alpha": 1.0,                # Optional: Marker transparency (0 to 1)
+              "stats": None,                    # Optional: statistics drawn instead of those
+                                                # of the plotted vals (ie of the full resolution
+                                                # values when only a subsample is plotted). A dict
+                                                # as returned by calculate_display_stats()
+              "flag_percents": None,            # Optional: % of each flag value (in flag_values
+                                                # order) drawn instead of those of the plotted vals
+              "bad_data_percents": None,        # Optional: {"valid": %, "nan": %} of all the
+                                                # data, drawn on the bad data mini-map instead of
+                                                # those of the plotted vals (ie when the valid and
+                                                # Nan values are subsampled differently)
+              "grid": None,                    # Optional: draw the map as a grid of cells
+                                                # instead of points: a dict with "x_edges" (nx+1),
+                                                # "y_edges" (ny+1) cell edges (m) in projection
+                                                # "epsg" and "values" (ny, nx), NaN where empty.
+                                                # lats, lons, vals are then the centres and values
+                                                # of the cells with data (for the histograms and
+                                                # statistics). Not for flag data
           }
           ```
 
@@ -755,6 +824,11 @@ class Polarplot:
 
                 percent_valid = np.mean(valid_vals_bool) * 100.0
 
+                # % valid and Nan of all the data, when the data plotted are a subsample
+                bad_data_percents = data_set.get("bad_data_percents") or {}
+                percent_valid = bad_data_percents.get("valid", percent_valid)
+                percent_nan = bad_data_percents.get("nan", percent_nan)
+
                 # ------------------------------------------------------------------------------
                 # Plot data
                 # ------------------------------------------------------------------------------
@@ -772,6 +846,7 @@ class Polarplot:
                         "cmap_extend": data_set.get("cmap_extend", self.thisarea.cmap_extend),
                         "min_plot_range": data_set.get("min_plot_range", np.nanmin(vals)),
                         "max_plot_range": data_set.get("max_plot_range", np.nanmax(vals)),
+                        "log": bool(data_set.get("cmap_log", False)),
                     }
 
                     if is_flag_data:
@@ -794,6 +869,7 @@ class Polarplot:
                             cmap_info,
                             data_set.get("plot_size_scale_factor", 1.0),
                             data_set.get("plot_alpha", 1.0),
+                            grid=data_set.get("grid"),
                         )
 
                 # Only draw colorbar and histograms of 1st data set
@@ -824,7 +900,7 @@ class Polarplot:
                                 data_set.get("units", "no units"),
                             )
 
-                            self.draw_stats(cbar, vals)
+                            self.draw_stats(cbar, vals, data_set.get("stats"))
 
                         if self.thisarea.show_histograms:
                             self.draw_histograms(
@@ -835,6 +911,7 @@ class Polarplot:
                                 data_set.get("units", "no units"),
                                 cmap,  # pylint: disable=used-before-assignment
                                 use_cmap=use_cmap_in_hist,
+                                log_scale=bool(data_set.get("cmap_log", False)),
                             )
 
                         if self.thisarea.show_latitude_scatter:
@@ -992,7 +1069,7 @@ class Polarplot:
 
         return fx, fy
 
-    def draw_stats(self, cbar, vals: np.ndarray):
+    def draw_stats(self, cbar, vals: np.ndarray, stats: dict | None = None):
         """plot stats info (min,max,mean,std,MAD,nvals) of vals
            positioned around colorbar axes
 
@@ -1000,15 +1077,22 @@ class Polarplot:
             cbar (Axes): colorbar axes instance
             vals (np.ndarray): values array (after Nan filtering) used to calculate and draw stats
                                info
+            stats (dict|None): precomputed stats to draw instead of those of vals, as returned by
+                               calculate_display_stats()
         """
 
         if self.thisarea.show_stats is False:
             return
+
+        if stats is None:
+            stats = calculate_display_stats(vals)
+        s_nvals, s_min, s_max = stats["nvals"], stats["min"], stats["max"]
+        s_mean, s_median, s_std, s_mad = stats["mean"], stats["median"], stats["std"], stats["mad"]
         # Step 1: Get the colorbar's bounding box in figure coordinates
         bbox = cbar.ax.get_window_extent().transformed(plt.gcf().transFigure.inverted())
 
         if self.thisarea.position_stats_manually:
-            nvals_str = r"$\bf{nvals} $" + f"={len(vals)}"
+            nvals_str = r"$\bf{nvals} $" + f"={s_nvals}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.nvals_position[0],
                 bbox.y1 + self.thisarea.nvals_position[1],
@@ -1016,7 +1100,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            std_str = r"$\bf{stdev} $" + f"={np.std(vals):.2f}"
+            std_str = r"$\bf{stdev} $" + f"={s_std:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.stdev_position[0],
                 bbox.y1 + self.thisarea.stdev_position[1],
@@ -1024,7 +1108,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            min_str = r"$\bf{min} $" + f"={np.min(vals):.2f}"
+            min_str = r"$\bf{min} $" + f"={s_min:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.min_position[0],
                 bbox.y1 + self.thisarea.min_position[1],
@@ -1032,7 +1116,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            max_str = r"$\bf{max} $" + f"={np.max(vals):.2f}"
+            max_str = r"$\bf{max} $" + f"={s_max:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.max_position[0],
                 bbox.y1 + self.thisarea.max_position[1],
@@ -1040,7 +1124,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            mad_str = r"$\bf{MAD} $" + f"={calculate_mad(vals):.2f}"
+            mad_str = r"$\bf{MAD} $" + f"={s_mad:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.mad_position[0],
                 bbox.y1 + self.thisarea.mad_position[1],
@@ -1048,7 +1132,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            median_str = r"$\bf{median} $" + f"={np.median(vals):.2f}"
+            median_str = r"$\bf{median} $" + f"={s_median:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.median_position[0],
                 bbox.y1 + self.thisarea.median_position[1],
@@ -1056,7 +1140,7 @@ class Polarplot:
                 ha="left",
                 va="bottom",
             )
-            mean_str = r"$\bf{mean} $" + f"={np.mean(vals):.2f}"
+            mean_str = r"$\bf{mean} $" + f"={s_mean:.2f}"
             plt.gcf().text(
                 bbox.x0 + self.thisarea.mean_position[0],
                 bbox.y1 + self.thisarea.mean_position[1],
@@ -1074,13 +1158,13 @@ class Polarplot:
             text_x = bbox.x0 + (bbox.width / 2)  # Horizontally centered
 
             # Step 3: Add text to the top and bottom of the colorbar
-            min_str = r"$\bf{min} $" + f"={np.min(vals):.2f}"
-            max_str = r"$\bf{max} $" + f"={np.max(vals):.2f}"
-            mean_str = r"$\bf{mean} $" + f"={np.mean(vals):.2f}"
-            median_str = r"$\bf{median} $" + f"={np.median(vals):.2f}"
-            std_str = r"$\bf{stdev} $" + f"={np.std(vals):.2f}"
-            mad_str = r"$\bf{MAD} $" + f"={calculate_mad(vals):.2f}"
-            nvals_str = r"$\bf{nvals} $" + f"={len(vals)}"
+            min_str = r"$\bf{min} $" + f"={s_min:.2f}"
+            max_str = r"$\bf{max} $" + f"={s_max:.2f}"
+            mean_str = r"$\bf{mean} $" + f"={s_mean:.2f}"
+            median_str = r"$\bf{median} $" + f"={s_median:.2f}"
+            std_str = r"$\bf{stdev} $" + f"={s_std:.2f}"
+            mad_str = r"$\bf{MAD} $" + f"={s_mad:.2f}"
+            nvals_str = r"$\bf{nvals} $" + f"={s_nvals}"
 
             plt.gcf().text(text_x, text_bottom_y, min_str, ha="center", va="top")
             plt.gcf().text(text_x, text_top_y, max_str, ha="center", va="bottom")
@@ -1136,12 +1220,12 @@ class Polarplot:
             text_y = bbox.y0 + (bbox.height / 2)  # Vertically centered
 
             # Step 3: Add text to the left and right of the colorbar
-            min_str = f"min:{np.min(vals):.2f}"
+            min_str = f"min:{s_min:.2f}"
             if len(min_str) > 11:
-                min_str = f"{np.min(vals):.2f}"
-            max_str = f"max:{np.max(vals):.2f}"
+                min_str = f"{s_min:.2f}"
+            max_str = f"max:{s_max:.2f}"
             if len(max_str) > 11:
-                max_str = f"{np.max(vals):.2f}"
+                max_str = f"{s_max:.2f}"
             plt.gcf().text(text_left_x, text_y, min_str, ha="right", va="center")
             plt.gcf().text(text_right_x, text_y, max_str, ha="left", va="center")
             text_y += 0.04
@@ -1150,7 +1234,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{MAD}: $" + f"{calculate_mad(vals):.2f}",
+                r"$\bf{MAD}: $" + f"{s_mad:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1158,7 +1242,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{mean}: $" + f"{np.mean(vals):.2f}",
+                r"$\bf{mean}: $" + f"{s_mean:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1166,7 +1250,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{median}: $" + f"{np.median(vals):.2f}",
+                r"$\bf{median}: $" + f"{s_median:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1174,7 +1258,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{std}: $" + f"{np.std(vals):.2f}",
+                r"$\bf{std}: $" + f"{s_std:.2f}",
                 ha="left",
                 va="center",
             )
@@ -1182,7 +1266,7 @@ class Polarplot:
             plt.gcf().text(
                 text_left_x + self.thisarea.stats_position_x_offset,
                 text_y + self.thisarea.stats_position_y_offset,
-                r"$\bf{nvals}: $" + f"{len(vals)}",
+                r"$\bf{nvals}: $" + f"{s_nvals}",
                 ha="left",
                 va="center",
             )
@@ -1482,6 +1566,7 @@ class Polarplot:
         varunits: str,
         cmap,
         use_cmap=True,
+        log_scale=False,
     ):
         """draw two histograms of plot range and full range
 
@@ -1492,30 +1577,46 @@ class Polarplot:
             max_plot_range (float): maximum plot range
             varunits (str): units of vals
             cmap (_type_): colormap instance
+            use_cmap (bool): colour the plot range histogram with the colormap
+            log_scale (bool): the colour scale is logarithmic: use log spaced bins and a log
+                              axis for the plot range histogram
         """
 
         if len(vals) < 2:
-            log.error("not enough values to create histogram")
+            log.info("not enough values to create histogram: histograms not drawn")
             return
         if np.nanmin(vals) == np.nanmax(vals):
-            log.error("can't create histogram from equal values")
+            log.info("all values are equal: histograms not drawn")
             return
 
         hist_axes = fig.add_axes(
             self.thisarea.histogram_plotrange_axes
         )  # left, bottom, width, height (fractions of axes)
 
+        bins_spec: int | np.ndarray = 120
+        if log_scale:
+            min_plot_range = positive_log_min(min_plot_range, np.asarray(vals))
+            bins_spec = np.geomspace(min_plot_range, max_plot_range, 121)
         _, bins, patches = hist_axes.hist(
             np.array(vals),
-            120,
+            bins_spec,
             range=[min_plot_range, max_plot_range],
             density=1,
             facecolor="darkblue",
             alpha=0.75,
             orientation="horizontal",
         )
-        bin_centers = 0.5 * (bins[:-1] + bins[1:])
-        col = bin_centers - min(bin_centers)
+        if log_scale:
+            hist_axes.set_yscale("log")
+            ticks = log_scale_ticks(min_plot_range, max_plot_range, decades_only=True)
+            hist_axes.set_yticks(ticks)
+            hist_axes.set_yticklabels([f"{t:g}" for t in ticks])
+            hist_axes.minorticks_off()
+            bin_centers = np.sqrt(bins[:-1] * bins[1:])  # geometric centres
+            col = np.log(bin_centers) - np.log(min(bin_centers))
+        else:
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+            col = bin_centers - min(bin_centers)
         col /= max(col)
 
         if use_cmap:
@@ -1526,7 +1627,16 @@ class Polarplot:
         hist_axes.get_xaxis().set_visible(False)
         hist_axes.set_facecolor("white")
 
-        hist_axes.text(0.05, -0.05, "Plot Range", fontsize=10, transform=hist_axes.transAxes)
+        # label a fixed distance below the axes, whatever the axes height
+        hist_axes.annotate(
+            "Plot Range",
+            xy=(0.05, 0.0),
+            xycoords="axes fraction",
+            xytext=(0, -4),
+            textcoords="offset points",
+            va="top",
+            fontsize=10,
+        )
 
         # -----------------------------------------------------------------------------------------
         # Histogram (full range) in single color
@@ -1548,7 +1658,16 @@ class Polarplot:
         hist_axes.set_xticklabels([])
         hist_axes.get_xaxis().set_visible(False)
         hist_axes.set_facecolor("white")
-        hist_axes.text(0.05, -0.05, "Full Range", fontsize=10, transform=hist_axes.transAxes)
+        # label a fixed distance below the axes, whatever the axes height
+        hist_axes.annotate(
+            "Full Range",
+            xy=(0.05, 0.0),
+            xycoords="axes fraction",
+            xytext=(0, -4),
+            textcoords="offset points",
+            va="top",
+            fontsize=10,
+        )
         hist_axes.set_ylabel(f"({varunits})")
 
     def draw_mapscale_bar(self, ax, dataprj):
@@ -1657,6 +1776,12 @@ class Polarplot:
                 orientation="horizontal",
                 extend=dataset.get("cmap_extend", self.thisarea.cmap_extend),
             )
+        if dataset.get("cmap_log"):
+            # plain number ticks (1, 2, 5 x 10^n) instead of the default 10^n labels
+            ticks = log_scale_ticks(scatter.norm.vmin, scatter.norm.vmax)
+            cbar.set_ticks(ticks)
+            cbar.set_ticklabels([f"{t:g}" for t in ticks])
+            cbar.minorticks_off()
         cbar.set_label(f"{varname} ({varunits})")
 
         return cbar
@@ -1718,7 +1843,11 @@ class Polarplot:
 
         number_of_each_flag = []
         percent_of_each_flag = []
+
         total = vals.size
+        # optional precomputed percentages (ie of full resolution values when only a subsample
+        # of vals is plotted)
+        flag_percents = data_set.get("flag_percents")
 
         for flag_index in range(len(flag_names)):
             flagindices = np.flatnonzero(vals == flag_values[flag_index])
@@ -1736,7 +1865,9 @@ class Polarplot:
                 )
 
             number_of_each_flag.append(flagindices.size)
-            if total > 0:
+            if flag_percents is not None:
+                percent_of_each_flag.append(float(flag_percents[flag_index] or 0.0))
+            elif total > 0:
                 percent_of_each_flag.append(100.0 * flagindices.size / total)
             else:
                 percent_of_each_flag.append(0.0)
@@ -1852,6 +1983,7 @@ class Polarplot:
         cmap_info: dict,
         plot_size_scale_factor=1.0,
         plot_alpha=1.0,
+        grid: dict | None = None,
     ):
         """plot lat,lon,vals, data on map
 
@@ -1861,6 +1993,10 @@ class Polarplot:
             lons (np.ndarray): longitude values
             vals (np.ndarray): values to plot
             cmap_info: (dict): colormap info
+            plot_size_scale_factor (float): marker size scale factor
+            plot_alpha (float): marker transparency (0 to 1)
+            grid (dict|None): if set, draw this grid of cells instead of the points:
+                              {"x_edges", "y_edges", "values", "epsg"} (see plot_points)
         """
 
         # load colormap
@@ -1880,7 +2016,31 @@ class Polarplot:
         else:
             vmax = np.nanmax(vals)
         # Normalizer
-        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        norm: mcolors.Normalize
+        if cmap_info.get("log"):
+            norm = mcolors.LogNorm(vmin=positive_log_min(vmin, vals), vmax=vmax)
+            # values <= 0 can not be placed on a log scale: draw them in the under colour
+            if cmap_info["cmap_under_color"] is not None:
+                new_cmap.set_bad(cmap_info["cmap_under_color"])
+        else:
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+        if grid is not None:
+            # empty cells (and values <= 0 on a log scale) are not drawn
+            new_cmap.set_bad((0.0, 0.0, 0.0, 0.0))
+            mesh = ax.pcolormesh(
+                np.asarray(grid["x_edges"]),
+                np.asarray(grid["y_edges"]),
+                np.ma.masked_invalid(np.asarray(grid["values"])),
+                cmap=new_cmap,
+                norm=norm,
+                shading="flat",
+                alpha=plot_alpha,
+                transform=ccrs.epsg(str(grid["epsg"])),
+                zorder=20,
+                rasterized=True,
+            )
+            return mesh, new_cmap
 
         # Default size is 36. Scale up or down
         scale_factor = 36 * plot_size_scale_factor
@@ -2252,11 +2412,6 @@ class Polarplot:
             linewidth (int, optional): line width to use for polygon edges. Defaults to 2.
         """
 
-        print(f"{self.thisarea.centre_lat} {self.thisarea.centre_lon}")
-        xc, yc = self.thisarea.latlon_to_xy(self.thisarea.centre_lat, self.thisarea.centre_lon)
-        print(f"{xc - self.thisarea.width_km * 1000 / 2, xc + self.thisarea.width_km * 1000 / 2}")
-        print(f"{yc - self.thisarea.height_km * 1000 / 2, yc + self.thisarea.height_km * 1000 / 2}")
-
         polygon_color = "red"
         if override_mask_color:
             polygon_color = override_mask_color
@@ -2266,8 +2421,6 @@ class Polarplot:
         if override_mask_display is not None:
             display_polygon_mask = override_mask_display
 
-        print(f"display_polygon_mask {display_polygon_mask}")
-
         # form a polygon from xy limits mask. Only show xy limits polygon for global map where
         # fill is specified
         if (
@@ -2276,7 +2429,7 @@ class Polarplot:
             and display_polygon_mask
             and fill
         ):
-            print("drawing filled xylimits mask...")
+            log.debug("drawing filled xylimits mask...")
 
             x = [
                 self.thisarea.mask.xlimits[0],
@@ -2317,7 +2470,7 @@ class Polarplot:
             and self.thisarea.masktype == "xylimits"
             and display_polygon_mask
         ):
-            print("drawing xylimits mask...")
+            log.debug("drawing xylimits mask...")
             x = [
                 self.thisarea.mask.xlimits[0],
                 self.thisarea.mask.xlimits[1],
@@ -2356,13 +2509,13 @@ class Polarplot:
             and self.thisarea.masktype == "polygon"
             and display_polygon_mask
         ):
-            print("draw mask polygon..")
+            log.debug("draw mask polygon..")
 
             if self.thismask:
-                print("mask found..")
+                log.debug("mask found..")
 
                 if self.thisarea.mask.polygon_lon.any():
-                    print("draw single polygon..")
+                    log.debug("draw single polygon..")
 
                     x, y = self.thisarea.latlon_to_xy(
                         self.thisarea.mask.polygon_lat, self.thisarea.mask.polygon_lon
@@ -2387,7 +2540,7 @@ class Polarplot:
                     ax.add_patch(poly)
 
                 elif self.thismask.polygons_lon:
-                    print("draw multiple polygons..")
+                    log.debug("draw multiple polygons..")
 
                     n_polygons = len(self.thismask.polygons_lon)
                     for pi in range(n_polygons):
@@ -2510,7 +2663,7 @@ class Polarplot:
         # EPSG:3395: World Mercator/ WGS 84
         elif self.thisarea.epsg_number == 3395:
             dataprj = ccrs.epsg("3395")
-            if self.thisarea.name == "global":
+            if "global" in (self.thisarea.name, *self.thisarea.base_area_names):
                 this_projection = ccrs.PlateCarree()
             else:
                 this_projection = ccrs.Mercator()
