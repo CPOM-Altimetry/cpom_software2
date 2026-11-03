@@ -27,6 +27,7 @@ import numpy as np
 import polars as pl
 from matplotlib.tri import LinearTriInterpolator, Triangulation
 
+from cpom.altimetry.datasets.parquet_tools.spatio_temporal import parquet_filter
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
     get_basins_to_process,
@@ -39,7 +40,6 @@ from cpom.altimetry.tools.sec_tools.metadata_helper import (
 )
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
-from cpom.masks.masks import Mask
 
 
 def _parse_optional_float(value: Any) -> float | None:
@@ -645,15 +645,25 @@ def process_target(
     interpolated_lf = get_data_with_xy(interpolated_df.lazy(), ga, logger)
 
     if params.mask:
-        mask_values = [int(v) for v in params.mask_values] if params.mask_values else None
-        masked_lf = Mask(params.mask, basin_numbers=mask_values).points_inside_polars(
-            interpolated_lf.collect()
+        mask_values: list[int | str] | None = (
+            [int(v) for v in params.mask_values] if params.mask_values else None
         )
+        masked_result = (
+            parquet_filter(interpolated_lf, engine="polars")
+            .get_cpom_grid_mask(params.mask, basin_numbers=mask_values)
+            .run()
+        )
+        if isinstance(masked_result, pl.DataFrame):
+            masked_lf = masked_result.lazy()
+        elif isinstance(masked_result, pl.LazyFrame):
+            masked_lf = masked_result
+        else:
+            raise TypeError(
+                f"Expected a Polars frame from parquet_filter, got {type(masked_result)}"
+            )
     else:
         masked_lf = interpolated_lf
 
-    if isinstance(masked_lf, pl.DataFrame):
-        masked_lf = masked_lf.lazy()
     masked_lf.sink_parquet(output_path, compression="zstd")
 
     try:
