@@ -1,58 +1,72 @@
 """Class for area masking"""
 
 import csv
+import glob
 import hashlib
+import importlib
 import logging
+import os
+from collections.abc import Sequence
 from multiprocessing.shared_memory import SharedMemory
-from os import environ
 from os.path import isfile
 from typing import Any, Optional
 
 import numpy as np
 import polars as pl
+from matplotlib.path import Path  # for polygon masking
 from netCDF4 import Dataset  # pylint: disable=E0611
 from pyproj import CRS  # CRS definitions
 from pyproj import Transformer  # for transforming between projections
+
+from cpom.utils.definition_loading_helpers import import_module_from_file
 
 # pylint: disable=R0801
 # pylint: disable=C0302
 
 log = logging.getLogger(__name__)
 
-# list of all supported mask names
-mask_list = [
-    "ase_xylimits_mask",  # rectangular mask for Amundsen Sea Embayment (ASE)
-    "ronne_filchner_xylimits_mask",  # rectangular mask for Ronne Filchner (Antarctica)
-    "trilinear_singular",  # rectangular mask for Greenland
-    "antarctica_bedmachine_v2_grid_mask",  # Antarctic Bedmachine v2 surface type mask
-    "greenland_bedmachine_v3_grid_mask",  # Greenland Bedmachine v3 surface type mask
-    "antarctica_iceandland_dilated_10km_grid_mask",  # Antarctic ice (grounded+floating) and
-    # ice free land mask (source BedMachine v2) ,
-    # dilated by 10km out into the ocean. NetCDF compressed version.
-    "greenland_iceandland_dilated_10km_grid_mask",  # Greenland ice (grounded+floating) and ice free
-    # land mask  (source BedMachine v3) , dilated by
-    # 10km out into the ocean
-    "antarctic_grounded_and_floating_2km_grid_mask",
-    # Antarctic grounded and floating ice, 2km grid, source: Zwally 2012
-    "greenland_icesheet_2km_grid_mask",
-    # Greenland ice sheet grounded ice mask, from 2km grid, source: Zwally 2012. Can select basins
-    "antarctic_icesheet_2km_grid_mask_rignot2016",
-    # Antarctic ice sheet grounded ice mask + islands, from 2km grid, source: Rignot 2016
-    "greenland_icesheet_2km_grid_mask_rignot2016",
-    # Greenland ice sheet grounded ice mask, from 2km grid, source: Rignot 2016. Can select basins
-    "greenland_icesheet_2km_grid_mask_mouginot2019",
-    # Greenland ice sheet grounded ice mask, from 2km grid, source: Mouginot 2019. Can select basins
-    "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers",
-    # Greenland ice sheet grounded ice
-    # + glaciers mask, from 2km grid, source: Mouginot 2019. Can select glaciers
-    "austfonna_xylimits_mask",
-]
-
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-positional-arguments
+
+
+def list_all_mask_definition_names_only(logger=None) -> list[str]:
+    """return a list of all mask definition names (only the names)
+
+    Raises:
+
+    Returns:
+        list[str]
+    """
+
+    if logger is None:
+        logger = logging.getLogger()
+
+    original_level = logger.level
+    logger.setLevel(logging.ERROR)
+
+    try:
+        mask_def_directory = f"{os.environ['CPOM_SOFTWARE_DIR']}/src/cpom/masks/definitions"
+        if not os.path.isdir(mask_def_directory):
+            raise FileNotFoundError(f"{mask_def_directory} not found")
+
+        all_defs = glob.glob(f"{mask_def_directory}/*.py")
+        all_defs = [
+            os.path.basename(thisdef).replace(".py", "")
+            for thisdef in all_defs
+            if "__init__" not in thisdef
+        ]
+
+        final_defs = []
+        for thisdef in all_defs:
+            _ = Mask(thisdef)
+            final_defs.append(thisdef)
+        return sorted(final_defs)
+
+    finally:
+        logger.setLevel(original_level)
 
 
 class Mask:
@@ -62,6 +76,7 @@ class Mask:
         self,
         mask_name: str,
         basin_numbers: Optional[list[int]] = None,
+        mask_filename: Optional[str] = None,
         mask_path: Optional[str] = None,
         store_in_shared_memory: bool = False,
         thislog: logging.Logger | None = None,
@@ -70,9 +85,11 @@ class Mask:
 
         Args:
             mask_name (str): mask name, must be in global mask_list
-            basin_numbers (list[int], optional): list of grid values to select from grid masks.
-            Can use grid value names instead of numbers. If None, all grid values in mask are used.
+            basin_numbers (list[int], optional): list of grid values to select from grid masks
+                                                 def=None
             mask_path (str, optional): override default path of mask data file
+            mask_definition_path (str, optional): uses mask definition found at this path instead of
+                looking in stored definitions
             store_in_shared_memory (bool, optional): stores/access mask array in SharedMemory
             thislog (logging.Logger|None, optional): attach to a different log instance
         """
@@ -88,12 +105,23 @@ class Mask:
         self.shared_mem: Any = None
         self.shared_mem_child = False  # set to True if a child process
         self.polygons = None
-        self.polygons_lon = np.array([])
-        self.polygons_lat = np.array([])
+        self.polygons_lon: list[list[float]] = []
+        self.polygons_lat: list[list[float]] = []
         self.polygon = None
         self.polygon_lon = np.array([])
         self.polygon_lat = np.array([])
         self.mask_type = None  # 'xylimits', 'polygon', 'grid','latlimits'
+
+        # default values
+        self.num_x = 0
+        self.num_y = 0
+        self.binsize = 0
+        self.minym = 0
+        self.minxm = 0
+        self.xlimits: list[float] = []
+        self.ylimits: list[float] = []
+        self.shapefile_path = None
+        self.shapefile_column_name = None
 
         self.crs_wgs = CRS("epsg:4326")  # assuming you're using WGS84 geographic
 
@@ -103,575 +131,18 @@ class Mask:
             self.log = log
 
         # ---------------------------------------------------------------------------
-        # Define the limits,bounds or polygons of each mask
+        # Load mask definition from file
         # ---------------------------------------------------------------------------
 
-        if mask_name not in mask_list:
-            raise ValueError(f"{mask_name} not in supported mask_list")
-
         self.log.info("Setting up %s..", mask_name)
-
-        # -----------------------------------------------------------------------------
-
-        if mask_name == "greenland_area_xylimits_mask":
-            # Greenland rectangular mask for rapid masking
-            self.mask_type = "xylimits"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            self.xlimits = [
-                -630000,
-                904658,
-            ]  # [minx, maxx] in m, in current  coordinate system
-            self.ylimits = [
-                -3355844,
-                -654853,
-            ]  # [miny, maxy] in m, in current  coordinate system
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45W
-
-        elif mask_name == "ase_xylimits_mask":
-            # ASE rectangular mask for rapid masking
-            self.mask_type = "xylimits"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            self.xlimits = [
-                -1996781 - 50000,
-                -1196781 + 50000,
-            ]  # [minx, maxx] in m, in current  coordinate system
-            self.ylimits = [
-                -768646 - 50000,
-                31353 + 50000,
-            ]  # [miny, maxy] in m, in current  coordinate system
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
-
-        elif mask_name == "ronne_filchner_xylimits_mask":
-            # ASE rectangular mask for rapid masking
-            self.mask_type = "xylimits"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            self.xlimits = [
-                -1685615,
-                -390616,
-            ]  # [minx, maxx] in m, in current  coordinate system
-            self.ylimits = [
-                -48143,
-                1246856,
-            ]  # [miny, maxy] in m, in current  coordinate system
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South
-
-        elif mask_name == "austfonna_xylimits_mask":
-            # Rectangular bounding box mask for Austfonna ice cap, Svalbard
-
-            self.mask_type = "xylimits"
-
-            self.xlimits = [984212, 1104825]  # [minx, maxx] in m, +/-10km buffer
-            self.ylimits = [-482786, -323176]  # [miny, maxy] in m, +/-10km buffer
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North
-            self.mask_long_name = "Austfonna RGI ice cap, Svalbard"
-        # -----------------------------------------------------------------------------
-
-        # -----------------------------------------------------------------------------
-
-        elif mask_name == "antarctica_bedmachine_v2_grid_mask":
-            # Antarctica surface type grid mask from BedMachine v2, 500m resolution
-            #    - 0='Ocean', 1='Ice-free land',2='Grounded ice',3='Floating ice',
-            #      4='Lake Vostok'
-            # src=https://nsidc.org/data/nsidc-0756/versions/2
-
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if mask_path is None:
-                mask_file = (
-                    f'{environ["CPDATA_DIR"]}/RESOURCES/surface_discrimination_masks'
-                    "/antarctica/bedmachine_v2/BedMachineAntarctica_2020-07-15_v02.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 13333  # mask dimension in x direction
-            self.num_y = 13333  # mask dimension in y direction
-            self.dtype = np.uint8  # data type used for mask array.
-            # values are 0..4, so using uint8 to reduce memory
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(mask_file, flip=True)
-
-            self.minxm = -3333000
-            self.minym = -3333000
-            self.binsize = 500
-
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South (71S, 0E)
-            self.mask_grid_possible_values = [0, 1, 2, 3, 4]  # values in the mask_grid
-            self.grid_value_names = [
-                "Ocean",
-                "Ice-free land",
-                "Grounded ice",
-                "Floating ice",
-                "Lake Vostok",
-            ]
-            self.grid_colors = ["blue", "brown", "grey", "green", "red"]
-
-            if basin_numbers is not None:
-                if 0 in basin_numbers:
-                    self.mask_long_name += "Ocean"
-                if 1 in basin_numbers:
-                    self.mask_long_name += " Ice-free land"
-                if 2 in basin_numbers:
-                    self.mask_long_name += " Grounded ice"
-                if 3 in basin_numbers:
-                    self.mask_long_name += " Floating ice"
-                if 4 in basin_numbers and 2 not in basin_numbers:
-                    self.mask_long_name += " Lake Vostok"
-                self.mask_long_name += " (bedmachine v2)"
-
-        # -----------------------------------------------------------------------------
-
-        elif mask_name == "greenland_bedmachine_v3_grid_mask":
-            # Greenland surface type grid mask from BedMachine v3, 150m resolution
-            #   - 0='Ocean', 1='Ice-free land',2='Grounded ice',3='Floating ice',
-            #     4='non-Greenland land'
-
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-            # read netcdf file
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPDATA_DIR"]}/RESOURCES/surface_discrimination_masks'
-                    "/greenland/bedmachine_v3/BedMachineGreenland-2017-09-20.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 10218  # mask dimension in x direction
-            self.num_y = 18346  # mask dimension in y direction
-            self.dtype = np.uint8  # data type used for mask array.
-            # values are 0..4, so using uint8 to reduce memory
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(mask_file, flip=True)
-
-            self.binsize = 150
-            self.minxm = -652925
-            self.minym = -632675 - (self.num_y * self.binsize)
-
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - South (70N, 45W)
-            self.mask_grid_possible_values = [0, 1, 2, 3, 4]  # values in the mask_grid
-            self.grid_value_names = [
-                "Ocean",  # 0
-                "Ice-free land",  # 1
-                "Grounded ice",  # 2
-                "Floating ice",  # 3
-                "Non-Greenland land",  # 4
-            ]
-            self.grid_colors = ["blue", "brown", "grey", "green", "white"]
-
-            if basin_numbers is not None:
-                if 0 in basin_numbers:
-                    self.mask_long_name += "Ocean"
-                if 1 in basin_numbers:
-                    self.mask_long_name += " Ice-free land"
-                if 2 in basin_numbers:
-                    self.mask_long_name += " Grounded ice"
-                if 3 in basin_numbers:
-                    self.mask_long_name += " Floating ice"
-                if 4 in basin_numbers:
-                    self.mask_long_name += "Non-Greenland land"
-                self.mask_long_name += " (bedmachine v3)"
-
-        # -----------------------------------------------------------------------------
-        # Antarctica surface type grid mask derived from BedMachine v2, 500m resolution
-        #    - 0='Other', 1='Ice (grounded+floating)+ice-free land, dilated by 10km in to  ocean'
-        elif mask_name == "antarctica_iceandland_dilated_10km_grid_mask":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPDATA_DIR"]}/RESOURCES/surface_discrimination_masks'
-                    "/antarctica/bedmachine_v2/ant_dilated_grid_mask.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError(f"mask file {mask_file} does not exist")
-
-            self.num_x = 13333
-            self.num_y = 13333
-            self.dtype = np.uint8  # data type used for mask array.
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-            self.minxm = -3333000
-            self.minym = -3333000
-            self.binsize = 500  # meters
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South (71S, 0E)
-            self.mask_grid_possible_values = [0, 1]  # values in the mask_grid
-            self.grid_value_names = ["outside", "inside Antarctic dilated mask"]
-            self.grid_colors = ["blue", "darkgrey"]
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="mask")
-
-            self.mask_long_name = "Dilated by 10km in to  Ocean"
-        # -----------------------------------------------------------------------------
-
-        # Greenland surface type grid mask derived from BedMachine v3, 150m resolution
-        #    - 0='Other', 1='Ice (grounded+floating)+ice-free land, dilated by 10km in to  ocean'
-        elif mask_name == "greenland_iceandland_dilated_10km_grid_mask":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPDATA_DIR"]}/RESOURCES/surface_discrimination_masks'
-                    "/greenland/bedmachine_v3/grn_dilated_grid_mask.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError(f"mask file {mask_file} does not exist")
-
-            self.num_x = 10218
-            self.num_y = 18346
-            self.dtype = np.uint8  # data type used for mask array.
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-            self.binsize = 150  # meters
-            self.minxm = -652925
-            self.minym = -3384575
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North (70N, 45W)
-            self.mask_grid_possible_values = [0, 1]  # values in the mask_grid
-            self.grid_value_names = ["outside", "inside Greenland dilated mask"]
-            self.grid_colors = ["blue", "darkgrey"]
-            self.mask_long_name = "Dilated by 10km in to  Ocean"
-
-            with Dataset(mask_file) as nc:
-                self.mask_grid = np.array(nc.variables["mask"][:]).astype("i1")
-            self.mask_grid = np.transpose(self.mask_grid)
-
-        # -----------------------------------------------------------------------------
-
-        elif mask_name == "antarctic_grounded_and_floating_2km_grid_mask":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/antarctica'
-                    "/zwally_2012_imbie1_ant_grounded_and_floating_icesheet_basins/"
-                    "basins/zwally_2012_imbie1_ant_grounded_and_floating_icesheet_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 2820
-            self.num_y = 2420
-            self.dtype = np.uint8
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(
-                mask_file,
-                flip=False,
-                nc_mask_var="ANT_ZWALLY_BASINMASK_INCFLOATING_ICE",
+        try:
+            self._load_mask(
+                mask_filename=mask_filename,
+                mask_path=mask_path,
             )
 
-            self.minxm = -2820000
-            self.minym = -2420000
-            self.binsize = 2000  # km
-
-            self.mask_grid_possible_values = list(range(28))  # values in the mask_grid
-            self.grid_value_names = [f"Basin-{i}" for i in range(28)]
-            self.grid_value_names[0] = "Unknown"
-
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
-            self.mask_long_name = "Zwally grounded and floating ice 2km grid"
-
-        elif mask_name == "greenland_icesheet_2km_grid_mask":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "zwally_2012_grn_icesheet_basins/basins/Zwally_GIS_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 1000
-            self.num_y = 1550
-            self.dtype = np.uint8
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-
-            self.minxm = -1000000
-            self.minym = -3500000
-            self.binsize = 2000
-
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="gre_basin_mask")
-
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
-            self.grid_value_names = [
-                "None",
-                "1.1",
-                "1.2",
-                "1.3",
-                "1.4",
-                "2.1",
-                "2.2",
-                "3.1",
-                "3.2",
-                "3.3",
-                "4.1",
-                "4.2",
-                "4.3",
-                "5.0",
-                "6.1",
-                "6.2",
-                "7.1",
-                "7.2",
-                "8.1",
-                "8.2",
-            ]
-            self.mask_grid_possible_values = list(range(20))  # values in the mask_grid
-            self.grid_colors = [
-                "blue",
-                "bisque",
-                "darkorange",
-                "moccasin",
-                "gold",
-                "greenyellow",
-                "yellowgreen",
-                "gray",
-                "lightgray",
-                "silver",
-                "purple",
-                "sandybrown",
-                "peachpuff",
-                "coral",
-                "tomato",
-                "navy",
-                "lavender",
-                "olivedrab",
-                "lightyellow",
-                "sienna",
-            ]
-            self.mask_long_name = "Zwally grounded and floating ice 2km grid"
-
-        elif mask_name == "antarctic_icesheet_2km_grid_mask_rignot2016":
-            # basin mask values are : 0..18, or 255 (unknown)
-            #
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/antarctica/'
-                    "rignot_2016_imbie2_ant_grounded_icesheet_basins/basins/"
-                    "rignot_2016_imbie2_ant_grounded_icesheet_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 2820
-            self.num_y = 2420
-            self.dtype = np.uint8
-            self.bad_mask_value = 255  # value in unknown grid cells in mask
-
-            self.minxm = -2820000  # meters
-            self.minym = -2420000  # meters
-            self.binsize = 2000  # meters
-
-            self.dtype = np.uint8
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
-
-            self.mask_grid_possible_values = list(range(19))  # values in the mask_grid
-            self.grid_value_names = [
-                "Islands",
-                "West H-Hp",
-                "West F-G",
-                "East E-Ep",
-                "East D-Dp",
-                "East Cp-D",
-                "East B-C",
-                "East A-Ap",
-                "East Jpp-K",
-                "West G-H",
-                "East Dp-E",
-                "East Ap-B",
-                "East C-Cp",
-                "East K-A",
-                "West J-Jpp",
-                "Peninsula Ipp-J",
-                "Peninsula I-Ipp",
-                "Peninsula Hp-I",
-                "West Ep-F",
-            ]
-
-            self.crs_bng = CRS("epsg:3031")  # Polar Stereo - South -71S
-            self.shapefile_path = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/'
-                "antarctica/rignot_2016_imbie2_ant_grounded_icesheet_basins/data/"
-                "/ANT_Basins_IMBIE2_v1.6.shp"
-            )
-            self.shapefile_column_name = "SUBREGION1"
-            self.mask_long_name = "Rignot (2016) 2km grid"
-
-        elif mask_name == "greenland_icesheet_2km_grid_mask_rignot2016":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "GRE_Basins_IMBIE2_v1.3/basins/"
-                    "rignot_2016_imbie2_grn_grounded_icesheet_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 1000
-            self.num_y = 1550
-            self.minxm = -1000000  # meters
-            self.minym = -3500000  # meters
-            self.binsize = 2000  # meters
-            self.dtype = np.uint8
-            self.bad_mask_value = 0  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
-
-            self.mask_grid_possible_values = list(range(57))  # values in the mask_grid
-
-            # 0 (unclassified), 1-50 (ice caps), 51 (NW), 52(CW), 53(SW), 54(SE), 55(NE), 56(NO)
-            self.grid_value_names = ["Ice cap -" + str(i) for i in range(57)]
-            self.grid_value_names[0] = "unclassified"
-            self.grid_value_names[51] = "NW"
-            self.grid_value_names[52] = "CW"
-            self.grid_value_names[53] = "SW"
-            self.grid_value_names[54] = "SE"
-            self.grid_value_names[55] = "NE"
-            self.grid_value_names[56] = "NO"
-
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
-            self.shapefile_path = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                "GRE_Basins_IMBIE2_v1.3/shpfiles/GRE_IceSheet_IMBIE2_v1.3.shp"
-            )
-            self.shapefile_column_name = "SUBREGION1"
-            self.mask_long_name = "Rignot (2016) 2km grid"
-        elif mask_name == "greenland_icesheet_2km_grid_mask_mouginot2019":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "Mouginot/"
-                    "mouginot_2019_grn_grounded_icesheet_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 1000
-            self.num_y = 1550
-            self.minxm = -1000000  # meters
-            self.minym = -3500000  # meters
-            self.binsize = 2000  # meters
-            self.dtype = np.uint8
-            self.bad_mask_value = 0  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
-
-            self.mask_grid_possible_values = list(range(7))  # values in the mask_grid
-
-            self.grid_value_names = [
-                "Unclassified [0]",
-                "CE [1]",
-                "CW [2]",
-                "NO [3]",
-                "NE [4]",
-                "NW [5]",
-                "SE [6]",
-                "SW [7]",
-            ]
-            self.mask_grid_possible_values = list(range(len(self.grid_value_names)))
-
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
-            self.shapefile_path = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                "Mouginot/"
-                "Greenland_Basins_PS_v1.4.2.shp"
-            )
-            self.shapefile_column_name = "SUBREGION1"
-
-            self.mask_long_name = "Mouginot (2019) 2km grid"
-
-        elif mask_name == "greenland_icesheet_2km_grid_mask_mouginot2019_glaciers":
-            self.mask_type = "grid"  # 'xylimits', 'polygon', 'grid','latlimits'
-
-            if not mask_path:
-                mask_file = (
-                    f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                    "Mouginot/mouginot_subbasins/"
-                    "mouginot_2019_grn_grounded_icesheet_glacier_basins_2km.nc"
-                )
-            else:
-                mask_file = mask_path
-
-            if not isfile(mask_file):
-                self.log.error("mask file %s does not exist", mask_file)
-                raise FileNotFoundError("mask file does not exist")
-
-            self.num_x = 1000
-            self.num_y = 1550
-            self.minxm = -1000000  # meters
-            self.minym = -3500000  # meters
-            self.binsize = 2000  # meters
-            self.dtype = np.uint8
-            self.bad_mask_value = 0  # value in unknown grid cells in mask
-
-            self.load_netcdf_mask(mask_file, flip=False, nc_mask_var="basinmask")
-            # Load glacier names from CSV
-            glacier_csv = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                "Mouginot/mouginot_subbasins/glacier_names.csv"
-            )
-            # Mask values are 1-260, CSV has 260 rows. Prepend entry for mask value 0.
-            glacier_names = ["Unclassified"]
-            with open(glacier_csv, mode="r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    glacier_names.append(row["NAME"])
-
-            self.grid_value_names = glacier_names
-
-            self.mask_grid_possible_values = list(range(0, len(self.grid_value_names)))
-            self.shapefile_path = (
-                f'{environ["CPOM_SOFTWARE_DIR"]}/resources/drainage_basins/greenland/'
-                "Mouginot/mouginot_subbasins/"
-                "Greenland_Basins_PS_v1.4.2.shp"
-            )
-            self.shapefile_column_name = "NAME"
-
-            self.crs_bng = CRS("epsg:3413")  # Polar Stereo - North -latitude of origin 70N, 45
-            self.mask_long_name = "Mouginot (2019) 2km glacier grid"
-        else:
-            raise ValueError(f"mask name: {mask_name} not supported")
+        except ImportError as exc:
+            raise ImportError(f"{mask_name} not in supported mask list") from exc
 
         # -----------------------------------------------------------------------------
 
@@ -682,6 +153,84 @@ class Mask:
         self.lonlat_to_xy_transformer = Transformer.from_proj(
             self.crs_wgs, self.crs_bng, always_xy=True
         )
+
+    def _load_mask(self, mask_filename: str | None = None, mask_path: str | None = None):
+        """Load mask settings for current mask name"""
+
+        log.info("loading mask -%s-", self.mask_name)
+
+        if mask_filename is None:
+            try:
+                module = importlib.import_module(f"cpom.masks.definitions.{self.mask_name}")
+            except ImportError as exc:
+                raise ImportError(f"Could not load mask definition: {self.mask_name}") from exc
+        else:
+            module, self.mask_name = import_module_from_file(mask_filename)
+
+        mask_definition = module.mask_definition.copy()
+
+        # names of masks this mask inherits definitions from (via use_definitions_from)
+        self.base_mask_names: list[str] = []
+
+        secondary_mask_name = mask_definition.get("use_definitions_from", None)
+        while secondary_mask_name is not None:
+            if "use_definitions_from" in mask_definition:
+                del mask_definition["use_definitions_from"]
+            log.info("loading secondary mask %s", secondary_mask_name)
+            self.base_mask_names.append(secondary_mask_name)
+            try:
+                module2 = importlib.import_module(f"cpom.mask.definitions.{secondary_mask_name}")
+            except ImportError as exc:
+                raise ImportError(f"Could not load mask definition: {secondary_mask_name}") from exc
+            mask_definition2 = module2.mask_definition.copy()
+            secondary_mask_name = mask_definition2.get("use_definitions_from", None)
+            if "use_definitions_from" in mask_definition2:
+                del mask_definition2["use_definitions_from"]
+            mask_definition2.update(mask_definition)
+            mask_definition = mask_definition2
+
+        for setting_name, setting_value in mask_definition.items():
+            match setting_name:
+                case "nc_mask":
+                    if setting_value:
+                        mask_file_path = (
+                            mask_definition["default_mask_file"] if mask_path is None else mask_path
+                        )
+
+                        if not isfile(mask_file_path):
+                            self.log.error("mask file %s does not exist", mask_file_path)
+                            raise FileNotFoundError("mask file does not exist")
+
+                        mask_flip = mask_definition.get("nc_mask_flip", False)
+                        mask_var = mask_definition.get("nc_mask_var", "mask")
+                        self.dtype = mask_definition.get(
+                            "dtype", np.uint8
+                        )  # read this now incase its not read yet
+                        self.load_netcdf_mask(mask_file_path, mask_flip, mask_var)
+                case "default_mask_file" | "nc_mask_flip" | "nc_mask_var":
+                    continue
+
+                # parse epsg code to CRS
+                case "crs_epsg_code":
+                    self.crs_bng = CRS(setting_value)
+
+                # apply longname suffixes
+                case "basin_longname_suffixes":
+                    if callable(setting_value):
+                        self.mask_long_name = setting_value(self.mask_long_name, self.basin_numbers)
+
+                case "glacier_csv":
+                    glacier_names = ["Unclassified"]
+                    with open(setting_value, mode="r", encoding="utf-8") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            glacier_names.append(row["NAME"])
+
+                    self.grid_value_names = glacier_names
+
+                # anything else, set as an attribute
+                case _:
+                    setattr(self, setting_name, setting_value)
 
     def load_netcdf_mask(self, mask_file: str, flip=True, nc_mask_var: str = "mask"):
         """load mask array from netcdf grid masks
@@ -802,8 +351,7 @@ class Mask:
         Args:
             lats (np.ndarray|list[float]): list of latitude points
             lons (np.ndarray|list[float]): list of longitude points
-            basin_numbers (list[int,], optional): list of basin numbers or grid value names.
-                                                    Defaults to None.
+            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
             inputs_are_xy (bool, optional): lats, lons are already transformed to x,y.
                                             Defaults to False.
 
@@ -836,10 +384,6 @@ class Mask:
         if self.basin_numbers:
             if not basin_numbers:
                 basin_numbers = self.basin_numbers
-
-        # basin numbers are strings convert
-        if basin_numbers and isinstance(basin_numbers[0], str):
-            basin_numbers = self.get_grid_value_from_grid_value_names(basin_numbers)
 
         if inputs_are_xy:
             x, y = lats, lons
@@ -884,22 +428,29 @@ class Mask:
                     if self.mask_grid[jj, ii] > 0:
                         inmask[i] = True
                         n_inside += 1
+        elif self.mask_type == "polygon":
+            points = np.column_stack((x, y))
+
+            if len(self.polygon_lon) > 0:
+                poly_x, poly_y = self.latlon_to_xy(self.polygon_lat, self.polygon_lon)
+                poly_corners = np.column_stack((poly_x, poly_y))
+                path = Path(poly_corners)
+                inmask = path.contains_points(points)
+            elif self.polygons_lon:
+                inmask = np.zeros(x.size, np.bool_)
+                for pi, plon in enumerate(self.polygons_lon):
+                    poly_x, poly_y = self.latlon_to_xy(self.polygons_lat[pi], plon)
+                    poly_corners = np.column_stack((poly_x, poly_y))
+                    path = Path(poly_corners)
+                    inmask |= path.contains_points(points)
+            else:
+                inmask = np.zeros(x.size, np.bool_)
+
+            n_inside = int(np.sum(inmask))
         else:
             return inmask, 0
 
         return inmask, n_inside
-
-    def get_grid_value_names_from_grid_value(self, basin_numbers):
-        """Get grid value names from grid values"""
-        return [
-            self.grid_value_names[self.mask_grid_possible_values.index(v)] for v in basin_numbers
-        ]
-
-    def get_grid_value_from_grid_value_names(self, grid_value_names):
-        """Get grid values from grid value names"""
-        return [
-            self.mask_grid_possible_values[self.grid_value_names.index(n)] for n in grid_value_names
-        ]
 
     def grid_mask_values(
         self,
@@ -964,7 +515,9 @@ class Mask:
             mask_values[i] = self.mask_grid[jj, ii]
         return mask_values
 
-    def latlon_to_xy(self, lats: np.ndarray, lons: np.ndarray) -> tuple:
+    def latlon_to_xy(
+        self, lats: Sequence[float] | np.ndarray, lons: Sequence[float] | np.ndarray
+    ) -> tuple:
         """
         :param lats: latitude points in degs
         :param lons: longitude points in degrees E
@@ -1017,8 +570,7 @@ class Mask:
             df (pl.LazyFrame|pl.DataFrame): polars LazyFrame or DataFrame with x,y columns
             x_col (str): name of column in df containing x values
             y_col (str): name of column in column in df containing y values
-            basin_numbers (list[int,], optional): list of basin numbers or grid value names.
-                                                    Defaults to None.
+            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
             return_pl_dataframe (bool, optional): return a polars DataFrame instead of LazyFrame
                                                   Defaults to False.
         Returns:
@@ -1029,12 +581,10 @@ class Mask:
             df = df.lazy()
 
         # Basin numbers assignment
-        if basin_numbers:
-            self.basin_numbers = basin_numbers
-
-        # basin numbers are strings convert
-        if self.basin_numbers and isinstance(self.basin_numbers[0], str):
-            self.basin_numbers = self.get_grid_value_from_grid_value_names(self.basin_numbers)
+        if basin_numbers and not isinstance(basin_numbers, (list, np.ndarray)):
+            basin_numbers = [basin_numbers]
+        if self.basin_numbers and not basin_numbers:
+            basin_numbers = self.basin_numbers
 
         # Filter by mask type
         if self.mask_type == "xylimits":
@@ -1056,26 +606,57 @@ class Mask:
                     .cast(pl.Int64)
                     .alias("jj"),
                 ]
-            ).filter(
-                (pl.col("ii") >= 0)
-                & (pl.col("ii") < self.num_x)
-                & (pl.col("jj") >= 0)
-                & (pl.col("jj") < self.num_y)
-            )  # Filter out grid-cells out of bounds
-
-        if self.basin_numbers:
-            rows, cols = np.indices(self.mask_grid.shape)
-
-            mask_grid_df = pl.LazyFrame(
-                {
-                    "jj": rows.reshape(-1),
-                    "ii": cols.reshape(-1),
-                    "mask_value": self.mask_grid.reshape(-1),
-                }
-            ).filter(pl.col("mask_value").is_in(self.basin_numbers))
-
-            df = df.join(mask_grid_df, on=["ii", "jj"], how="inner").drop(
-                ["ii", "jj", "mask_value"]
             )
+            df = (
+                df.with_columns(
+                    [
+                        (
+                            (pl.col("ii") >= 0)
+                            & (pl.col("ii") < self.num_x)
+                            & (pl.col("jj") >= 0)
+                            & (pl.col("jj") < self.num_y)
+                        ).alias("in_bounds")
+                    ]
+                )
+                .filter(pl.col("in_bounds"))
+                .drop("in_bounds")
+            )
+            jj = df.select("jj").collect().to_numpy().flatten()
+            ii = df.select("ii").collect().to_numpy().flatten()
+
+            # Get mask values from grid
+            mask_values = self.mask_grid[jj, ii]
+            df = df.with_columns([pl.Series("mask_value", mask_values)])
+
+            if self.basin_numbers:
+                df = df.filter(pl.col("mask_value").is_in(self.basin_numbers))
+            else:
+                df = df.filter(pl.col("mask_value") > 0)
+            df = df.drop(["ii", "jj", "mask_value"])
+
+        elif self.mask_type == "polygon":
+            df_collected = df.collect()
+            x_vals = df_collected.get_column(x_col).to_numpy()
+            y_vals = df_collected.get_column(y_col).to_numpy()
+            points = np.column_stack((x_vals, y_vals))
+
+            if len(self.polygon_lon) > 0:
+                poly_x, poly_y = self.latlon_to_xy(self.polygon_lat, self.polygon_lon)
+                path = Path(np.column_stack((poly_x, poly_y)))
+                inmask = path.contains_points(points)
+            elif self.polygons_lon:
+                inmask = np.zeros(len(x_vals), np.bool_)
+                for pi, plon in enumerate(self.polygons_lon):
+                    poly_x, poly_y = self.latlon_to_xy(self.polygons_lat[pi], plon)
+                    path = Path(np.column_stack((poly_x, poly_y)))
+                    inmask |= path.contains_points(points)
+            else:
+                inmask = np.zeros(len(x_vals), np.bool_)
+
+            df_collected = df_collected.with_columns(pl.Series("in_bounds", inmask))
+            df_collected = df_collected.filter(pl.col("in_bounds")).drop("in_bounds")
+
+            df = df_collected if return_pl_dataframe else df_collected.lazy()
+            return df
 
         return df.collect() if return_pl_dataframe else df

@@ -4,7 +4,6 @@ import glob
 import importlib
 import logging
 import os
-import sys
 from typing import Optional
 
 import numpy as np
@@ -13,6 +12,7 @@ from pyproj import CRS  # Transformer transforms between projections
 from pyproj import Transformer  # Transformer transforms between projections
 
 from cpom.masks.masks import Mask
+from cpom.utils.definition_loading_helpers import import_module_from_file
 
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-instance-attributes
@@ -114,40 +114,6 @@ def list_all_area_definition_names_only(logger=None) -> list[str]:
         logger.setLevel(original_level)
 
 
-def import_module_from_file(file_path):
-    """Imports a Python module from a specified file path.
-
-    The function dynamically loads a Python module from the given file path.
-    The module name is derived from the file name, excluding its extension
-    and directory path. The module is also added to `sys.modules` for
-    standard import access.
-
-    Args:
-        file_path (str): The file path to the Python module to be imported.
-
-    Raises:
-        ImportError: If the module cannot be imported, either due to an
-                     invalid file path or a failure during execution.
-
-    Returns:
-        tuple: A tuple containing:
-            - module (module): The imported module object.
-            - module_name (str): The name of the imported module.
-    """
-    # Calculate the module name from the file path
-    module_name = os.path.splitext(os.path.basename(file_path))[0]
-
-    # Load the module
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec and spec.loader:
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module  # Add to sys.modules
-        spec.loader.exec_module(module)  # Execute the module
-        return module, module_name
-
-    raise ImportError(f"Cannot import module from file path: {file_path}")
-
-
 class Area:
     """class to define polar areas for plotting etc"""
 
@@ -185,11 +151,15 @@ class Area:
 
         area_definition = module.area_definition.copy()
 
+        # names of areas this area inherits definitions from (via use_definitions_from)
+        self.base_area_names: list[str] = []
+
         secondary_area_name = area_definition.get("use_definitions_from", None)
         while secondary_area_name is not None:
             if "use_definitions_from" in area_definition:
                 del area_definition["use_definitions_from"]
             log.info("loading secondary area %s", secondary_area_name)
+            self.base_area_names.append(secondary_area_name)
             try:
                 module2 = importlib.import_module(f"cpom.areas.definitions.{secondary_area_name}")
             except ImportError as exc:
@@ -287,6 +257,8 @@ class Area:
         self.stats_position_y_offset_simple = area_definition.get(
             "stats_position_y_offset_simple", 0
         )
+        self.show_stats = area_definition.get("show_stats", True)
+
         self.position_stats_manually = area_definition.get("position_stats_manually", False)
         self.nvals_position = area_definition.get("nvals_position", (0.0, 0.0))
         self.stdev_position = area_definition.get("stdev_position", (0.0, 0.0))
@@ -646,16 +618,16 @@ class Area:
         bool_mask = np.full_like(lats, False, dtype=bool)
 
         if self.specify_by_bounding_lat:
-            (lats_inside, lons_inside, indices_inside_orig, n_inside) = self.inside_latlon_bounds(
+            lats_inside, lons_inside, indices_inside_orig, n_inside = self.inside_latlon_bounds(
                 lats, lons
             )
             x_inside, y_inside = self.latlon_to_xy(lats_inside, lons_inside)
         else:
-            (lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside) = (
+            lats_inside, lons_inside, x_inside, y_inside, indices_inside_orig, n_inside = (
                 self.inside_xy_extent(lats, lons)
             )
         if n_inside > 0:
-            (indices_inside_mask, n_inside) = self.inside_mask(x_inside, y_inside)
+            indices_inside_mask, n_inside = self.inside_mask(x_inside, y_inside)
             if n_inside > 0:
                 indice_inside_orig = indices_inside_orig[indices_inside_mask]
                 bool_mask[indice_inside_orig] = True

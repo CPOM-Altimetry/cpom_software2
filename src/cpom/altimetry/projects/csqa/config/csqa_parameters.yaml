@@ -1,0 +1,934 @@
+# ------------------------------------------------------------------------------------------------
+# CryoSat-2 Performance Monitoring (CSQA) : parameter definitions
+#
+# Each parameter produces, for every 30-day cycle and product baseline, one map per area (and per
+# variant and acquisition mode where configured) plus statistics per area/variant/mode.
+#
+#   long_name   : display name (portal menu and plot titles)
+#   group       : theme of the parameter in the portal menu (csqa_config.yaml:parameter_groups)
+#   description : text shown on the portal parameter page
+#   source      : input product id, as in csqa_config.yaml:products
+#   type        : flag  -> statistics are the % of each flag value
+#                 float -> statistics are n, mean, median, stdev, min, max
+#   variable    : netCDF variable (for parameters without variants)
+#   variants    : alternative variables for the same quantity (ie per retracker)
+#                   label   : name of the variant selector shown in the portal
+#                   options : list of {id, name, variable, mode_descriptions, plot}
+#                     mode_descriptions (optional): what the variant is in each acquisition
+#                     mode (ie the retracker used), null where it is not used in a mode.
+#                     Shown in the portal. The retracker definitions (in height) are YAML
+#                     anchors reused by other retracker parameters, ie
+#                     mode_descriptions: *retracker_1_modes
+#                     plot (optional): {range, cmap} of the variant's maps, overriding the
+#                     parameter's (for variants with very different value ranges)
+#   modes       : acquisition mode selections (all, lrm, sar, sarin), mode surface selections
+#                 (ie lrm_ice, csqa_config.yaml:mode_surfaces) and pass selections (asc, desc,
+#                 csqa_config.yaml:pass_selections). Omit for no mode selection
+#                 variant derived: a variant computed from several variables: the name of a
+#                 function in derived.py and its inputs: [variables] (ie mispointing_angle)
+#   value_scale : factor applied to the product values, ie 1000 for degrees -> millidegrees
+#   invalid_values : product values meaning missing, ie [0] where a variable is unused
+#                 variants may override valid_modes, invalid_values, value_scale and units, and
+#                 set plot: {log: true} for a logarithmic colour scale
+#   areas       : area ids from csqa_config.yaml:areas
+#   flags       : list of {value, name, color} for flag parameters
+#   units       : units of float parameters
+#   plot        : range [min, max] of the map colour scale, cmap (matplotlib colormap name)
+#                 or scales: list of {id, name, range, cmap (optional), log (optional)} for
+#                 several colour scales, each with its own set of maps (the first is the
+#                 default). log: true for a logarithmic colour scale (range must be above 0)
+#   dtype       : numpy dtype used to hold float values (default float32). Use float64 for
+#                 parameters needing more than ~7 significant digits (ie elevations)
+#   reject_bit  : (variant or parameter) {variable, mask, name}: values are rejected where this
+#                 bit of a flag word is set (ie freeboard_error). name is the bit's name in
+#                 the variable's flag_meanings (checked when reading products)
+#   valid_modes : acquisition modes with valid values (ie [sar, sarin]): values in other modes
+#                 are rejected. Default: every mode
+#   first_baseline : first product baseline containing the parameter (ie F). Earlier baselines
+#                 are not processed for it. Default: every baseline
+#   crossover   : single cycle crossover differences of a float parameter (ie heights) instead of
+#                 its values: {lat, lon (crossover locations, default POCA), max_arc_length_m,
+#                 min_time_separation_s, one_per_pass_pair, max_abs_difference, nadir_lat,
+#                 nadir_time}. Areas must have a mask and grid_area. See crossovers.py
+#   record_name : what each value is, ie crossover (default: measurement), for the portal
+#   default_variant : variant shown first in the portal (default the first), or {mode: variant}
+#                 for a default per mode (ie the OCOG retracker in LRM mode)
+#   grid        : gridded maps and statistics of a float parameter, in addition to the along-
+#                 track maps. The measurements of each selection are gridded into cells of
+#                 binsize_km of the area's grid_area (csqa_config.yaml), and a statistic of the
+#                 measurements in each cell is mapped. Gridded statistics are of the cell values
+#                   binsize_km : cell size (km)
+#                   areas      : areas gridded (with a grid_area)
+#                   modes      : mode selections gridded (default: the first of modes)
+#                   min_count  : minimum number of measurements in a cell (default 1)
+#                   smooth_radius_km : statistics of the measurements within this radius of each
+#                                cell (mean, std, count only), ie for sparse crossovers
+#                   statistics : list of {id, name, range, cmap, log} of the cell statistics
+#                                mapped (median, mean, max, min, std, count; the first is the
+#                                default). range/cmap/log default to the parameter's default
+#                                colour scale (count/std: the range of the values)
+# ------------------------------------------------------------------------------------------------
+
+parameters:
+  acquisition_mode:
+    long_name: "SIRAL Acquisition Mode"
+    group: general
+    description: >-
+      Instrument measurement mode of each 20 Hz measurement, derived from the configuration bits
+      in the L0 data: Low Resolution Mode (LRM), Synthetic Aperture Radar mode (SAR) and SAR
+      Interferometric mode (SARin). The mode is selected on board from the CryoSat-2 geographical
+      mode mask.
+    source: GDR-A
+    type: flag
+    variable: flag_instr_mode_op_20_ku
+    flags:
+      - {value: 1, name: "LRM", color: "#0072b2"}
+      - {value: 2, name: "SAR", color: "#009e73"}
+      - {value: 3, name: "SARin", color: "#d55e00"}
+    areas: [global, north_polar, south_polar]
+
+  surface_type:
+    long_name: "Surface Type"
+    group: general
+    description: >-
+      Four-state surface type mask at the measurement location, computed by combining data from
+      GMT, GlobCover, the MODIS Mosaic of Antarctica and water body outlines from LEGOS.
+    source: GDR-A
+    type: flag
+    variable: surf_type_20_ku
+    flags:
+      - {value: 0, name: "Ocean", color: "#0072b2"}
+      - {value: 1, name: "Lake/Enclosed Sea", color: "#56b4e9"}
+      - {value: 2, name: "Ice", color: "#cc79a7"}
+      - {value: 3, name: "Land", color: "#e69f00"}
+    areas: [global, north_polar, south_polar]
+
+  height:
+    long_name: "Surface Height"
+    group: general
+    description: >-
+      Surface height above the WGS84 ellipsoid of each 20 Hz measurement for each L2 retracker,
+      at the estimated echo location (POCA), with instrumental and geophysical corrections and
+      system bias applied. Corrected for surface slope with a slope model in LRM and SARin
+      degraded modes, and with the SARin phase information in SARin mode. Retrackers 2 and 3
+      are only used in LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    # float64: heights of several km with mm resolution
+    dtype: float64
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: height_1_20_ku
+          mode_descriptions: &retracker_1_modes
+            lrm: "Ocean CFI retracker"
+            sar: "UCL sea-ice retracker"
+            sarin: "UCL margins retracker"
+        - id: rtk2
+          name: "Retracker 2"
+          variable: height_2_20_ku
+          mode_descriptions: &retracker_2_modes
+            lrm: "UCL land-ice retracker"
+            sar: null
+            sarin: null
+        - id: rtk3
+          name: "Retracker 3"
+          variable: height_3_20_ku
+          mode_descriptions: &retracker_3_modes
+            lrm: "OCOG retracker"
+            sar: null
+            sarin: null
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+      scales:
+        - {id: landocean, name: "Land and ocean", range: [-120.0, 4300.0]}
+        - {id: ocean, name: "Ocean only", range: [-120.0, 80.0]}
+
+  ssha:
+    long_name: "Sea Surface Height Anomaly"
+    group: sea_ice
+    description: >-
+      Interpolated sea surface height anomaly (SSHA) of each 20 Hz measurement, computed using
+      the sea surface height interpolated to the measurement location. Unused (fill value) in
+      LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    variable: ssha_interp_20_ku
+    # SSHA is only computed in SAR and SARin modes
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # diverging, with a neutral grey midpoint at 0 m
+      cmap: coolwarm
+      # typical |SSHA| is 0.05-0.1 m: +-0.3 m holds ~95% of values (87-92% in SARin mode).
+      # The wide scale shows larger anomalies and outliers (as the old portal's +-1.2 m)
+      scales:
+        - {id: standard, name: "Standard", range: [-0.3, 0.3]}
+        - {id: wide, name: "Wide", range: [-1.2, 1.2]}
+
+  backscatter:
+    long_name: "Backscatter (Sigma0)"
+    group: general
+    description: >-
+      Backscatter coefficient of each 20 Hz measurement for each L2 retracker, corrected for
+      instrument effects and including a system bias. In SAR and SARin modes the retracker 1
+      backscatter is computed from the amplitude of an OCOG retracker applied to an LRM-like
+      convolved waveform. Retrackers 2 and 3 are only used in LRM mode.
+    source: GDR-A
+    type: float
+    units: dB
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: sig0_1_20_ku
+          mode_descriptions: *retracker_1_modes
+        - id: rtk2
+          name: "Retracker 2"
+          variable: sig0_2_20_ku
+          mode_descriptions: *retracker_2_modes
+        - id: rtk3
+          name: "Retracker 3"
+          variable: sig0_3_20_ku
+          mode_descriptions: *retracker_3_modes
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 35.0]
+      cmap: RdYlBu_r
+
+  quality_flags:
+    long_name: "Quality Flags"
+    group: general
+    description: >-
+      The 20 Hz L2 quality flag word: bits giving the ground segment's assessment of the quality
+      of each measurement's parameters, and the surface type discriminated by the SAR processing
+      chain. Statistics are the percentage of records with each bit set, per acquisition mode and
+      per mode and surface type (from the surface type mask), as in the CryoSat-2 quality
+      reports. An error bit set for a height or backscatter that is not a fill value means the
+      result should typically be rejected. The retracker 1 height and backscatter errors per mode
+      and surface type are comparable with the Height Error and Backscatter Error statistics of
+      earlier baselines.
+    source: GDR-A
+    type: flag
+    variable: flag_prod_status_20_ku
+    # each bit is selectable in the portal, with values Set / Not set. name: the bit's name in
+    # the variable's flag_meanings attribute (checked when reading products)
+    bits:
+      label: "Flag bit"
+      options:
+        - {mask: 134217728, name: block_degraded, label: "Record degraded"}
+        - {mask: 67108864, name: orbit_error, label: "Orbit error"}
+        - {mask: 33554432, name: orbit_discontinuity, label: "Orbit discontinuity"}
+        - {mask: 16777216, name: height_1_error, label: "Height error (retracker 1)"}
+        - {mask: 8388608, name: height_2_error, label: "Height error (retracker 2)"}
+        - {mask: 4194304, name: height_3_error, label: "Height error (retracker 3)"}
+        - {mask: 268435456, name: height_sea_ice_error, label: "Sea ice height error"}
+        - {mask: 262144, name: ssha_interp_error, label: "SSHA interpolation error"}
+        - {mask: 1, name: calibration_warning, label: "Calibration warning"}
+        - {mask: 2097152, name: sig0_1_error, label: "Backscatter error (retracker 1)"}
+        - {mask: 1048576, name: sig0_2_error, label: "Backscatter error (retracker 2)"}
+        - {mask: 524288, name: sig0_3_error, label: "Backscatter error (retracker 3)"}
+        - {mask: 65536, name: freeboard_error, label: "Freeboard error"}
+        - {mask: 131072, name: peakiness_error, label: "Peakiness error"}
+        - {mask: 32768, name: surf_type_class_ocean, label: "Surface class: ocean"}
+        - {mask: 16384, name: surf_type_class_lead, label: "Surface class: lead"}
+        - {mask: 8192, name: surf_type_class_sea_ice, label: "Surface class: sea ice"}
+        - {mask: 4096, name: surf_type_class_undefined, label: "Surface class: undefined"}
+        - {mask: 1024, name: sarin_rx_1_error, label: "SARin RX 1 error"}
+        - {mask: 512, name: sarin_rx_2_error, label: "SARin RX 2 error"}
+        - {mask: 256, name: sarin_side_redundant, label: "SARin side redundant"}
+        - {mask: 128, name: surface_model_unavailable, label: "Surface model unavailable"}
+        - {mask: 64, name: mispointing_error, label: "Mispointing error"}
+        - {mask: 32, name: delta_time_error, label: "Delta time error"}
+        - {mask: 2, name: sarin_bad_velocity, label: "SARin bad velocity"}
+        - {mask: 4, name: sarin_out_of_range, label: "SARin out of range"}
+        - {mask: 8, name: sarin_bad_baseline, label: "SARin bad baseline"}
+        - {mask: 2048, name: sarin_height_ambiguous, label: "SARin height ambiguous"}
+        - {mask: 16, name: lrm_slope_model_invalid, label: "LRM slope model invalid"}
+        # Baseline-F only
+        - {mask: 536870912, name: sarin_height_unwrap, label: "SARin height unwrap"}
+        - {mask: 1073741824, name: sarin_off_nadir_lead, label: "SARin off-nadir lead"}
+    default_variant: b24  # height error (retracker 1)
+    modes: [all, lrm, sar, sarin, lrm_ice, lrm_land, lrm_ocean, sarin_ice, sarin_land, sar_ocean]
+    # maps (set / not set) only for all modes, and only where a bit is set
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  geophysical_corrections:
+    long_name: "Geophysical Corrections"
+    group: general
+    description: >-
+      The atmospheric and geophysical range corrections at 1 Hz. These are 1-way corrections that
+      are added to the range (or subtracted from the height); flag_cor_applied_20_ku shows which
+      were applied to each measurement's height (ie the tide, inverse barometer and dynamic
+      atmosphere corrections over ocean only). The sea state bias is not provided in Baseline-F.
+    source: GDR-A
+    type: float
+    units: m
+    variants:
+      label: "Correction"
+      # plot: colour range of each correction's maps (~1st-99th percentile of the values)
+      options:
+        - id: dry
+          name: "Dry troposphere (model)"
+          variable: mod_dry_tropo_cor_01
+          plot: {range: [-2.4, -1.4], cmap: viridis}
+        - id: wet
+          name: "Wet troposphere (model)"
+          variable: mod_wet_tropo_cor_01
+          plot: {range: [-0.45, 0.0], cmap: viridis}
+        - id: ib
+          name: "Inverse barometer"
+          variable: inv_bar_cor_01
+          plot: {range: [-0.4, 0.4], cmap: coolwarm}
+        - id: dac
+          name: "Dynamic atmosphere (DAC)"
+          variable: hf_fluct_total_cor_01
+          plot: {range: [-0.4, 0.4], cmap: coolwarm}
+        - id: iono
+          name: "Ionosphere (model)"
+          variable: iono_cor_01
+          plot: {range: [-0.12, 0.0], cmap: viridis}
+        - id: ionogim
+          name: "Ionosphere (GIM)"
+          variable: iono_cor_gim_01
+          plot: {range: [-0.12, 0.0], cmap: viridis}
+        - id: ssb
+          name: "Sea state bias"
+          variable: sea_state_bias_01_ku
+          plot: {range: [-0.3, 0.0], cmap: viridis}
+        - id: ot
+          name: "Ocean tide"
+          variable: ocean_tide_01
+          plot: {range: [-1.0, 1.0], cmap: coolwarm}
+        - id: lpt
+          name: "Long period tide"
+          variable: ocean_tide_eq_01
+          plot: {range: [-0.04, 0.04], cmap: coolwarm}
+        - id: olt
+          name: "Ocean loading tide"
+          variable: load_tide_01
+          plot: {range: [-0.05, 0.05], cmap: coolwarm}
+        - id: set
+          name: "Solid earth tide"
+          variable: solid_earth_tide_01
+          plot: {range: [-0.2, 0.2], cmap: coolwarm}
+        - id: pt
+          name: "Geocentric pole tide"
+          variable: pole_tide_01
+          plot: {range: [-0.015, 0.015], cmap: coolwarm}
+    areas: [global, north_polar, south_polar]
+
+  mispointing:
+    long_name: "Mispointing Angle"
+    group: general
+    description: >-
+      Antenna mispointing angle at 1 Hz: the angle between the antenna boresight and the nadir
+      direction, which should nominally be zero. It is derived from the antenna bench roll and
+      pitch angles, measured by the star trackers and post-processed by the ground facility, as
+      sin^2(mispointing) = sin^2(roll) + cos^2(roll) sin^2(pitch) (yaw does not change the
+      boresight direction). The roll, pitch and yaw angles are also shown. Ascending and
+      descending passes (from the rate of change of latitude) are also shown separately, as the
+      attitude differs between them.
+    source: GDR-A
+    type: float
+    units: mdeg
+    # product angles are in degrees
+    value_scale: 1000
+    variants:
+      label: "Angle"
+      # unsigned mispointing ~60-220 mdeg; roll ~-200 to -10, pitch ~-120 to -25 and yaw
+      # ~-120 to 125 mdeg in Baseline-E/F
+      options:
+        - id: mispointing
+          name: "Mispointing"
+          derived: mispointing_angle
+          inputs: [off_nadir_roll_angle_str_01, off_nadir_pitch_angle_str_01]
+          plot: {range: [50.0, 220.0], cmap: viridis}
+        - id: roll
+          name: "Roll"
+          variable: off_nadir_roll_angle_str_01
+          plot: {range: [-200.0, 0.0], cmap: viridis}
+        - id: pitch
+          name: "Pitch"
+          variable: off_nadir_pitch_angle_str_01
+          plot: {range: [-125.0, 0.0], cmap: viridis}
+        - id: yaw
+          name: "Yaw"
+          variable: off_nadir_yaw_angle_str_01
+          plot: {range: [-125.0, 125.0], cmap: coolwarm}
+    modes: [all, asc, desc]
+    areas: [global, north_polar, south_polar]
+
+  peakiness:
+    long_name: "Waveform Peakiness"
+    group: general
+    description: >-
+      Waveform peakiness of each 20 Hz measurement: the ratio of the maximum power in the
+      waveform to the average power of the waveform to the right of the expected leading edge
+      location (the ENVISAT derivation, used for LRM and SARin). In SAR mode, waveform bins with
+      no power are excluded from the average. SAR and SARin echoes do not have the typical
+      pulse-limited echo shape, so peakiness needs a different interpretation in each mode.
+    source: GDR-A
+    type: float
+    variable: peakiness_20_ku
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+      # peakiness is highly skewed and mode dependent: median ~1.3 in LRM, ~5-10 in SARin,
+      # ~10-35 in SAR, with 95th percentiles of ~10-25 (LRM) and ~50-100 (SAR, SARin), so the
+      # default is a log scale showing all modes. Values <= 0 are drawn in the under colour
+      scales:
+        - {id: log, name: "Logarithmic", range: [0.5, 200.0], log: true}
+        - {id: low, name: "Low (LRM)", range: [0.0, 5.0]}
+        - {id: high, name: "High (SAR/SARin)", range: [0.0, 100.0]}
+
+  snow_depth:
+    long_name: "Snow Depth"
+    group: sea_ice
+    description: >-
+      Snow depth at 1 Hz. Baseline-E: modified Warren climatology (Arctic only). Baseline-F:
+      computed from CryoTEMPO Baseline-C radar freeboard and ICESat-2 ATL10 lidar freeboard.
+      Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: m
+    variable: snow_depth_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 0.6]
+      cmap: viridis
+
+  snow_density:
+    long_name: "Snow Density"
+    group: sea_ice
+    description: >-
+      Snow density at 1 Hz. Baseline-E: a fixed average value for all records. Baseline-F:
+      interpolated from a monthly model file. Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: "kg/m^3"
+    variable: snow_density_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [250.0, 450.0]
+      cmap: viridis
+
+  sea_ice_concentration:
+    long_name: "Sea Ice Concentration"
+    group: sea_ice
+    description: >-
+      Sea ice concentration (sea ice area fraction) at 1 Hz. Baseline-E: derived from NSIDC
+      SSM/I data. Baseline-F: derived from NSIDC-0081 (before July 2025) or OSI-408-a data.
+      Unused (fill value) in LRM mode.
+    source: GDR-A
+    type: float
+    units: "%"
+    variable: sea_ice_concentration_01
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 100.0]
+      cmap: viridis
+
+  freeboard:
+    long_name: "Radar Freeboard"
+    group: sea_ice
+    description: >-
+      Radar freeboard of each 20 Hz measurement: the height of the radar scattering horizon above
+      the local sea surface, from the sea ice processing of SAR and SARin mode measurements (fill
+      value in LRM mode). Freeboard can be a small negative value due to noise in the height and
+      in the interpolated sea surface. By default measurements with the freeboard error flag set
+      are excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in
+      each cell of a 10 km polar stereographic grid, with statistics of the cell values.
+    source: GDR-A
+    type: float
+    units: m
+    variants:
+      label: "Measurements"
+      options:
+        - id: filtered
+          name: "Freeboard error not set"
+          variable: radar_freeboard_20_ku
+          reject_bit: &freeboard_error
+            {variable: flag_prod_status_20_ku, mask: 65536, name: freeboard_error}
+        - id: unfiltered
+          name: "All measurements"
+          variable: radar_freeboard_20_ku
+    # radar freeboard is only computed in SAR and SARin modes
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged values are ~-0.25 to 0.55 m (1st-99th percentile), above -0.3 m
+      range: [-0.3, 0.7]
+      cmap: viridis
+    grid: &freeboard_grid
+      binsize_km: 10
+      areas: [north_polar, south_polar]
+      modes: [all]
+      statistics:
+        - {id: median}
+        - {id: mean}
+        - {id: max, range: [-0.3, 1.5]}
+        - {id: std, range: [0.0, 0.4]}
+        # ~1-30 measurements per cell in a week of data
+        - {id: count, range: [1.0, 500.0], log: true}
+
+  sea_ice_freeboard:
+    long_name: "Sea Ice Freeboard"
+    group: sea_ice
+    description: >-
+      Sea ice freeboard of each 20 Hz measurement (Baseline-F onwards): the height of the
+      snow-ice interface above the local sea surface, computed as the radar freeboard plus the
+      snow depth correction (for the slower propagation of the radar pulse through the snow
+      layer). Only computed in SAR and SARin modes. Baseline-F products contain 0 rather than the
+      fill value in LRM mode and where the freeboard error flag is set, so these measurements are
+      excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in each
+      cell of a 10 km polar stereographic grid.
+    source: GDR-A
+    type: float
+    units: m
+    variable: sea_ice_freeboard_20_ku
+    reject_bit: *freeboard_error
+    valid_modes: [sar, sarin]
+    first_baseline: F
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged values are ~-0.2 to 0.6 m in SAR mode (1st-99th percentile), to 1.2 m in SARin
+      range: [-0.3, 0.7]
+      cmap: viridis
+    grid: *freeboard_grid
+
+  sea_ice_thickness:
+    long_name: "Sea Ice Thickness"
+    group: sea_ice
+    description: >-
+      Sea ice thickness of each 20 Hz measurement (Baseline-F onwards), computed from the sea ice
+      freeboard, the snow depth and density, and the sea water and sea ice densities, assuming
+      hydrostatic equilibrium. Thickness is negative where the sea ice freeboard is negative.
+      Only computed in SAR and SARin modes. Baseline-F products contain 0 rather than the fill
+      value in LRM mode and where the freeboard error flag is set, so these measurements are
+      excluded. The 10 km grid maps show a statistic (ie the median) of the measurements in each
+      cell of a 10 km polar stereographic grid.
+    source: GDR-A
+    type: float
+    units: m
+    variable: sea_ice_thickness_20_ku
+    reject_bit: *freeboard_error
+    valid_modes: [sar, sarin]
+    first_baseline: F
+    modes: [all, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      # unflagged Antarctic winter values are ~-1.7 to 7 m in SAR mode (1st-99th percentile),
+      # to 13 m in SARin; ~5% are below -0.6 m
+      range: [-1.0, 5.0]
+      cmap: viridis
+    grid:
+      <<: *freeboard_grid
+      statistics:
+        - {id: median}
+        - {id: mean}
+        - {id: max, range: [-1.0, 10.0]}
+        - {id: std, range: [0.0, 2.0]}
+        - {id: count, range: [1.0, 500.0], log: true}
+
+  crossovers:
+    long_name: "Crossover Height Differences"
+    group: derived
+    description: >-
+      Single cycle crossover height differences over the Antarctic and Greenland ice sheets
+      (grounded ice of the BedMachine masks): the difference between the heights of the
+      ascending and descending passes of the cycle where their ground tracks cross (ascending
+      minus descending), interpolated between consecutive 20 Hz measurements of each track.
+      Crossovers are found separately in LRM and SARin modes and for each retracker, using
+      heights without the retracker's height error flag, along tracks of the measurement (POCA)
+      locations. A pair of passes gives one crossover (the median of their crossings, as tracks
+      of POCA locations can cross more than once). Over time intervals without surface change
+      the differences measure the height precision of the altimeter and processing chain.
+      Differences larger than 5 m are counted as outliers, but excluded from the statistics (the
+      Valid column) and maps. The maps show the mean crossover difference within 20 km of each
+      10 km grid cell.
+    source: GDR-A
+    type: float
+    units: m
+    record_name: crossover
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: height_1_20_ku
+          mode_descriptions: *retracker_1_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 16777216, name: height_1_error}
+        - id: rtk2
+          name: "Retracker 2"
+          variable: height_2_20_ku
+          mode_descriptions: *retracker_2_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 8388608, name: height_2_error}
+          valid_modes: [lrm]
+        - id: rtk3
+          name: "Retracker 3"
+          variable: height_3_20_ku
+          mode_descriptions: *retracker_3_modes
+          reject_bit: {variable: flag_prod_status_20_ku, mask: 4194304, name: height_3_error}
+          valid_modes: [lrm]
+    # OCOG in LRM mode (as the previous portal), UCL margins retracker in SARin mode
+    default_variant: {lrm: rtk3, sarin: rtk1}
+    modes: [lrm, sarin]
+    # gridded maps only
+    map_modes: []
+    areas: [antarctica, greenland]
+    crossover:
+      # crossovers of the tracks of POCA locations (the pass direction is from the nadir)
+      lat: lat_poca_20_ku
+      lon: lon_poca_20_ku
+      max_arc_length_m: 1000
+      # crossings of the same orbit, near its turning latitude, are not crossovers
+      min_time_separation_s: 1800
+      # one crossover per pair of passes (zig-zagging POCA tracks can cross several times), and
+      # an outlier limit of 5 m: in a week of Baseline-F LRM Antarctic crossovers these give an
+      # OCOG r.m.s. of 0.42 m, close to the previous portal's Baseline-D values (0.41-0.43 m)
+      one_per_pass_pair: true
+      max_abs_difference: 5.0
+    plot:
+      range: [-0.5, 0.5]
+      cmap: RdBu_r
+    grid:
+      binsize_km: 10
+      # statistics of the crossovers within 20 km of each 10 km cell (as the previous portal):
+      # crossovers are too sparse for continuous maps of the crossovers in each cell
+      smooth_radius_km: 20
+      areas: [antarctica, greenland]
+      modes: [lrm, sarin]
+      statistics:
+        - {id: mean}
+        - {id: std, range: [0.0, 2.0], cmap: viridis}
+        - {id: count, range: [1.0, 100.0], log: true, cmap: viridis}
+
+  # ----------------------------------------------------------------------------------------------
+  # L2i parameters: the L2 in-depth products of each mode (LRM, SAR and SARin), giving lower
+  # level parameters of the L2 processing. L2i variables are generally 0 (not the fill value) in
+  # the modes where they are unused, which valid_modes / invalid_values exclude
+  # ----------------------------------------------------------------------------------------------
+
+  l2i_retracker_correction:
+    long_name: "Retracker Range Correction"
+    description: >-
+      Correction to the range computed by each L2 retracker (the offset of the retracking point
+      from the tracking point), used to compute the L2 heights. Measurements where the
+      retracker failed (flag_retracker_20_ku), which have default values (ie 46.374 m for LRM
+      retracker 1), are excluded. Retrackers 2 and 3 are only used in LRM mode.
+    source: L2I
+    type: float
+    units: m
+    variants:
+      label: "Retracker"
+      options:
+        - id: rtk1
+          name: "Retracker 1"
+          variable: retracker_1_cor_20_ku
+          mode_descriptions: *retracker_1_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 4, name: retracker_1_fail}
+        - id: rtk2
+          name: "Retracker 2"
+          variable: retracker_2_cor_20_ku
+          mode_descriptions: *retracker_2_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 2, name: retracker_2_fail}
+          valid_modes: [lrm]
+        - id: rtk3
+          name: "Retracker 3"
+          variable: retracker_3_cor_20_ku
+          mode_descriptions: *retracker_3_modes
+          reject_bit: {variable: flag_retracker_20_ku, mask: 1, name: retracker_3_fail}
+          valid_modes: [lrm]
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: RdYlBu_r
+      # median ~-14 m in LRM, ~-18 m in SAR and ~-60 m in SARin (larger range window)
+      scales:
+        - {id: wide, name: "All modes", range: [-100.0, 100.0]}
+        - {id: lrmsar, name: "LRM / SAR", range: [-30.0, 10.0]}
+
+  l2i_retracker_flags:
+    long_name: "Retracker Flags"
+    description: >-
+      The 20 Hz retracker flag word: failures of each L2 retracker, and the waveform quality
+      checks of each mode. Statistics are the percentage of records with each bit set. The
+      retracker failure percentages per mode correspond to the Retracker Failure statistics of
+      the previous portal (LRM: CFI = retracker 1, LIRT = retracker 2, OCOG = retracker 3).
+    source: L2I
+    type: flag
+    variable: flag_retracker_20_ku
+    bits:
+      label: "Flag bit"
+      options:
+        - {mask: 4, name: retracker_1_fail, label: "Retracker 1 failure"}
+        - {mask: 2, name: retracker_2_fail, label: "Retracker 2 failure"}
+        - {mask: 1, name: retracker_3_fail, label: "Retracker 3 failure"}
+        - {mask: 131072, name: sea_ice_retracker_fail, label: "Sea ice retracker failure"}
+        - {mask: 8, name: poor_phase_fit, label: "Poor phase fit"}
+        - {mask: 16, name: poor_power_fit, label: "Poor power fit"}
+        - {mask: 32, name: fdm_ocog_fail, label: "FDM / OCOG failure"}
+        - {mask: 64, name: fit_failed, label: "Fit failed"}
+        - {mask: 128, name: sarin_low_coherence, label: "SARin low coherence"}
+        - {mask: 256, name: sarin_interp_fail, label: "SARin interpolation failure"}
+        - {mask: 512, name: abnormal_bb_param, label: "Abnormal beam behaviour parameter"}
+        - {mask: 1024, name: out_of_range, label: "Out of range"}
+        - {mask: 2048, name: bad_leading_edge, label: "Bad leading edge"}
+        - {mask: 4096, name: low_variance, label: "Low variance"}
+        - {mask: 8192, name: high_noise, label: "High noise"}
+        - {mask: 16384, name: high_peakiness, label: "High peakiness"}
+        - {mask: 32768, name: low_peakiness, label: "Low peakiness"}
+        - {mask: 65536, name: low_power, label: "Low power"}
+    default_variant: b2  # retracker 1 failure
+    modes: [all, lrm, sar, sarin]
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  l2i_surface_class:
+    long_name: "Discriminated Surface Type"
+    description: >-
+      Surface type discriminated by analysis of the waveform and auxiliary data (the
+      discrimination result), as bits of a flag word: the LRM and SARin classes, and the SAR sea
+      ice discriminator classes, which are also used over ocean in SARin mode. Statistics are the
+      percentage of records with each class bit set.
+    source: L2I
+    type: flag
+    variable: flag_surf_type_class_20_ku
+    bits:
+      label: "Surface class"
+      options:
+        - {mask: 2, name: lrm_ocean, label: "LRM ocean"}
+        - {mask: 4, name: lrm_land_ice, label: "LRM land ice"}
+        - {mask: 1, name: lrm_undefined, label: "LRM undefined"}
+        - {mask: 16, name: sarin_valid, label: "SARin valid"}
+        - {mask: 8, name: sarin_undefined, label: "SARin undefined"}
+        - {mask: 64, name: sar_ocean, label: "Sea ice discrimination: ocean"}
+        - {mask: 128, name: sar_sea_ice, label: "Sea ice discrimination: sea ice"}
+        - {mask: 256, name: sar_lead, label: "Sea ice discrimination: lead"}
+        - {mask: 32, name: sar_undefined, label: "Sea ice discrimination: undefined"}
+    default_variant: b7  # sea ice
+    modes: [all, lrm, sar, sarin]
+    map_modes: [all]
+    areas: [global, north_polar, south_polar]
+
+  l2i_sarin_discriminator:
+    long_name: "SARin Discriminator Parameters"
+    description: >-
+      Waveform parameters computed by the SARin surface type discriminator (sarin_output_1-10).
+      Only used in SARin mode. Zero values (not computed, ~2% of SARin records, and sea ice
+      peakiness outside sea ice areas) are excluded. Bin values are in waveform range bins.
+    source: L2I
+    type: float
+    valid_modes: [sarin]
+    invalid_values: [0]
+    variants:
+      label: "Parameter"
+      options:
+        - id: totalpower
+          name: "Total power"
+          variable: sarin_output_1_20_ku
+          plot: {range: [1000.0, 1.0e9], log: true}
+        - id: maxpower
+          name: "Maximum power"
+          variable: sarin_output_2_20_ku
+          plot: {range: [10.0, 1.0e9], log: true}
+        - id: meanpower
+          name: "Mean power"
+          variable: sarin_output_3_20_ku
+          plot: {range: [1.0, 1.0e7], log: true}
+        - id: maxpowerbin
+          name: "Bin of maximum power"
+          variable: sarin_output_4_20_ku
+          # stored in 1/1000 bin
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: halfpowerbin
+          name: "Bin of half maximum power"
+          variable: sarin_output_5_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: maxcoherence
+          name: "Maximum coherence"
+          variable: sarin_output_6_20_ku
+          value_scale: 0.001
+          plot: {range: [0.5, 1.0]}
+        - id: maxcoherencebin
+          name: "Bin of maximum coherence"
+          variable: sarin_output_7_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 512.0]}
+        - id: firstpowerbin
+          name: "First power bin"
+          variable: sarin_output_8_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [0.0, 200.0]}
+        - id: lastpowerbin
+          name: "Last power bin"
+          variable: sarin_output_9_20_ku
+          value_scale: 0.001
+          units: bin
+          plot: {range: [300.0, 512.0]}
+        - id: seaicepeakiness
+          name: "Sea ice peakiness"
+          variable: sarin_output_10_20_ku
+          plot: {range: [0.0, 80.0]}
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+
+  l2i_sarin_ambiguity:
+    long_name: "SARin Ambiguity Warning"
+    description: >-
+      Flag indicating whether the SARin height may be affected by positional ambiguity due to
+      phase wrapping of the interferometric phase. Only used in SARin mode (0 in LRM and SAR
+      modes, which are excluded).
+    source: L2I
+    type: flag
+    variable: flag_sarin_ambiguity_warning_20_ku
+    valid_modes: [sarin]
+    flags:
+      - {value: 0, name: "No warning", color: "#009e73"}
+      - {value: 1, name: "Warning", color: "#d55e00"}
+      - {value: 2, name: "Not checked", color: "#b8bfc8"}
+      - {value: 3, name: "Unwrapped", color: "#0072b2"}
+    areas: [global, north_polar, south_polar]
+
+  l2i_stack:
+    long_name: "Stack Beam Behaviour"
+    description: >-
+      Parameters of the Gaussian fitted to the range integrated power of the single look echoes
+      of each SAR / SARin stack (the beam behaviour parameters), and the number of beams in the
+      stack. SAR and SARin stacks differ (ie ~245 beams in SAR mode, ~58 in SARin), so modes are
+      shown separately. Unused (0) in LRM mode. Angles are converted from radians to millidegrees.
+    source: L2I
+    type: float
+    valid_modes: [sar, sarin]
+    variants:
+      label: "Stack parameter"
+      options:
+        - id: std
+          name: "Standard deviation"
+          variable: stack_std_20_ku
+          units: beams
+          plot: {range: [0.0, 60.0]}
+        - id: centre
+          name: "Centre"
+          variable: stack_centre_20_ku
+          units: beam
+          plot: {range: [0.0, 120.0]}
+        - id: amplitude
+          name: "Scaled amplitude"
+          variable: stack_scaled_amplitude_20_ku
+          units: dB
+          plot: {range: [-175.0, -100.0]}
+        - id: skewness
+          name: "Skewness"
+          variable: stack_skewness_20_ku
+          plot: {range: [-1.0, 12.0]}
+        - id: kurtosis
+          name: "Kurtosis"
+          variable: stack_kurtosis_20_ku
+          plot: {range: [-2.0, 100.0]}
+        - id: peakiness
+          name: "Peakiness"
+          variable: stack_peakiness_20_ku
+          plot: {range: [0.5, 200.0], log: true}
+        - id: stdangle
+          name: "Standard deviation (angle)"
+          variable: stack_std_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [0.0, 600.0]}
+        - id: centreangle
+          name: "Centre (boresight angle)"
+          variable: stack_centre_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [-800.0, 800.0], cmap: coolwarm}
+        - id: lookangle
+          name: "Centre (look angle)"
+          variable: stack_centre_look_angle_20_ku
+          value_scale: 57295.78
+          units: mdeg
+          plot: {range: [-250.0, 250.0], cmap: coolwarm}
+        - id: residuals
+          name: "Fit residuals"
+          variable: stack_gaussian_fitting_residuals_20_ku
+          units: dBW
+          plot: {range: [-95.0, -50.0]}
+        - id: nbefore
+          name: "Beams before weighting"
+          variable: stack_number_before_weighting_20_ku
+          units: beams
+          plot: {range: [0.0, 260.0]}
+        - id: nafter
+          name: "Beams after weighting"
+          variable: stack_number_after_weighting_20_ku
+          units: beams
+          plot: {range: [0.0, 200.0]}
+    modes: [sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      cmap: viridis
+
+  l2i_doppler_correction:
+    long_name: "Doppler Range Correction"
+    description: >-
+      The Doppler range correction for the satellite altitude rate (dop_cor_20_ku, applied to the
+      window delay in the L1 processing), and the slope Doppler correction that replaces it in
+      LRM mode to account for sloping terrain (slope_dop_cor_20_ku; 0 where not applied, ie over
+      ocean, which is excluded).
+    source: L2I
+    type: float
+    units: m
+    variants:
+      label: "Correction"
+      options:
+        - id: doppler
+          name: "Doppler"
+          variable: dop_cor_20_ku
+        - id: slope
+          name: "Slope Doppler (LRM)"
+          variable: slope_dop_cor_20_ku
+          valid_modes: [lrm]
+          invalid_values: [0]
+    modes: [all, lrm, sar, sarin]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [-0.06, 0.06]
+      cmap: coolwarm
+
+  l2i_slope_attitude:
+    long_name: "LRM Slope Correction Attitude"
+    description: >-
+      The echo attitude in LRM mode: the angle between the nadir vector and the echo point
+      vector, from the slope correction of the LRM heights over ice sheets. 0 where no slope
+      correction is applied (ie over ocean), which is excluded. Note: the product gives the units
+      as radians, but the values (median ~0.1 over the flat Antarctic interior, where surface
+      slopes are ~0.1 degrees) are consistent with degrees.
+    source: L2I
+    type: float
+    units: rad
+    variable: offset_attitude_20_ku
+    valid_modes: [lrm]
+    invalid_values: [0]
+    areas: [global, north_polar, south_polar]
+    plot:
+      range: [0.0, 0.5]
+      cmap: viridis

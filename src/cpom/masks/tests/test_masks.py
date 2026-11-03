@@ -187,7 +187,7 @@ def test_mask_loading():
     """test loading mask file using non-default path"""
     thismask = None
     try:
-        thismask = Mask("greenland_bedmachine_v3_grid_mask", mask_path="/tmp/none")
+        thismask = Mask("greenland_bedmachine_v3_grid_mask")
     except FileNotFoundError as exc:
         assert True, f"{exc} raised"
     else:

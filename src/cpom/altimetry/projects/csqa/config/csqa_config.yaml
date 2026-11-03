@@ -1,0 +1,164 @@
+# ------------------------------------------------------------------------------------------------
+# CryoSat-2 Performance Monitoring (CSQA) : global configuration
+#
+# Used by the CSQA QCV processing tools in cpom.altimetry.projects.csqa
+# Environment variables in path values are expanded (ie $HOME/data or ${CSQA_DATA_DIR})
+#
+# An alternative config file can be selected with the --config command line option or the
+# CSQA_CONFIG environment variable.
+# ------------------------------------------------------------------------------------------------
+
+# QA data takes: 30-day sub-cycles numbered from 1, starting at 00:00 UTC on mission_start_date
+cycles:
+  mission_start_date: "2010-10-18"
+  cycle_length_days: 30
+  # days after acquisition before input products are available (GDR-A latency). The latest
+  # cycle that can have data is the one containing (today - data_latency_days): --latest and
+  # --all process cycles up to that cycle
+  data_latency_days: 35
+
+# Product baselines processed and displayed by default (baseline character in product filenames)
+baselines: [E, F]
+
+# Input product archives. Each directory in 'dirs' contains <YYYY>/<MM> sub-directories.
+products:
+  GDR-A:
+    long_name: "L2 GDR-A (all acquisition modes)"
+    dirs:
+      - /raid6/cpdata/SATS/RA/CRY/L2/GDR-A
+    file_glob: "CS_*_SIR_GDR_2__*.nc"
+    file_types:
+      SIR_GDR_2_: "GDR-A"
+  L2I:
+    long_name: "L2i (LRM, SAR, SARin)"
+    dirs:
+      - /raid6/cpdata/SATS/RA/CRY/L2I/LRM
+      - /raid6/cpdata/SATS/RA/CRY/L2I/SAR-A
+      - /raid6/cpdata/SATS/RA/CRY/L2I/SIN
+    file_glob: "CS_*_SIR_*I2__*.nc"
+    # display names of the file types (one per SIRAL mode)
+    file_types:
+      SIR_LRMI2_: "LRM"
+      SIR_SARI2_: "SAR"
+      SIR_SINI2_: "SARin"
+
+# Availability of the most recent input products (portal Data Availability page): files per
+# acquisition day over the most recent <days> days of data, ending with the latest data found
+# in the last <search_days> days
+availability:
+  days: 30
+  search_days: 120
+
+# When the same product granule exists more than once for a baseline, the highest version is
+# used, and for equal versions the processing stage listed first here is preferred
+stage_preference: ["LTA_", "OFFL", "NRT_"]
+
+# Coordinates used when a parameter variable has no usable 'coordinates' attribute
+# (Baseline-E GDR-A products only contain the POCA coordinates)
+default_coordinates:
+  lat: lat_poca_20_ku
+  lon: lon_poca_20_ku
+
+# Output directory for plots, statistics and the portal index (outside the web root)
+output_dir: /raid6/www/csqa_data
+
+# Themes grouping the parameters of each input product in the portal menu, in display order
+# (parameters:<id>:group). Themes without parameters are not shown
+parameter_groups:
+  general: "General"
+  land_ice: "Land Ice"
+  sea_ice: "Sea Ice"
+  derived: "Derived"
+
+# Parameter definitions (path relative to this file's directory, or absolute)
+parameters_file: csqa_parameters.yaml
+
+# Areas for which plots and statistics are produced.
+#   polarplot_area : cpom.areas.definitions area used by Polarplot
+#   lat_min, lat_max : measurement latitude range selected for the area's statistics and plots
+#   grid_area : cpom.gridding.gridareas.GridArea used for the area's gridded maps (parameters
+#               with a grid). The polar stereographic grid must cover the area
+#   mask : {name, basins}: cpom.masks.masks.Mask (and its values inside the area) selecting the
+#          area's measurements, ie an ice sheet's grounded ice (used by crossover parameters)
+areas:
+  global:
+    long_name: "Global"
+    polarplot_area: global_csqa
+    lat_min: -90.0
+    lat_max: 90.0
+  north_polar:
+    long_name: "North Polar (>60N)"
+    polarplot_area: north_polar_csqa
+    lat_min: 60.0
+    lat_max: 90.0
+    grid_area: arctic  # EPSG:3413
+  south_polar:
+    long_name: "South Polar (<60S)"
+    polarplot_area: south_polar_csqa
+    lat_min: -90.0
+    lat_max: -60.0
+    grid_area: antarctic_ocean  # EPSG:3031
+  antarctica:
+    long_name: "Antarctic Ice Sheet"
+    polarplot_area: antarctica_is
+    lat_min: -90.0
+    lat_max: -60.0
+    grid_area: antarctica  # EPSG:3031
+    # grounded ice (and Lake Vostok) of the BedMachine v2 mask
+    mask: {name: antarctica_bedmachine_v2_grid_mask, basins: [2, 4]}
+  greenland:
+    long_name: "Greenland Ice Sheet"
+    polarplot_area: greenland_is
+    lat_min: 58.0
+    lat_max: 85.0
+    grid_area: greenland  # EPSG:3413
+    # grounded ice of the BedMachine v3 mask
+    mask: {name: greenland_bedmachine_v3_grid_mask, basins: [2]}
+
+# SIRAL acquisition modes, used to select parameter values per mode
+modes:
+  variable: flag_instr_mode_op_20_ku
+  values:
+    lrm: 1
+    sar: 2
+    sarin: 3
+  labels:
+    all: "All modes"
+    lrm: "LRM"
+    sar: "SAR"
+    sarin: "SARin"
+
+# Surface types: the 4-state surface type mask at each measurement location, used by the mode
+# and surface type selections below
+surface_types:
+  variable: surf_type_20_ku
+  values:
+    ocean: 0
+    lake: 1  # lake / enclosed sea
+    ice: 2
+    land: 3
+
+# Selections of an acquisition mode over surface types, used like modes in a parameter's modes
+# (ie the quality flag percentages per mode and surface type, as reported in the CryoSat-2
+# quality reports and the previous QA portal)
+mode_surfaces:
+  lrm_ice: {mode: lrm, surfaces: [ice], label: "LRM Ice"}
+  lrm_land: {mode: lrm, surfaces: [land], label: "LRM Land"}
+  lrm_ocean: {mode: lrm, surfaces: [ocean], label: "LRM Ocean"}
+  sarin_ice: {mode: sarin, surfaces: [ice], label: "SARin Ice"}
+  sarin_land: {mode: sarin, surfaces: [land], label: "SARin Land"}
+  sar_ocean: {mode: sar, surfaces: [ocean], label: "SAR Ocean"}
+
+# Selections of the ascending or descending passes, used like modes in a parameter's modes. The
+# pass direction of each record is from the rate of change of its (nadir) latitude
+pass_selections:
+  asc: {direction: ascending, label: "Ascending passes"}
+  desc: {direction: descending, label: "Descending passes"}
+
+plots:
+  image_format: webp
+  dpi: 85
+  webp_quality: 80
+  # maximum number of points drawn in each map. Larger selections are plotted as a regular
+  # along-track subsample (statistics always use every record)
+  max_points: 2000000
