@@ -33,7 +33,7 @@ from typing import cast
 import geopandas as gpd
 import polars as pl
 
-from cpom.altimetry.datasets.parquet_tools.spatio_temporal import ParquetFilter
+from cpom.altimetry.datasets.parquet_tools.spatio_temporal import parquet_filter
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
 )
@@ -270,7 +270,7 @@ def process_single_basin(
 
         # Find bins with centres inside basin.
         bins_in_basin = (
-            ParquetFilter(
+            parquet_filter(
                 unique_cells, lon_col="x", lat_col="y", data_crs=data_crs, engine="duckdb"
             )
             .get_polygon(
@@ -288,7 +288,7 @@ def process_single_basin(
         if mask is None:
             raise ValueError("mask is required when clipping by grid mask")
         basin_data = (
-            ParquetFilter(data, engine="polars")
+            parquet_filter(data, engine="polars")
             .get_cpom_grid_mask(mask, basin_numbers=[basin_number])
             .run()
         )
