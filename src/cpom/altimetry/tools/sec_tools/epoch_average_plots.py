@@ -339,8 +339,10 @@ def plot_timeseries(params, data: pl.DataFrame, out_path: Path) -> None:
     ax.set_xlabel("Epoch date")
     ax.set_ylabel("Height change (m)")
 
+    start_date = min(times).date()
+    end_date = max(times).date()
     ax.set_title(
-        f"Epoch-averaged {params.plotting_column} time series",
+        f"Epoch-averaged {params.plotting_column} time series ({start_date} to {end_date})",
         fontsize=14,
     )
 
@@ -482,7 +484,7 @@ def plot_icesheet(params: argparse.Namespace, logger: logging.Logger):
 
         Polarplot(area_name).plot_points(
             {
-                "name": f"dh_{epoch_id}",
+                "name": f"dh_{epoch_id} ({min_date} to {max_date})",
                 "lats": epoch_data["latitude"],
                 "lons": epoch_data["longitude"],
                 "vals": epoch_data[params.plotting_column],
