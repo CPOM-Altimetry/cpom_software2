@@ -12,10 +12,11 @@ Supports two configuration methods:
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Iterable, List, Optional
 
 import h5py  # type: ignore[import-untyped]
 import numpy as np
@@ -216,6 +217,8 @@ class DatasetHelper(DatasetConfig):
         max_dt_time: str | datetime | None = None,
         hemisphere: str | None = None,
         log: logging.Logger | None = None,
+        threaded: bool = False,
+        max_workers: int = 8,
     ) -> np.ndarray:
         """
         Get a structured numpy array of valid file and their dates from the filename.
@@ -231,6 +234,12 @@ class DatasetHelper(DatasetConfig):
                 (formats: YYYYMMDD, YYYY/MM/DD, YYYY.MM.DD).
             max_dt_time (str | datetime | None): Maximum date filter (same formats).
             hemisphere (str | None): Filter to 'north' or 'south'.
+            threaded (bool): Search immediate subdirectories of the search dir
+                concurrently instead of one sequential rglob walk. Off by default
+                (preserves prior behaviour); worth enabling when data_dir is a
+                network mount with many subdirectories, where the walk is
+                latency-bound (per-directory round trips) rather than CPU-bound.
+            max_workers (int): Thread pool size used when threaded=True.
 
         Returns:
             np.ndarray: Structured array with:
@@ -304,8 +313,20 @@ class DatasetHelper(DatasetConfig):
         if self.search_pattern is None:
             raise ValueError("search_pattern must be set")
 
+        found_files: Iterable[Path]
+        if threaded:
+            subdirs = [d for d in Path(search_dir).iterdir() if d.is_dir()]
+            if subdirs:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    files = executor.map(lambda d: list(d.rglob(self.search_pattern)), subdirs)
+                found_files = [f for sub in files for f in sub]
+            else:
+                found_files = list(Path(search_dir).rglob(self.search_pattern))
+        else:
+            found_files = Path(search_dir).rglob(self.search_pattern)
+
         valid_files = []
-        for file in Path(search_dir).rglob(self.search_pattern):
+        for file in found_files:
             log.debug("file %s", file)
             date_obj = self.get_product_startdate_from_filename(file)
             if not isinstance(date_obj, datetime):
@@ -418,7 +439,7 @@ class DatasetHelper(DatasetConfig):
         if latitude is None:
             latitude_param = self.get_param_path("latitude")
             assert latitude_param is not None
-            latitude = self.get_variable(nc, latitude_param, False)  # type: ignore[assignment]
+            latitude = self.get_variable(nc, latitude_param)
 
         assert latitude is not None
         if ascending_start == "None":

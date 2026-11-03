@@ -4,6 +4,8 @@ cpom.altimetry.datasets.defaults.elevation_correction_helper
 Default elevation corrections for altimetry datasets.
 """
 
+from datetime import datetime, timedelta
+
 import numpy as np
 
 
@@ -65,22 +67,71 @@ def get_is1_elev(
 
     corrected_elevation = elevation + sat_corr
 
-    # laser_bias_corrections = (
-    #     ("2003-09-25", "2004-06-21", -0.017),
-    #     ("2004-10-03", "2008-10-19", +0.011),
-    # )
+    laser_bias_corrections = (
+        ("2003-09-25", "2004-06-21", -0.017),
+        ("2004-10-03", "2008-10-19", +0.011),
+    )
 
-    # standard_epoch_dt = datetime.fromisoformat(standard_epoch)
-    # time_dt = np.array(
-    #     [standard_epoch_dt + timedelta(seconds=float(t_sec)) for t_sec in time],
-    #     dtype=object,
-    # )
+    time = dataset.get_variable(
+        nc,
+        dataset.get_param_path("time"),
+        replace_fill=False,
+        raise_if_missing=strict_missing,
+    )[input_mask]
+    standard_epoch_dt = datetime.fromisoformat(dataset.dataset_epoch)
+    time_dt = np.array(
+        [standard_epoch_dt + timedelta(seconds=float(t_sec)) for t_sec in time],
+        dtype=object,
+    )
 
-    # for start_str, end_str, bias in laser_bias_corrections:
-    #     start_dt = datetime.fromisoformat(start_str)
-    #     end_dt = datetime.fromisoformat(end_str)
-    #     correction_mask = (time_dt >= start_dt) & (time_dt <= end_dt)
-    #     if np.any(correction_mask):
-    #         corrected_elevation[correction_mask] = corrected_elevation[correction_mask] + bias
+    laser_bias_applied = np.zeros_like(corrected_elevation)
+    for start_str, end_str, bias in laser_bias_corrections:
+        start_dt = datetime.fromisoformat(start_str)
+        end_dt = datetime.fromisoformat(end_str)
+        correction_mask = (time_dt >= start_dt) & (time_dt <= end_dt)
+        if np.any(correction_mask):
+            corrected_elevation[correction_mask] = corrected_elevation[correction_mask] + bias
+            laser_bias_applied[correction_mask] = bias
 
-    return corrected_elevation, {"sat_corr_applied": sat_corr}
+    return corrected_elevation, {
+        "sat_corr_applied": sat_corr,
+        "laser_bias_applied": laser_bias_applied,
+    }
+
+
+# def get_is1_elev(
+#     dataset,
+#     nc,
+#     input_mask,
+#     elevation: np.ndarray,
+#     strict_missing,
+# ) -> tuple[np.ndarray, dict]:
+#     """Applies : elevation = elevation + Data_40HZ/Elevation_Corrections/d_satElevCorr"""
+#     sat_corr = dataset.get_variable(
+#         nc,
+#         "Data_40HZ/Elevation_Corrections/d_satElevCorr",
+#         replace_fill=False,
+#         raise_if_missing=strict_missing,
+#     )[input_mask]
+
+#     corrected_elevation = elevation + sat_corr
+
+#     # laser_bias_corrections = (
+#     #     ("2003-09-25", "2004-06-21", -0.017),
+#     #     ("2004-10-03", "2008-10-19", +0.011),
+#     # )
+
+#     # standard_epoch_dt = datetime.fromisoformat(standard_epoch)
+#     # time_dt = np.array(
+#     #     [standard_epoch_dt + timedelta(seconds=float(t_sec)) for t_sec in time],
+#     #     dtype=object,
+#     # )
+
+#     # for start_str, end_str, bias in laser_bias_corrections:
+#     #     start_dt = datetime.fromisoformat(start_str)
+#     #     end_dt = datetime.fromisoformat(end_str)
+#     #     correction_mask = (time_dt >= start_dt) & (time_dt <= end_dt)
+#     #     if np.any(correction_mask):
+#     #         corrected_elevation[correction_mask] = corrected_elevation[correction_mask] + bias
+
+#     return corrected_elevation, {"sat_corr_applied": sat_corr}

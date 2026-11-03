@@ -1,8 +1,8 @@
 """
 cpom.altimetry.datasets.parquet_tools.spatio_temporal
 
-General utility tool to run out of memory spatial and temporal
-filters on large parquet altimetry archives via a small builder-pattern query ('ParquetFilter').
+General utility tool to filter a parquet data archive to a spatiotemporal extent.
+Runs out of memory using duckdb tmp data spill, or using polars lazyframes.
 
 Two interchangeable backends implement the same builder interface:
     - DuckDBParquetFilter: SQL/DuckDB-backed. Supports polygon + H3 cell
@@ -168,8 +168,13 @@ def get_mask_cell_indices(
         selected by basin_numbers. Empty arrays if nothing matches.
     """
     resolved_basins = mask.resolve_basin_numbers(basin_numbers)
-    return np.where(
-        mask.mask_grid > 0 if resolved_basins is None else np.isin(mask.mask_grid, resolved_basins)
+    return cast(
+        tuple[np.ndarray, np.ndarray],
+        np.where(
+            mask.mask_grid > 0
+            if resolved_basins is None
+            else np.isin(mask.mask_grid, resolved_basins)
+        ),
     )
 
 
@@ -306,10 +311,11 @@ def get_polygon_from_mask(
     """
     mask = to_mask(mask)
 
-    if hasattr(mask, "shapefile_path"):
+    shapefile_path = getattr(mask, "shapefile_path", None)
+    if shapefile_path is not None:
         filter_column, values = get_shapefile_column_and_values(mask, basin_numbers)
         return get_polygon_from_shapefile(
-            mask.shapefile_path, target_crs=target_crs, filter_column=filter_column, values=values
+            shapefile_path, target_crs=target_crs, filter_column=filter_column, values=values
         )
 
     if mask.mask_type == "xylimits":
@@ -336,7 +342,8 @@ def reproject(
     target_crs: Optional[int],
     src_crs: Optional[int] = None,
 ) -> Union[BaseGeometry, gpd.GeoDataFrame]:
-    """Reproject a shapely geometry or GeoDataFrame to the target CRS.
+    """
+    _ = materializeReproject a shapely geometry or GeoDataFrame to the target CRS.
 
     Args:
         geom: A shapely geometry or GeoDataFrame to reproject.
@@ -828,12 +835,19 @@ class DuckDBParquetFilter:
             pl.DataFrame({"ii": cols.astype(np.int32), "jj": rows.astype(np.int32)}),
         )
 
-        ii = f"CAST(ROUND_EVEN(({self.lon_col} - {mask.minxm}) / {mask.binsize}, 0) AS BIGINT)"
-        jj = f"CAST(ROUND_EVEN(({self.lat_col} - {mask.minym}) / {mask.binsize}, 0) AS BIGINT)"
+        ii = (
+            f"CAST(ROUND_EVEN(CASE WHEN isfinite({self.lon_col}) AND isfinite({self.lat_col}) "
+            f"THEN ({self.lon_col} - {mask.minxm}) / {mask.binsize} ELSE NULL END, 0) AS BIGINT)"
+        )
+        jj = (
+            f"CAST(ROUND_EVEN(CASE WHEN isfinite({self.lon_col}) AND isfinite({self.lat_col}) "
+            f"THEN ({self.lat_col} - {mask.minym}) / {mask.binsize} ELSE NULL END, 0) AS BIGINT)"
+        )
 
         self._add_clause(
             " AND ".join(
                 [
+                    f"isfinite({self.lon_col}) AND isfinite({self.lat_col})",
                     f"{ii} BETWEEN 0 AND {mask.num_x - 1}",
                     f"{jj} BETWEEN 0 AND {mask.num_y - 1}",
                 ]
@@ -874,10 +888,11 @@ class DuckDBParquetFilter:
         output_path: Optional[str] = None,
         output_table: Optional[str] = None,
         if_exists: Literal["replace", "append", "fail"] = "replace",
-        partition_by: Optional[list[str]] = None,
+        partition_by: Optional[Union[str, list[str]]] = None,
+        materialize: bool = False,
         verbose: bool = False,
         close_after_run: bool = False,
-    ) -> Optional[Union[pl.DataFrame, TableHandle]]:
+    ) -> Optional[Union[pl.DataFrame, pl.LazyFrame, TableHandle]]:
         """Compile filters and run against DuckDB.
 
         Modes:
@@ -892,7 +907,10 @@ class DuckDBParquetFilter:
             output_table: name of a table to create on the DuckDB connection.
             if_exists: what to do if output_table already exists on the connection.
                 replace, append or drop.
-            partition_by: column names to hive-partition the output on. Only valid with output_path.
+            partition_by: column name(s) to hive-partition the output on.
+                Only valid with output_path.
+            materialize: unused by this engine; DuckDB results are always materialized
+                eagerly. Kept for signature parity with 'PolarsParquetFilter.run'.
             verbose: if True, prints the query and parameters before executing.
             close_after_run: if True, closes the DuckDB connection after running.
 
@@ -901,6 +919,7 @@ class DuckDBParquetFilter:
             >>> handle = classInstance.reset().get_time(start="2020-01-01").run(
             output_table="filtered_data")
         """
+        _ = materialize
         if self._closed:
             raise RuntimeError(
                 f"{type(self).__name__} for {self.input_path!r} is closed;"
@@ -910,6 +929,8 @@ class DuckDBParquetFilter:
             raise ValueError("Pass at most one of output_path, output_table.")
         if partition_by is not None and output_path is None:
             raise ValueError("partition_by requires output_path.")
+        if isinstance(partition_by, str):
+            partition_by = [partition_by]
         try:
             query, params = self._get_query()
             if verbose:
@@ -1238,9 +1259,11 @@ class PolarsParquetFilter:
             self._filters.append(pl.lit(False))
             return self
 
+        finite_mask = pl.col(self.lon_col).is_finite() & pl.col(self.lat_col).is_finite()
         ii_expr = ((pl.col(self.lon_col) - mask.minxm) / mask.binsize).round().cast(pl.Int64)
         jj_expr = ((pl.col(self.lat_col) - mask.minym) / mask.binsize).round().cast(pl.Int64)
 
+        self._filters.append(finite_mask)
         self._filters.append(ii_expr.is_between(0, mask.num_x) & jj_expr.is_between(0, mask.num_y))
 
         self._grid_mask_join = {
@@ -1253,10 +1276,13 @@ class PolarsParquetFilter:
     def run(
         self,
         output_path: Optional[str] = None,
+        output_table: Optional[str] = None,
+        if_exists: Literal["replace", "append", "fail"] = "replace",
         partition_by: Optional[Union[str, list[str]]] = None,
         materialize: bool = False,
         verbose: bool = False,
-    ) -> Optional[Union[pl.DataFrame, pl.LazyFrame]]:
+        close_after_run: bool = False,
+    ) -> Optional[Union[pl.DataFrame, pl.LazyFrame, TableHandle]]:
         """Compile filters and run via polars' lazy engine.
 
         Modes:
@@ -1266,16 +1292,29 @@ class PolarsParquetFilter:
 
         Args:
             output_path: path to write the result to as a parquet file.
+            output_table: unsupported by this engine; 'PolarsParquetFilter' has no DuckDB
+                connection to hold a table on. Kept for signature parity with
+                'DuckDBParquetFilter.run'; passing a value raises 'ValueError'.
+            if_exists: unused by this engine; kept for signature parity with
+                'DuckDBParquetFilter.run'.
             partition_by: column name(s) to hive-partition the output on.
                 Only valid with 'output_path'.
             materialize: if True, returns a polars DataFrame with the filtered results.
                 Default is False (returns a LazyFrame).
             verbose: if True, prints the query plan before executing.
+            close_after_run: unused by this engine; kept for signature parity with
+                'DuckDBParquetFilter.run'.
 
         Example:
             >>> df = classInstance.get_bounding_box(polygon).run(materialize=True)
             >>> lf = classInstance.reset().get_time(start="2020-01-01").run()
         """
+        _ = if_exists, close_after_run
+        if output_table is not None:
+            raise ValueError(
+                "output_table is not supported by PolarsParquetFilter; "
+                "use engine='duckdb' instead."
+            )
         if partition_by is not None and output_path is None:
             raise ValueError("partition_by requires output_path.")
         try:

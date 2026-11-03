@@ -11,6 +11,20 @@ import numpy as np
 # ----------------------------
 
 
+def get_new_fdr4alt_qual_mask(dataset, nc, input_mask, strict_missing) -> tuple[np.ndarray, dict]:
+    """Applies : expert/retracking_ice1_qual == 0"""
+    retracking_ice1_qual = dataset.get_variable(
+        nc,
+        "expert/quality_flag_ampli",
+        replace_fill=False,
+        raise_if_missing=strict_missing,
+    )[input_mask]
+
+    retracking_ice1_qual_mask = retracking_ice1_qual == 0
+
+    return retracking_ice1_qual_mask, {"retracking_ice1_qual": retracking_ice1_qual}
+
+
 def get_fdr4alt_qual_mask(dataset, nc, input_mask, strict_missing) -> tuple[np.ndarray, dict]:
     """Applies : expert/retracking_ice1_qual == 0"""
     retracking_ice1_qual = dataset.get_variable(

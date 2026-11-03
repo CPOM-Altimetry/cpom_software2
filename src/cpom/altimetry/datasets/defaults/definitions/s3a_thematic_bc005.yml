@@ -1,8 +1,8 @@
 mission : s3a
-long_name : "Sentiment-3A Thematic Land Ice Dataset BC-005"
+long_name : "Sentinel-3A Thematic Land Ice Dataset BC-005"
 file_backend: "netcdf4"
 dataset_epoch : "2000-01-01T00:00:00"
-search_pattern :  "**/S3A_SR_2_LAN_LI_*/enhanced_measurement.nc"
+search_pattern :  "S3A_SR_2_LAN_LI_*/enhanced_measurement.nc"
 yyyymm_str_fname_indices: [-83, -75]
 
 params: 

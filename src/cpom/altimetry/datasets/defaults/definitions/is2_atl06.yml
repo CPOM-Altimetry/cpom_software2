@@ -12,7 +12,6 @@ params:
   elevation: "land_ice_segments/h_li"
   elevation_err: "land_ice_segments/h_li_sigma"
   time: "land_ice_segments/delta_time"
-  uncertainty_total: "land_ice_segments/h_li_sigma"
   geolocation_err: "land_ice_segments/sigma_geo_h"
 
 default_qual_correction: cpom.altimetry.datasets.defaults.quality_correction_helper.get_is2_qual_mask
