@@ -4,8 +4,8 @@ Utility functions for applying mission-specific quality and elevation correction
 within the SEC gridding pipeline.
 
 Corrections are either loaded dynamically from names/dotted paths specified in the
-dataset YAML config, or a default correction function can be applied if passed
-to params.correction_function within the gridding script's run control file.
+dataset YAML config. A custom correction function can also be supplied via
+params.correction_function within the gridding script's run control file.
 """
 
 import importlib
@@ -15,6 +15,8 @@ from typing import Callable, Union
 
 import numpy as np
 from pyproj import CRS, Transformer
+
+from cpom.altimetry.datasets.dataset_helper import DatasetHelper
 
 # ----------------------------
 # Helper methods
@@ -28,10 +30,16 @@ def _apply_mask_to_dict(variable_dict: dict, mask: np.ndarray) -> dict:
 
 def _resolve_callable(name: Union[str, Callable]) -> Callable:
     """
-    Resolve a string function name into a callable function.
+    Resolve a string function name or callable into a callable.
+
         A) If a callable is passed directly, return it.
-        B) Plain name lookup in the current global scope.
-        C) Dotted path lookup for functions in other modules.
+        B) Plain name lookup in the current modules global scope.
+        C) Import via dotted path (e.g. 'my.module.func')
+
+    Args:
+        name: A callable, plain function name , or dotted import path
+    Returns
+        Callable: Resolved function
     """
     if callable(name):
         return name
@@ -47,7 +55,7 @@ def _resolve_callable(name: Union[str, Callable]) -> Callable:
 
 
 def _call_with_accepted_kwargs(func: Callable, **kwargs) -> typing.Any:
-    """Call func with only the kwargs its signature actually declares."""
+    """Call func with only the kwargs its signature declares."""
     accepted = inspect.signature(func).parameters
     return func(**{k: v for k, v in kwargs.items() if k in accepted})
 
@@ -58,7 +66,14 @@ def _call_with_accepted_kwargs(func: Callable, **kwargs) -> typing.Any:
 
 
 def _transform_is1_to_wgs84(variable_dict: dict) -> dict:
-    """Convert ICESat-1 TOPEX lat/lon/height coordinates in-place to WGS84."""
+    """Convert ICESat-1 lat/lon/elevation from TOPEX ellipsoid to WGS84 in-place.
+    Args:
+        variable_dict: Dict containing 'latitude', 'longitude', and 'elevation' arrays.
+
+    Returns:
+        dict: The same dict with latitude, longitude, and elevation replaced
+              by their WGS84 equivalents.
+    """
     topex_crs = CRS.from_proj4("+proj=latlong +a=6378136.300 +rf=298.257 +no_defs")
     ecef_crs = CRS.from_proj4("+proj=geocent +a=6378136.300 +rf=298.257 +no_defs")
     topex_to_ecef = Transformer.from_crs(topex_crs, ecef_crs, always_xy=True)
@@ -83,15 +98,30 @@ def _transform_is1_to_wgs84(variable_dict: dict) -> dict:
 # ---------------------------
 
 
-def default_corrections(dataset, nc, input_mask, variable_dict, params) -> dict:
+def default_corrections(
+    dataset: DatasetHelper, nc: object, input_mask: np.ndarray, variable_dict: dict, params: object
+) -> dict:
     """
-    Run the qual/elev corrections defined in the dataset YAML config.
+    Apply quality and elevation corrections defined in the dataset config YAML.
 
-      1. Quality filter drops rows from the variable_dict.
-      2. Elevation correction. Corrected elevation replaces the original
-      'elevation' in variable_dict.
+    Steps:
+        1. Quality filter: applies the dataset's default_qual_correction function,
+           masking out rows that fail quality checks.
+        2. Elevation correction: applies the dataset's default_elev_correction function,
+           replacing the 'elevation' entry in variable_dict.
+        3. For ICESat-1 data, converts corrected coordinates from TOPEX to WGS84.
 
-    ICESat-1 is transformed from TOPEX to WGS84.
+    Args:
+        dataset (DatasetHelper): Dataset configuration object with default_qual_correction,
+                 default_elev_correction, and mission attributes.
+        nc (object): Open NetCDF file.
+        input_mask (np.ndarray): Boolean array selecting valid observations before correction.
+        variable_dict (dict): Dictionary of variable arrays
+            (e.g. latitude, longitude, elevation, time).
+        params (object): Command line arguments from gridding script.
+
+    Returns:
+        dict: Updated variable_dict with quality-filtered and corrected values.
     """
     surviving_mask = input_mask
 
@@ -112,7 +142,7 @@ def default_corrections(dataset, nc, input_mask, variable_dict, params) -> dict:
             input_mask=surviving_mask,
             elevation=variable_dict["elevation"],
             time=variable_dict.get("time"),
-            standard_epoch=params.standard_epoch,
+            standard_epoch=getattr(params, "standard_epoch", None),
             strict_missing=strict_missing,
         )
         if dataset.mission == "is1":
@@ -121,12 +151,25 @@ def default_corrections(dataset, nc, input_mask, variable_dict, params) -> dict:
     return variable_dict
 
 
-def apply_corrections(dataset, nc, input_mask, variable_dict, params) -> dict:
+def apply_corrections(
+    dataset: DatasetHelper, nc: object, input_mask: np.ndarray, variable_dict: dict, params: object
+) -> dict:
     """
     Entry point for corrections to be applied.
-    If correction_function != "default_corrections",
-    then that function is called directly with all available kwargs.
-    Otherwise, run default_corrections is called.
+
+    If a custom correction function is supplied via params.correction_function,
+    it will be called with all available kwargs.
+    Otherwise, the default_corrections function will be applied.
+
+    Args:
+        dataset (DatasetHelper): Dataset configuration object.
+        nc (object):  Open NetCDF file.
+        input_mask (np.ndarray): Boolean array selecting valid observations before correction.
+        variable_dict (dict): Dictionary of variable arrays
+            (e.g. latitude, longitude, elevation, time).
+        params (object): Command line arguments from gridding script.
+    Returns:
+        dict: Updated variable_dict with quality-filtered and corrected values.
     """
     custom_fn = getattr(params, "correction_function", None)
     user_supplied = custom_fn not in (None, "default_corrections")

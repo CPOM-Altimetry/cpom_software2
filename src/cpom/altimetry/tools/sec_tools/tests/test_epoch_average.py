@@ -29,7 +29,6 @@ def test_infer_epoch_origin_from_filtered_epochs() -> None:
 def test_assign_epochs_uses_absolute_epoch_numbering() -> None:
     """Assign observations to the preserved absolute epoch numbers after filtering."""
 
-    epoch_origin_dt = datetime(2000, 1, 1)
     epoch_lf = pl.LazyFrame(
         {
             "epoch_number": [2, 3],
@@ -49,9 +48,7 @@ def test_assign_epochs_uses_absolute_epoch_numbering() -> None:
         }
     )
 
-    assigned = assign_epochs_lf(
-        surface_fit_lf, epoch_lf, epoch_origin_dt, epoch_length_days=10
-    ).collect()
+    assigned = assign_epochs_lf(surface_fit_lf, epoch_lf, epoch_length_days=10).collect()
 
     assert assigned.shape[0] == 2
     assert assigned["epoch_number"].to_list() == [2, 3]

@@ -1,36 +1,41 @@
 """
 cpom.altimetry.tools.sec_tools.clip_to_basins
 
-Purpose:
+Clip gridded SEC outputs to selected regions and write one Parquet per region.
+To be run after epoch_average step.
 
-    Clips data to basin, glacier, or region defined by a CPOM Mask class grid mask,
-    by clipping points to mask label based on a 2km grid.
+This module supports two clipping routes:
+1. Grid-mask clipping via CPOM Mask classes (--mask)
+2. Polygon clipping via shapefile boundaries (--shapefile or mask-provided shapefile)
 
-    Supports non-partitioned datasets after epoch_average.
-    To process large partitioned datasets saved before epoch_average, use
-    clip_to_basins_from_shapefile.py.
+For each selected region, the tool:
+- Loads input parquet data
+- Resolves grid-cell centre x/y coordinates from x_bin/y_bin
+- Applies region clipping (mask-based or polygon-within test)
+- Writes clipped parquet and metadata to a per-region output folder
 
-Supported Masks:
-    Any grid mask from cpom.masks.mask_list that has grid_value_names defined.
-
-Output:
-    - Clipped Parquet data written per basin:
-            <out_dir>/<basin_name>/data.parquet
-    - metadata.json summarising processing parameters and execution time
+Outputs:
+- <out_dir>/<region_label>/data.parquet
+- <out_dir>/<region_label>/clip_to_basins_meta.json
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
 import time
 from pathlib import Path
 
+import geopandas as gpd
 import polars as pl
 
 from cpom.altimetry.tools.sec_tools.basin_selection_helper import (
     add_basin_selection_arguments,
+)
+from cpom.altimetry.tools.sec_tools.metadata_helper import (
+    elapsed,
+    get_metadata_params,
+    write_metadata,
 )
 from cpom.gridding.gridareas import GridArea
 from cpom.logging_funcs.logging import set_loggers
@@ -38,215 +43,299 @@ from cpom.masks.masks import Mask
 
 
 def parse_arguments(args: list[str]) -> argparse.Namespace:
-    """
-    Parse command line arguments for clipping altimetry data
-    using the CPOM Mask class.
+    """Parse command-line arguments for mask-based clipping of altimetry data."""
 
-    Args:
-        args: List of command-line arguments.
-
-    Returns:
-        argparse.Namespace: Parsed command line arguments.
-    """
     parser = argparse.ArgumentParser(
         description="Clip altimetry data to regions defined by CPOM grid mask"
     )
     parser.add_argument(
-        "--in_dir",
+        "--in_step",
         type=str,
-        required=True,
-        help="Directory containing input altimetry data",
+        help="Input algorithm step to source metadata from",
     )
+    parser.add_argument("--in_dir", type=str, required=True, help="Input data directory")
     parser.add_argument(
         "--out_dir",
-        help="Directory for output results",
         type=str,
         required=True,
+        help="Output directory Path",
     )
     parser.add_argument(
         "--parquet_glob",
         type=str,
         default="**/*.parquet",
-        help="File glob pattern for selecting input files.",
-    )
-    parser.add_argument(
-        "--grid_info_json",
-        help="Path to the grid metadata JSON file, if not passed is inferred",
-        required=True,
+        help="Glob pattern for selecting input files relative to --in_dir.",
     )
     parser.add_argument(
         "--mask",
         type=str,
-        required=True,
-        help="CPOM Mask Class to be used for clipping.",
+        help="CPOM Mask class name used for clipping.",
+    )
+    parser.add_argument(
+        "--shapefile",
+        type=str,
+        help="Path to the shapefile for clipping (alternative to --mask).",
+    )
+    parser.add_argument(
+        "--shp_file_column",
+        type=str,
+        help="Shapefile column containing basin/region identifiers.",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable DEBUG level logging",
     )
-
+    # Fall back if grid parameters are not provided in metadata
+    parser.add_argument(
+        "--gridarea",
+        type=str,
+        required=False,
+        help="Grid area name. Grid metadata fallback",
+    )
+    parser.add_argument(
+        "--binsize",
+        type=float,
+        required=False,
+        help="Grid bin size. Grid metadata fallback",
+    )
+    parser.add_argument(
+        "--keep_output_as_numbers",
+        action="store_true",
+        help=(
+            "Keep output directory and metadata basin labels as numeric mask values "
+            "instead of mask.grid_value_names labels."
+        ),
+    )
     # Standardize basin selection arguments across tools
     add_basin_selection_arguments(parser)
     return parser.parse_args(args)
 
 
-def get_data(grid_area: GridArea, infile: str, logger: logging.Logger) -> pl.LazyFrame:
+def get_basin_values_and_numbers(
+    params: argparse.Namespace,
+    logger: logging.Logger,
+) -> tuple[list[tuple[str, int]], Mask | None, gpd.GeoDataFrame | None]:
     """
-    Load data and add geographic coordinates.
+    Get basin names and corresponding mask values for clipping.
 
-    Add latitude/longitude coordinates for grid-cell centres to a dataset.
+    Returns:
+        tuple[list[tuple[str, int]], Mask | None, gpd.GeoDataFrame | None]:
+            - (basin_name, basin_number) pairs for each region to process
+            - Mask object when clipping from a CPOM mask, else None
+            - GeoDataFrame when clipping with polygon boundaries, else None
+    """
 
-    Coordinates are derived from x_bin and y_bin indices using the GridArea
+    mask, shp = None, None
+
+    if params.mask:
+        mask = Mask(
+            params.mask,
+            basin_numbers=params.region_selector if params.region_selector != ["all"] else None,
+        )
+
+        if mask.basin_numbers:
+            if isinstance(mask.basin_numbers[0], str):
+                names = [str(name) for name in mask.basin_numbers]
+                numbers = [
+                    int(number)
+                    for number in mask.get_grid_value_from_grid_value_names(mask.basin_numbers)
+                ]
+            else:
+                numbers = [int(number) for number in mask.basin_numbers]
+                names = [str(name) for name in mask.get_grid_value_names_from_grid_value(numbers)]
+        else:
+            names = [str(name) for name in mask.grid_value_names]
+            numbers = [int(number) for number in mask.mask_grid_possible_values]
+
+        if hasattr(mask, "shapefile_path"):
+            logger.info(
+                "Clipping using mask: %s with shapefile: %s", params.mask, mask.shapefile_path
+            )
+            shp = gpd.read_file(mask.shapefile_path)
+            params.shp_file_column = mask.shapefile_column_name
+        else:
+            logger.info("Clipping using mask: %s with grid_mask", params.mask)
+
+    elif params.shapefile:
+        logger.info("Clipping using user provided shapefile: %s", params.shapefile)
+        shp = gpd.read_file(params.shapefile)
+        if not params.shp_file_column:
+            raise ValueError("--shp_file_column must be provided when using --shapefile")
+        unique_regions = shp[params.shp_file_column].unique()
+        unique_regions_list = [str(name) for name in unique_regions]
+        names = unique_regions_list if params.region_selector == ["all"] else params.region_selector
+        numbers = [unique_regions_list.index(str(name)) for name in names]
+    else:
+        logger.error(
+            "No valid clipping method provided. Please specify either --mask or --shapefile."
+        )
+        sys.exit("No valid clipping method provided. Please specify either --mask or --shapefile.")
+
+    return list(zip([str(name) for name in names], [int(number) for number in numbers])), mask, shp
+
+
+def get_data(
+    infile: str | Path,
+    grid_area: GridArea,
+    logger: logging.Logger,
+    shapefile: gpd.GeoDataFrame | None = None,
+) -> tuple[pl.LazyFrame, gpd.GeoDataFrame | None]:
+    """
+    Load data and add projected x/y coordinates for each grid-cell centre.
+
+    Unique (x_bin, y_bin) pairs are converted to lat/lon using the GridArea
     definition and appended as new columns.
 
     Args:
-        grid_area (GridArea): CPOM GridArea object for coordinate transformations.
-        infile (str): Path to the input parquet file.
-        logger (logging.Logger): Logger for progress messages.
+        grid_area (GridArea): CPOM GridArea object for coordinate conversion.
+        infile (str): Path to the input Parquet file.
+        logger (logging.Logger): Logger Object.
 
     Returns:
-        pl.LazyFrame: Epoch-averaged data with added 'lat' and 'lon' columns.
+        tuple[pl.LazyFrame, gpd.GeoDataFrame | None]:
+            - Input data with 'x' and 'y' columns joined to each row
+            - GeoDataFrame of unique bin centres (only when shapefile clipping is enabled)
     """
-    logger.info(f"Loading data from: {Path(infile)}")
+
+    logger.info("Loading data from: %s", Path(infile))
     epoch_data = pl.scan_parquet(Path(infile))
 
     # Get unique cells
     unique_cells = epoch_data.select(["x_bin", "y_bin"]).unique().collect()
 
-    # Compute lat/lon
-    lats, lons = grid_area.get_cellcentre_lat_lon_from_col_row(
+    x, y = grid_area.get_cellcentre_x_y_from_col_row(
         unique_cells.get_column("x_bin").to_numpy(),
         unique_cells.get_column("y_bin").to_numpy(),
     )
-    coords_df = unique_cells.with_columns(
+
+    unique_cells = unique_cells.with_columns(
         [
-            pl.Series("lat", lats),
-            pl.Series("lon", lons),
+            pl.Series("x", x),
+            pl.Series("y", y),
         ]
-    ).lazy()
+    )
+    bin_centres_gdf = None
+    if shapefile is not None:
+        bin_centres_gdf = gpd.GeoDataFrame(
+            unique_cells.to_pandas(),
+            geometry=gpd.points_from_xy(unique_cells["x"], unique_cells["y"]),
+            crs=grid_area.crs_bng,
+        )
 
     # Join coordinates to data
-    return epoch_data.join(
-        coords_df,
-        on=["x_bin", "y_bin"],
-        how="left",
-    )
-
-
-def clip_data_to_shape(
-    mask: Mask,
-    basin_name: str,
-    data: pl.LazyFrame,
-) -> pl.LazyFrame:
-    """
-    Clip point data to a specific region defined by a CPOM Mask.
-
-    Each row in the input data is assigned a mask label based on its latitude
-    and longitude. Only rows corresponding to the specified basin_name
-    (from mask.grid_value_names) are kept.
-
-    Args:
-        mask (Mask): CPOM Mask object for mask value lookup.
-        basin_name (str): Target mask label (from mask.grid_value_names) to keep.
-        data (pl.LazyFrame): Data with 'lat' and 'lon' columns.
-
-    Returns:
-        pl.LazyFrame: Clipped data containing only rows where mask_label matches
-        basin_name.
-    """
-    if isinstance(data, pl.LazyFrame):
-        data_df: pl.DataFrame = data.collect()
-    else:
-        data_df = data
-
-    # Evaluate mask values
-    mask_values = mask.grid_mask_values(
-        data_df.get_column("lat").to_numpy(), data_df.get_column("lon").to_numpy()
-    )
-
-    def _label_for_value(mask: Mask, value: int, unknown_label: str) -> str:
-        if 0 <= value < len(mask.grid_value_names):
-            return mask.grid_value_names[value]
-        return unknown_label
-
-    labels = [_label_for_value(mask, int(v), "unknown") for v in mask_values]
-
-    # Filter to target basin
-    data_df = (
-        data_df.with_columns(
-            [
-                pl.Series("mask_label", labels),
-            ]
-        )
-        .filter(pl.col("mask_label") == basin_name)
-        .drop("mask_label")
-    )
-
-    return data_df.lazy()
+    epoch_data = epoch_data.join(unique_cells.lazy(), on=["x_bin", "y_bin"], how="left")
+    return epoch_data, bin_centres_gdf
 
 
 def process_single_basin(
     params: argparse.Namespace,
-    mask: Mask,
-    grid_area: GridArea,
+    data: pl.LazyFrame,
+    mask: Mask | None,
+    shapefile: gpd.GeoDataFrame | None,
+    unique_cells: gpd.GeoDataFrame | None,
     basin_name: str,
-    logger: logging.Logger,
-):
+    basin_number: int,
+) -> pl.LazyFrame:
     """
-    Clip altimetry data to a single basin and write results to disk.
+    Clip input data to a single basin.
 
     Args:
-        params: Command line parameters.
-            Includes:
-            - in_dir: Input directory with gridded altimetry data.
-            - out_dir: Output directory for clipped data.
-            - parquet_glob: Glob pattern to match parquet files.
-        mask: CPOM Mask object for mask value lookup.
-        grid_area: CPOM GridArea object for coordinate transformations.
-        basin_name: Name of the basin, used for output directory naming.
-        logger: Logger object.
+        params (argparse.Namespace): Runtime parameters.
+        data (pl.LazyFrame): Input data with 'x' and 'y' columns for masking.
+        mask (Mask | None): CPOM Mask object for grid-based clipping.
+        shapefile (gpd.GeoDataFrame | None): Region polygons for shp clipping.
+        unique_cells (gpd.GeoDataFrame | None): Unique grid-cell centres for shp clipping.
+        basin_name (str): Basin/region label.
+        basin_number (int): Numeric basin identifier.
 
-    Output:
-        - Non-partitioned: <out_dir>/<basin_name>/data.parquet
-        - Partitioned: <out_dir>/<basin_name>/x_part=<x>/y_part=<y>/data.parquet
-                    (one file per non-empty partition)
+    Returns:
+        pl.LazyFrame: Clipped basin data.
     """
-    logger.info(f"Clipping to: {basin_name}")
-    output_dir = Path(params.out_dir) / basin_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if shapefile is not None:
+        if unique_cells is None:
+            raise ValueError("unique_cells is required when clipping by shapefile")
+        # Find bins with centres inside basin.
+        bins_in_basins = gpd.sjoin(
+            unique_cells,
+            shapefile[shapefile[params.shp_file_column] == basin_name],
+            how="inner",
+            predicate="within",
+        )[["x_bin", "y_bin"]].drop_duplicates()
 
-    in_file = Path(params.in_dir) / params.parquet_glob
-    data = get_data(grid_area, in_file, logger)
-    clipped_data = clip_data_to_shape(mask, basin_name, data)
-    clipped_data.drop(["lat", "lon"]).sink_parquet(output_dir / "data.parquet")
-    logger.info(f"Wrote: {output_dir / 'data.parquet'}")
+        basin_data = data.join(
+            pl.from_pandas(bins_in_basins).lazy(),
+            on=["x_bin", "y_bin"],
+            how="inner",
+        )
+
+    else:
+        if mask is None:
+            raise ValueError("mask is required when clipping by grid mask")
+        basin_data = mask.points_inside_polars(
+            data, basin_numbers=[basin_number], return_pl_dataframe=False
+        )
+
+    return basin_data
 
 
-def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Logger):
+def write_clipped_data(
+    output_data: pl.LazyFrame, output_dir: Path, logger: logging.Logger
+) -> dict[str, int | str]:
+    """Write clipped data and return simple row/cell summary statistics."""
+
+    stats_df = output_data.select(
+        [
+            pl.len().alias("n_rows"),
+            pl.struct(["x_bin", "y_bin"]).n_unique().alias("n_unique_cells"),
+        ]
+    ).collect()
+
+    output_file = output_dir / "data.parquet"
+    output_data.sink_parquet(output_file)
+    logger.info(f"Wrote: {output_file}")
+
+    return {
+        "output_file": str(output_file),
+        "n_rows": int(stats_df["n_rows"][0]),
+        "n_unique_cells": int(stats_df["n_unique_cells"][0]),
+    }
+
+
+def get_metadata_json(
+    params: argparse.Namespace,
+    start_time: float,
+    logger: logging.Logger,
+    basin_name: str,
+    basin_number: int,
+    basin_output_dir: Path,
+    basin_stats: dict[str, int | str],
+):
     """
-    Generate metadata JSON for clipped data.
+    Generate metadata JSON for processed basin.
 
     Args:
         params (argparse.Namespace): Command line parameters.
         start_time (float): Start time.
         logger (logging.Logger): Logger object.
+        basin_name (str): Basin identifier.
+        basin_output_dir (Path): Output basin directory
+        basin_stats (dict): Output statistics from process_single_basin()
     """
-    meta_json_path = Path(params.out_dir) / "metadata.json"
-    hours, remainder = divmod(int(time.time() - start_time), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
     try:
-        with open(meta_json_path, "w", encoding="utf-8") as f_meta:
-            json.dump(
-                {
-                    **vars(params),
-                    "execution_time": f"{hours:02}:{minutes:02}:{seconds:02}",
-                },
-                f_meta,
-                indent=2,
-            )
-        logger.info("Wrote data_set metadata to %s", meta_json_path)
+        write_metadata(
+            params,
+            "clip_to_basins",
+            basin_output_dir,
+            {
+                **dict(vars(params)),
+                "basin_name": basin_name,
+                "basin_number": basin_number,
+                **basin_stats,
+                "execution_time": elapsed(start_time),
+            },
+        )
+        logger.info("Wrote data_set metadata to folder %s", basin_output_dir)
 
     except OSError as e:
         logger.error("Failed to write surface_fit_meta.json with %s", e)
@@ -255,24 +344,20 @@ def get_metadata_json(params: argparse.Namespace, start_time, logger: logging.Lo
 # ----------------#
 # Main Function #
 # ----------------#
-def clip_to_basins(args):
+def clip_to_basins(args: list[str]) -> None:
     """
-    Entry point for mask-based clipping of data to basins from CPOM
-    Mask class grid.
+    Main entry point for clipping altimetry data to shapefile basins.
+    from CPOM Mask class grid.
 
     Steps:
-        1. Parse command line arguments
-        2. Set up output directory and logging
-        3. Load grid metadata from JSON file
-        4. Initialize GridArea and Mask objects
-        5. Process and clip data by mask regions
-        6. Write metadata JSON
+        1. Parse command line arguments and initialise logging.
+        2. Resolve grid parameters and build GridArea object.
+        3. Process and clip data by mask regions
+        4. For each region: Clip data and write output and metadata.
 
     Args:
-        args (list[str]): Command line arguments.
+        args (list[str]): Arguments.
     """
-
-    start_time = time.time()
     params = parse_arguments(args)
     os.makedirs(params.out_dir, exist_ok=True)
     logger = set_loggers(
@@ -280,29 +365,49 @@ def clip_to_basins(args):
         default_log_level=logging.DEBUG if params.debug else logging.INFO,
     )
 
-    with open(Path(params.grid_info_json), "r", encoding="utf-8") as f:
-        grid_meta = json.load(f)
+    try:
+        grid_params = get_metadata_params(params=params, fields=["gridarea", "binsize"])
+    except ValueError as exc:
+        logger.error("Couldn't resolve required grid parameters: %s", exc)
+        sys.exit(str(exc))
 
-    grid_area = GridArea(grid_meta["gridarea"], grid_meta["binsize"])
-    mask = Mask(params.mask)
+    selector_name_num, this_mask, shapefile = get_basin_values_and_numbers(params, logger)
 
-    # Clip to basin shape by bin centres
-    for region in (
-        mask.grid_value_names if params.region_selector == ["all"] else params.region_selector
-    ):
-        logger.info("Processing region: %s", region)
-        output_dir = Path(params.out_dir) / region
+    input_data, unique_cells = get_data(
+        Path(params.in_dir) / params.parquet_glob,
+        GridArea(str(grid_params["gridarea"]), int(grid_params["binsize"])),
+        logger,
+        shapefile,
+    )
+
+    for basin_name, basin_number in selector_name_num:
+        start_time = time.time()
+
+        logger.info("Processing region: %s (mask value %s)", basin_name, basin_number)
+        output_dir = (
+            Path(params.out_dir) / basin_name
+            if not params.keep_output_as_numbers
+            else Path(params.out_dir) / str(basin_number)
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        process_single_basin(
-            params,
-            mask,
-            grid_area,
-            region,
+        stats_dict = write_clipped_data(
+            process_single_basin(
+                params,
+                input_data,
+                this_mask,
+                shapefile,
+                unique_cells,
+                basin_name,
+                basin_number,
+            ),
+            output_dir,
             logger,
         )
 
-    get_metadata_json(params, start_time, logger)
+        get_metadata_json(
+            params, start_time, logger, basin_name, basin_number, output_dir, stats_dict
+        )
 
 
 if __name__ == "__main__":
