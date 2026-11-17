@@ -12,7 +12,6 @@ from os.path import isfile
 from typing import Any, Optional
 
 import numpy as np
-import polars as pl
 from matplotlib.path import Path  # for polygon masking
 from netCDF4 import Dataset  # pylint: disable=E0611
 from pyproj import CRS  # CRS definitions
@@ -75,7 +74,7 @@ class Mask:
     def __init__(
         self,
         mask_name: str,
-        basin_numbers: Optional[list[int]] = None,
+        basin_numbers: Optional[list[int | str]] = None,
         mask_filename: Optional[str] = None,
         mask_path: Optional[str] = None,
         store_in_shared_memory: bool = False,
@@ -85,8 +84,9 @@ class Mask:
 
         Args:
             mask_name (str): mask name, must be in global mask_list
-            basin_numbers (list[int], optional): list of grid values to select from grid masks
-                                                 def=None
+            basin_numbers (list[int|str], optional): list of grid values to select from grid
+            masks.
+            Can use grid value names instead of numbers. If None, all grid values in mask are used.
             mask_path (str, optional): override default path of mask data file
             mask_definition_path (str, optional): uses mask definition found at this path instead of
                 looking in stored definitions
@@ -100,6 +100,7 @@ class Mask:
         self.mask_name = mask_name
         self.mask_long_name = ""
         self.mask_grid: np.ndarray = np.array([])
+        self.mask_grid_possible_values: list[int] = []
         self.basin_numbers = basin_numbers
         self.store_in_shared_memory = store_in_shared_memory
         self.shared_mem: Any = None
@@ -227,6 +228,7 @@ class Mask:
                             glacier_names.append(row["NAME"])
 
                     self.grid_value_names = glacier_names
+                    self.mask_grid_possible_values = list(range(len(glacier_names)))
 
                 # anything else, set as an attribute
                 case _:
@@ -343,7 +345,7 @@ class Mask:
         self,
         lats: np.ndarray | list,
         lons: np.ndarray | list,
-        basin_numbers: Optional[list[int]] = None,
+        basin_numbers: Optional[list[int | str]] = None,
         inputs_are_xy: bool = False,
     ) -> tuple[np.ndarray, int]:
         """Given a list of lat,lon or x,y points, find the points that are inside the current mask
@@ -351,7 +353,8 @@ class Mask:
         Args:
             lats (np.ndarray|list[float]): list of latitude points
             lons (np.ndarray|list[float]): list of longitude points
-            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
+            basin_numbers (list[int,], optional): list of basin numbers or grid value names.
+                                                    Defaults to None.
             inputs_are_xy (bool, optional): lats, lons are already transformed to x,y.
                                             Defaults to False.
 
@@ -384,6 +387,10 @@ class Mask:
         if self.basin_numbers:
             if not basin_numbers:
                 basin_numbers = self.basin_numbers
+
+        # basin numbers are strings convert
+        if basin_numbers and isinstance(basin_numbers[0], str):
+            basin_numbers = self.get_grid_value_from_grid_value_names(basin_numbers)
 
         if inputs_are_xy:
             x, y = lats, lons
@@ -451,6 +458,39 @@ class Mask:
             return inmask, 0
 
         return inmask, n_inside
+
+    def get_grid_value_names_from_grid_value(self, basin_numbers):
+        """Get grid value names from grid values"""
+        return [
+            self.grid_value_names[self.mask_grid_possible_values.index(v)] for v in basin_numbers
+        ]
+
+    def get_grid_value_from_grid_value_names(self, grid_value_names):
+        """Get grid values from grid value names"""
+        return [
+            self.mask_grid_possible_values[self.grid_value_names.index(n)] for n in grid_value_names
+        ]
+
+    def resolve_basin_numbers(
+        self, basin_numbers: Optional[list[int | str]] = None
+    ) -> Optional[list[int]]:
+        """Resolve caller-supplied or instance-default basin selection to integer values."""
+        selected = basin_numbers if basin_numbers is not None else self.basin_numbers
+        if not selected:
+            return None
+        selected = list(selected)
+        if isinstance(selected[0], str):
+            return self.get_grid_value_from_grid_value_names(selected)
+        return [int(v) for v in selected]
+
+    def resolve_basin_names(
+        self, basin_numbers: Optional[list[int | str]] = None
+    ) -> Optional[list[str]]:
+        """Resolve caller-supplied or instance-default basin selection to grid value names."""
+        resolved = self.resolve_basin_numbers(basin_numbers)
+        if resolved is None:
+            return None
+        return self.get_grid_value_names_from_grid_value(resolved)
 
     def grid_mask_values(
         self,
@@ -552,111 +592,3 @@ class Mask:
                 raise IOError(
                     f'Shared memory for {self.mask_name} could not be closed {exc}"'
                 ) from exc
-
-    ######################################################
-    # Function to Mask to a polars LazyFrame or DataFrame #
-    ######################################################
-    # pylint: disable=R0917
-    def points_inside_polars(
-        self,
-        df: pl.LazyFrame | pl.DataFrame,
-        x_col: str = "x",
-        y_col: str = "y",
-        basin_numbers: Optional[list[int]] = None,
-        return_pl_dataframe=False,
-    ) -> pl.LazyFrame | pl.DataFrame:
-        """Given a list of lat,lon or x,y points, find the points that are inside the current mask
-        Args:
-            df (pl.LazyFrame|pl.DataFrame): polars LazyFrame or DataFrame with x,y columns
-            x_col (str): name of column in df containing x values
-            y_col (str): name of column in column in df containing y values
-            basin_numbers (list[int,], optional): list of basin numbers. Defaults to None.
-            return_pl_dataframe (bool, optional): return a polars DataFrame instead of LazyFrame
-                                                  Defaults to False.
-        Returns:
-            pl.LazyFrame|pl.DataFrame: polars LazyFrame or DataFrame with only points inside mask
-        """
-        # Ensure LazyFrame
-        if isinstance(df, pl.DataFrame):
-            df = df.lazy()
-
-        # Basin numbers assignment
-        if basin_numbers and not isinstance(basin_numbers, (list, np.ndarray)):
-            basin_numbers = [basin_numbers]
-        if self.basin_numbers and not basin_numbers:
-            basin_numbers = self.basin_numbers
-
-        # Filter by mask type
-        if self.mask_type == "xylimits":
-            df = df.filter(
-                (pl.col(x_col) >= self.xlimits[0])
-                & (pl.col(x_col) <= self.xlimits[1])
-                & (pl.col(y_col) >= self.ylimits[0])
-                & (pl.col(y_col) <= self.ylimits[1])
-            )
-        elif self.mask_type == "grid":
-            df = df.with_columns(
-                [
-                    ((pl.col(x_col) - self.minxm) / self.binsize)
-                    .round()
-                    .cast(pl.Int64)
-                    .alias("ii"),
-                    ((pl.col(y_col) - self.minym) / self.binsize)
-                    .round()
-                    .cast(pl.Int64)
-                    .alias("jj"),
-                ]
-            )
-            df = (
-                df.with_columns(
-                    [
-                        (
-                            (pl.col("ii") >= 0)
-                            & (pl.col("ii") < self.num_x)
-                            & (pl.col("jj") >= 0)
-                            & (pl.col("jj") < self.num_y)
-                        ).alias("in_bounds")
-                    ]
-                )
-                .filter(pl.col("in_bounds"))
-                .drop("in_bounds")
-            )
-            jj = df.select("jj").collect().to_numpy().flatten()
-            ii = df.select("ii").collect().to_numpy().flatten()
-
-            # Get mask values from grid
-            mask_values = self.mask_grid[jj, ii]
-            df = df.with_columns([pl.Series("mask_value", mask_values)])
-
-            if self.basin_numbers:
-                df = df.filter(pl.col("mask_value").is_in(self.basin_numbers))
-            else:
-                df = df.filter(pl.col("mask_value") > 0)
-            df = df.drop(["ii", "jj", "mask_value"])
-
-        elif self.mask_type == "polygon":
-            df_collected = df.collect()
-            x_vals = df_collected.get_column(x_col).to_numpy()
-            y_vals = df_collected.get_column(y_col).to_numpy()
-            points = np.column_stack((x_vals, y_vals))
-
-            if len(self.polygon_lon) > 0:
-                poly_x, poly_y = self.latlon_to_xy(self.polygon_lat, self.polygon_lon)
-                path = Path(np.column_stack((poly_x, poly_y)))
-                inmask = path.contains_points(points)
-            elif self.polygons_lon:
-                inmask = np.zeros(len(x_vals), np.bool_)
-                for pi, plon in enumerate(self.polygons_lon):
-                    poly_x, poly_y = self.latlon_to_xy(self.polygons_lat[pi], plon)
-                    path = Path(np.column_stack((poly_x, poly_y)))
-                    inmask |= path.contains_points(points)
-            else:
-                inmask = np.zeros(len(x_vals), np.bool_)
-
-            df_collected = df_collected.with_columns(pl.Series("in_bounds", inmask))
-            df_collected = df_collected.filter(pl.col("in_bounds")).drop("in_bounds")
-
-            df = df_collected if return_pl_dataframe else df_collected.lazy()
-            return df
-
-        return df.collect() if return_pl_dataframe else df
