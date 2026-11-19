@@ -91,16 +91,16 @@ def main():
 
         # Get list of required parameters from the YAML
         required_params = [
-            dataset.latitude_param,
-            dataset.longitude_param,
-            dataset.elevation_param,
-            dataset.time_param,
-            dataset.power_param,
-            dataset.mode_param,
-            dataset.quality_param,
-            dataset.uncertainty_param,
-            dataset.latitude_nadir_param,
-            dataset.longitude_nadir_param,
+            dataset.get_param_path("latitude"),
+            dataset.get_param_path("longitude"),
+            dataset.get_param_path("elevation"),
+            dataset.get_param_path("time"),
+            dataset.get_param_path("power"),
+            dataset.get_param_path("mode"),
+            dataset.get_param_path("quality"),
+            dataset.get_param_path("uncertainty_total"),
+            dataset.get_param_path("latitude_nadir"),
+            dataset.get_param_path("longitude_nadir"),
         ]
         # Filter out None values
         required_params = [p for p in required_params if p is not None]

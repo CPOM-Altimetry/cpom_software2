@@ -47,8 +47,7 @@ def get_stats_per_grid_cell(griddir: str, conn: duckdb.DuckDBPyConnection) -> pl
     else:
         parquet_glob = f"{griddir}/year=*/**/*.parquet"
 
-    tbl = conn.execute(
-        f"""
+    tbl = conn.execute(f"""
                 SELECT
                 x_bin,
                 y_bin,
@@ -60,8 +59,7 @@ def get_stats_per_grid_cell(griddir: str, conn: duckdb.DuckDBPyConnection) -> pl
                 FROM parquet_scan('{parquet_glob}')
                 group by x_part, y_part, x_bin , y_bin, 
                 order by x_bin, y_bin
-    """
-    ).pl()
+    """).pl()
 
     return tbl
 

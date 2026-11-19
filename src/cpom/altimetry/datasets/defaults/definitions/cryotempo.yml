@@ -1,0 +1,16 @@
+
+mission: cs2
+long_name: "CryoTEMPO baseline D"
+file_backend: "netcdf4"
+dataset_epoch: "2000-01-01T00:00:00"
+search_pattern: "**/CS_OFFL_SIR_TDP_LI*.nc"
+yyyymm_str_fname_indices: [-48, -40]
+
+params:
+  latitude: "latitude"
+  longitude: "longitude"
+  elevation: "elevation"
+  elevation_err: "uncertainty"
+  power: "backscatter"
+  time: "time"
+  mode: "instrument_mode"
