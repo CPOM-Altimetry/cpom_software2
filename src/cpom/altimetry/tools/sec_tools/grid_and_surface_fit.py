@@ -25,7 +25,7 @@ import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 
-from cpom.altimetry.datasets.parquet_tools.spatio_temporal import ParquetFilter
+from cpom.altimetry.datasets.parquet_tools.spatio_temporal import parquet_filter
 from cpom.altimetry.tools.sec_tools.metadata_helper import (
     elapsed,
     get_algo_name,
@@ -258,7 +258,7 @@ def _compute_time_bounds(cache_dir: str, time_column: str = "time") -> tuple[flo
         (min_secs, max_secs)
     """
     glob = os.path.join(cache_dir, "x_part=*", "y_part=*", "*.parquet")
-    pfilter = ParquetFilter(glob, engine="duckdb")
+    pfilter = parquet_filter(glob, engine="duckdb")
     try:
         bounds = pfilter.select(
             [f"MIN({time_column}) AS min_secs", f"MAX({time_column}) AS max_secs"]
@@ -341,7 +341,7 @@ def _finalise_gridded_cache(
         + extra_cols
     )
 
-    ParquetFilter(lf, engine="polars").run(output_path=out_dir, partition_by=["x_part", "y_part"])
+    parquet_filter(lf, engine="polars").run(output_path=out_dir, partition_by=["x_part", "y_part"])
 
     stats = stats.collect()
 
@@ -394,7 +394,7 @@ def build_gridded_archive(
 
     temp_directory = os.path.join(cache_dir, "duckdb_temp")
     pfilter = (
-        ParquetFilter(
+        parquet_filter(
             parquet_glob,
             data_crs=params.data_crs,
             engine="duckdb",
