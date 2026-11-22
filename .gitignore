@@ -3,3 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+
+# ESA MAAP offline tokens (cs2/esa-maap/cs_maap_download.py)
+token.txt

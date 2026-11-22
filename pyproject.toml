@@ -37,6 +37,9 @@ statsmodels = "^0.14.6"
 envyaml = "^1.10.211231"
 cmocean = "^4.0.3"
 global-land-mask = "^1.0.0"
+pystac-client = "^0.9.1"
+tqdm = "^4.70.1"
+requests = "^2.34.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "*"

@@ -5153,6 +5153,416 @@ stubs = ["pyshp-stubs"]
 test = ["pytest"]
 
 [[package]]
+name = "pystac"
+version = "1.16.1"
+description = "Python library for working with the SpatioTemporal Asset Catalog (STAC) specification"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac-1.16.1-py3-none-any.whl", hash = "sha256:8ff7c1311c9e46b92c25d984e9166c2cb445b304712ab5c5f0615d830c8167fb"},
+    {file = "pystac-1.16.1.tar.gz", hash = "sha256:25126c9c7e78f44a3f4b5f61ec0dacf35ae0c2dc320412483701d0501793270b"},
+]
+
+[package.dependencies]
+pystac-core = ">=1.15.2,<2"
+pystac-ext-classification = "*"
+pystac-ext-datacube = "*"
+pystac-ext-eo = "*"
+pystac-ext-file = "*"
+pystac-ext-grid = "*"
+pystac-ext-item-assets = "*"
+pystac-ext-label = "*"
+pystac-ext-mgrs = "*"
+pystac-ext-mlm = "*"
+pystac-ext-pointcloud = "*"
+pystac-ext-projection = "*"
+pystac-ext-raster = "*"
+pystac-ext-render = "*"
+pystac-ext-sar = "*"
+pystac-ext-sat = "*"
+pystac-ext-scientific = "*"
+pystac-ext-storage = "*"
+pystac-ext-table = "*"
+pystac-ext-timestamps = "*"
+pystac-ext-version = "*"
+pystac-ext-view = "*"
+pystac-ext-xarray-assets = "*"
+
+[package.extras]
+jinja2 = ["jinja2 (<4.0)"]
+orjson = ["orjson (>=3.5)"]
+urllib3 = ["urllib3 (>=2.6.3)"]
+validation = ["jsonschema (>=4.18,<5.0)"]
+
+[[package]]
+name = "pystac-client"
+version = "0.9.1"
+description = "Python library for searching SpatioTemporal Asset Catalog (STAC) APIs."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_client-0.9.1-py3-none-any.whl", hash = "sha256:53247a8997002c36202fc419a891ea493bd44c45a446a8e77aca7d8b9bd82516"},
+    {file = "pystac_client-0.9.1.tar.gz", hash = "sha256:cfdbc123cb14fba5909b947ed57e423af39b061de07a52040fb65f694cb8896e"},
+]
+
+[package.dependencies]
+pystac = ">=1.10.0"
+python-dateutil = ">=2.8.2"
+requests = ">=2.28.2"
+
+[[package]]
+name = "pystac-core"
+version = "1.16.1"
+description = "Core functionality for PySTAC without extensions. Most users will want to use pystac, not this package"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_core-1.16.1-py3-none-any.whl", hash = "sha256:a194274553dc2d20c28998473b7635557ad4b7a799b7a5315484467bf4177b02"},
+    {file = "pystac_core-1.16.1.tar.gz", hash = "sha256:a55f135b535e2fc154981fd73ed407329cc24ee584e768f840036383c9b9b113"},
+]
+
+[package.dependencies]
+python-dateutil = ">=2.7.0"
+
+[[package]]
+name = "pystac-ext-classification"
+version = "2.0.2"
+description = "Classification extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_classification-2.0.2-py3-none-any.whl", hash = "sha256:cb1ba48207d327352bc6024b0ef74b6c1ff01d086eaab793a4ec7cb1520ee7a0"},
+    {file = "pystac_ext_classification-2.0.2.tar.gz", hash = "sha256:d4e7bc4e6ea85a838e7b41d647dda6155bb2d8f2dfb6de7cd511fe882330d4f3"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+pystac-ext-raster = "*"
+
+[[package]]
+name = "pystac-ext-datacube"
+version = "2.2.2"
+description = "Datacube extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_datacube-2.2.2-py3-none-any.whl", hash = "sha256:6236b05f5b2f6fa71a1bede0d398df2d19afc38a7e1d06bedca8efdad9805387"},
+    {file = "pystac_ext_datacube-2.2.2.tar.gz", hash = "sha256:6b10f5f830f9911fe0f108a410cc1512d012d3040aa0014ca21def53697e755c"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-eo"
+version = "1.1.2"
+description = "Electro-Optical extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_eo-1.1.2-py3-none-any.whl", hash = "sha256:ffe946d7ecf146b2c4c7764bd3b7120418e45f6850d6b1382e42faad430797b4"},
+    {file = "pystac_ext_eo-1.1.2.tar.gz", hash = "sha256:3973918574cb1fe20ef40efc95a3e81c5126049ad859bb50346ea6bf76ca6978"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+pystac-ext-projection = "*"
+pystac-ext-view = "*"
+
+[[package]]
+name = "pystac-ext-file"
+version = "2.1.2"
+description = "File extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_file-2.1.2-py3-none-any.whl", hash = "sha256:6c046fe7521997f6121fe593d601ca6856b2bb417d40ab8622df161b3638c1f5"},
+    {file = "pystac_ext_file-2.1.2.tar.gz", hash = "sha256:3581bf25dc788eb62d27f2d42732db12e7ffd7af23f8b35d77f7c5ce735366ae"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-grid"
+version = "1.1.2"
+description = "Grid extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_grid-1.1.2-py3-none-any.whl", hash = "sha256:664e0371becc50ec1fe7895fbf1e2f92599818e42a517e4d32dcabeb4db5ca3f"},
+    {file = "pystac_ext_grid-1.1.2.tar.gz", hash = "sha256:0da9cea1a53b9f4851c0c9458e969f31bce0fb64ff0120e3b49513213eaa56be"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-item-assets"
+version = "1.0.2"
+description = "Item Assets extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_item_assets-1.0.2-py3-none-any.whl", hash = "sha256:a5e1d9a341559319dae4a3d550b1a36f67cbfc64708b50ac9253253b812a4171"},
+    {file = "pystac_ext_item_assets-1.0.2.tar.gz", hash = "sha256:add715d7901538209d3510b1da0646e7bde0bf53146bb769dd71120daf8f891d"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-label"
+version = "1.0.3"
+description = "Label extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_label-1.0.3-py3-none-any.whl", hash = "sha256:4b0b09687b9242e00352f51c2afb9f92c886a9e923a4c5881bdb166128506158"},
+    {file = "pystac_ext_label-1.0.3.tar.gz", hash = "sha256:6922bdedb6edd06d6d750bded6869a244a1115f04147735c59bbf885301083e9"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-mgrs"
+version = "1.0.2"
+description = "MGRS extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_mgrs-1.0.2-py3-none-any.whl", hash = "sha256:41cd8d1a6f5c5d024d534986f113a32ebde332fcd8fe668f23499fe021553543"},
+    {file = "pystac_ext_mgrs-1.0.2.tar.gz", hash = "sha256:8251de11138bd9dcc8fc757d5b28eafdfd6991f827e8e64745637886ecb26a92"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-mlm"
+version = "1.4.2"
+description = "Machine Learning Model extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_mlm-1.4.2-py3-none-any.whl", hash = "sha256:1e437c095c17e6e69bcde08d0e8006a34a1e776a1e8531086b4b91b57b5ab660"},
+    {file = "pystac_ext_mlm-1.4.2.tar.gz", hash = "sha256:9335bd554c43f829b5dcfc954f3d35be2d0de15b6fb82aac6048b1316707b37b"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+pystac-ext-classification = "*"
+pystac-ext-raster = "*"
+
+[[package]]
+name = "pystac-ext-pointcloud"
+version = "1.0.2"
+description = "Point Cloud extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_pointcloud-1.0.2-py3-none-any.whl", hash = "sha256:d244dee96ce2b30b386bbbe66f68321df6d0abcc09e7b6623b3c6293fcc6eee5"},
+    {file = "pystac_ext_pointcloud-1.0.2.tar.gz", hash = "sha256:a932644e9f83d28db3c0110fbf5c99e22780aea5f4230ddfe9c3500754d5119f"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-projection"
+version = "2.0.2"
+description = "Projection extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_projection-2.0.2-py3-none-any.whl", hash = "sha256:cff1e52f37587bf0479017a8d7e70430b6ce1d73a4ce0cdbf79f2be37c8f1fe4"},
+    {file = "pystac_ext_projection-2.0.2.tar.gz", hash = "sha256:13d1445ebaf2d4a73ef0bf1b17b49678d81da2a51f89dc9f919e2554b14c6062"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-raster"
+version = "1.1.2"
+description = "Raster extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_raster-1.1.2-py3-none-any.whl", hash = "sha256:d77693ad38f7d1b5cacf1b2fab130da2d11ca1d1f3ff9a3da9889c2f04a416ad"},
+    {file = "pystac_ext_raster-1.1.2.tar.gz", hash = "sha256:b522e46cb3425bf98e189895cb9f8900e3c8e8e69e41e821560ec34b3c33f743"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-render"
+version = "2.0.1"
+description = "Render extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_render-2.0.1-py3-none-any.whl", hash = "sha256:2129d4d4eb79fdf0465dc31a2d39eeebc8e4147cfcb778f771d50249bd026b9c"},
+    {file = "pystac_ext_render-2.0.1.tar.gz", hash = "sha256:04e908e3571f83df2201da07c2b4ae5e6a7140fd202fdd5703907b1178b09f5c"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-sar"
+version = "1.0.2"
+description = "SAR extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_sar-1.0.2-py3-none-any.whl", hash = "sha256:8daa088fd83859117e350bcbb4c19256c043780d80fa66511e8f713e055c3b4d"},
+    {file = "pystac_ext_sar-1.0.2.tar.gz", hash = "sha256:252582235e3f3106112a8374b0d8b7ee4a9b330f14de1ded54f2c28d6de96046"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-sat"
+version = "1.0.2"
+description = "Satellite extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_sat-1.0.2-py3-none-any.whl", hash = "sha256:1585a2c46c6a32c8ceb3220d2ced5172d849f4392259dea679adce04a6439086"},
+    {file = "pystac_ext_sat-1.0.2.tar.gz", hash = "sha256:68cc7bbe84c2ecc5f4d3b6eca8f39b0bc622275fdcf6b9276bc016d7670c30e3"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-scientific"
+version = "1.0.2"
+description = "Scientific extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_scientific-1.0.2-py3-none-any.whl", hash = "sha256:a9ee0ad5319cb386dbb592147f1edea495204a56f2f825f29fe65ea8bbc42c1c"},
+    {file = "pystac_ext_scientific-1.0.2.tar.gz", hash = "sha256:0a2a8d1c36c7d3453cd79ce2a3f40a0084167d918e4ca8ee95bf219c38a5414a"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-storage"
+version = "2.0.2"
+description = "Storage extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_storage-2.0.2-py3-none-any.whl", hash = "sha256:72fcc921c6994d5810ac2ae9e42edb4473f55ed18d615ef75c81aaba3be8cb78"},
+    {file = "pystac_ext_storage-2.0.2.tar.gz", hash = "sha256:a55224c3f9eebb441f8c6a999033b47a34ba211b8f2ee806132525047ece5547"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-table"
+version = "1.2.2"
+description = "Table extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_table-1.2.2-py3-none-any.whl", hash = "sha256:b63d68cf58d1b88306bc4ed327ed5748577ef479948bcba3a69d9aa4c43c68c8"},
+    {file = "pystac_ext_table-1.2.2.tar.gz", hash = "sha256:c5d33351a07bf811be7eba318a474311578e5deeee2b7a6e67045fa1b8f40ea0"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-timestamps"
+version = "1.1.2"
+description = "Timestamps extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_timestamps-1.1.2-py3-none-any.whl", hash = "sha256:234c13e58592ac88330410d052d36b938143dca756af80157c0e53018c97678e"},
+    {file = "pystac_ext_timestamps-1.1.2.tar.gz", hash = "sha256:7466fac8300491a423c8b4cb52b9b23beec53db494385c87910584989e136414"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-version"
+version = "1.2.2"
+description = "Version extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_version-1.2.2-py3-none-any.whl", hash = "sha256:ac9f4bc15f4e9eda12834ce169f6fea62e1185a6e046dfe38588e9f0dcfb9c3f"},
+    {file = "pystac_ext_version-1.2.2.tar.gz", hash = "sha256:9536a19f278b59430ad71026284da62b991d5e3cec21337aed4f91c03e32a783"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-view"
+version = "1.0.2"
+description = "View extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_view-1.0.2-py3-none-any.whl", hash = "sha256:76d640519fa0b165a4d614f7bf9122cfe6aeaa6a665d0b86e1b370864833dfb8"},
+    {file = "pystac_ext_view-1.0.2.tar.gz", hash = "sha256:4d48eda56751dcf4e9dfa990ecfdb724ea9cfe518a0082cd1a6a15be0219be0d"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
+name = "pystac-ext-xarray-assets"
+version = "1.0.2"
+description = "Xarray Assets extension for PySTAC"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pystac_ext_xarray_assets-1.0.2-py3-none-any.whl", hash = "sha256:61a31e209d0fb771fda21d05038508b79f0977e816de4e097800c2e715163efe"},
+    {file = "pystac_ext_xarray_assets-1.0.2.tar.gz", hash = "sha256:14268efdda23a9edbed3bb203e0372f139e099805b9699b096899dcc75e51b98"},
+]
+
+[package.dependencies]
+pystac-core = "*"
+
+[[package]]
 name = "pytest"
 version = "7.4.4"
 description = "pytest: simple powerful testing with Python"
@@ -5824,25 +6234,25 @@ typing-extensions = {version = ">=4.4.0", markers = "python_version < \"3.13\""}
 
 [[package]]
 name = "requests"
-version = "2.32.5"
+version = "2.34.2"
 description = "Python HTTP for Humans."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6"},
-    {file = "requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf"},
+    {file = "requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"},
+    {file = "requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed"},
 ]
 
 [package.dependencies]
-certifi = ">=2017.4.17"
+certifi = ">=2023.5.7"
 charset_normalizer = ">=2,<4"
 idna = ">=2.5,<4"
-urllib3 = ">=1.21.1,<3"
+urllib3 = ">=1.26,<3"
 
 [package.extras]
 socks = ["PySocks (>=1.5.6,!=1.5.7)"]
-use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
+use-chardet-on-py3 = ["chardet (>=3.0.2,<8)"]
 
 [[package]]
 name = "rich"
@@ -6986,6 +7396,27 @@ files = [
 ]
 
 [[package]]
+name = "tqdm"
+version = "4.70.1"
+description = "Fast, Extensible Progress Meter"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "tqdm-4.70.1-py3-none-any.whl", hash = "sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"},
+    {file = "tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+discord = ["envwrap", "requests"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["envwrap", "slack-sdk"]
+telegram = ["envwrap", "requests"]
+
+[[package]]
 name = "traitlets"
 version = "5.14.3"
 description = "Traitlets Python configuration system"
@@ -7631,4 +8062,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "74b28942ff61564e9422d94130b9dacfffc12079f7fba0c8750bb61efc9e3ce8"
+content-hash = "1b1d0aef991474f65e0b8c8ae13ef3099fde781afb705efdea14e0b47d309480"
