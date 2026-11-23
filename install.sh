@@ -62,7 +62,8 @@ fi
 
 export ppath=$(poetry env info --path)
 
-echo "export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:\$PATH" >> $setup_and_run_file
+# Start on a new line, in case the template's last line has no trailing newline
+printf '\nexport PATH=%s/src/cpom/altimetry/tools:%s/bin:$PATH\n' "$CPOM_SOFTWARE_DIR" "$ppath" >> "$setup_and_run_file"
 
 export PATH=$CPOM_SOFTWARE_DIR/src/cpom/altimetry/tools:${ppath}/bin:$PATH
 
