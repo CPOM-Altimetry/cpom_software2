@@ -362,8 +362,15 @@ def download(url: str, dest: Path, tokens: TokenManager, expected_size: int | No
     tmp = dest.with_name(dest.name + ".part")
     headers = {"Authorization": f"Bearer {tokens.get()}"}
     with requests.get(url, headers=headers, stream=True, timeout=120) as r:
-        if r.status_code in (401, 403):
-            raise RuntimeError(f"HTTP {r.status_code} (not authorised) for {url}")
+        if r.status_code in (401, 403, 429):
+            # Include the server's reason and any Retry-After, to tell permission
+            # problems apart from rate or quota limits.
+            reason = " ".join(r.text[:300].split()) or "(empty body)"
+            retry_after = r.headers.get("Retry-After")
+            raise RuntimeError(
+                f"HTTP {r.status_code} for {url}\n      server says: {reason}"
+                + (f"\n      Retry-After: {retry_after}" if retry_after else "")
+            )
         r.raise_for_status()
         total = int(r.headers.get("Content-Length", 0)) or expected_size
         with (
