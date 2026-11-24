@@ -1,19 +1,25 @@
 #!/usr/bin/env python
 r"""Search for and download CryoSat-2 products (L1b, L2, CryoTEMPO) from the ESA MAAP catalogue.
 
-Search uses the public STAC API (no login needed). Downloads need an ESA MAAP
-long-lasting (offline) token, generated at
-    https://portal.maap.eo.esa.int/ini/services/auth/token/
-and saved as plain text in a token file. The script exchanges it for a short-lived
-access token at the MAAP IAM endpoint and refreshes it as needed.
+Search uses the public STAC API (no login needed). Downloads need a MAAP login, by
+one of two methods. Either way the script gets short-lived access tokens from the
+MAAP IAM endpoint and renews them as needed.
 
-Token file location, first match wins:
-    1. --token-file PATH
-    2. the MAAP_TOKEN_FILE environment variable
-    3. ~/.config/esa-maap/token.txt
-Keep it private:  chmod 600 ~/.config/esa-maap/token.txt
+1. M2M service account (ESA MAAP DAS machine-to-machine ICD v1.2): a JSON file
+       {"username": "...", "password": "...",
+        "client_id": "...", "client_secret": "..."}
+   located by: --m2m-file PATH, else $MAAP_M2M_FILE, else ~/.config/esa-maap/m2m.json
+   (client_secret may be left out if ESA did not issue one)
 
-Search-only runs (--dry-run) need no token.
+2. Personal long-lasting (offline) token, generated at
+       https://portal.maap.eo.esa.int/ini/services/auth/token/
+   (valid 90 days) and saved as plain text, located by:
+   --token-file PATH, else $MAAP_TOKEN_FILE, else ~/.config/esa-maap/token.txt
+
+--auth auto (the default) uses the M2M file if it exists, otherwise the token file.
+Keep both private, e.g.  chmod 600 ~/.config/esa-maap/*
+
+Search-only runs (--dry-run) need no login.
 
 Examples
 --------
@@ -40,6 +46,7 @@ Files already present (same name and size) are always skipped.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -63,6 +70,10 @@ CLIENT_ID = "offline-token"
 CLIENT_SECRET = "p1eL7uonXs6MDxtGbgKdPVRAmnGxHpVE"
 TOKEN_FILE_ENV = "MAAP_TOKEN_FILE"
 DEFAULT_TOKEN_FILE = Path.home() / ".config" / "esa-maap" / "token.txt"
+M2M_FILE_ENV = "MAAP_M2M_FILE"
+DEFAULT_M2M_FILE = Path.home() / ".config" / "esa-maap" / "m2m.json"
+M2M_REQUIRED_KEYS = {"username", "password", "client_id"}
+M2M_OPTIONAL_KEYS = {"client_secret"}
 
 # Every CryoSat collection in the MAAP catalogue, with the complete product-type and
 # baseline lists from each collection's /queryables endpoint (fetched 2026-11-21).
@@ -151,10 +162,31 @@ ASSETS = {"nc": "enclosure_nc", "hdr": "enclosure_hdr", "zip": "product"}
 ASSET_SUFFIX = {"nc": ".nc", "hdr": ".HDR", "zip": ".ZIP"}
 
 
-class TokenManager:  # pylint: disable=too-few-public-methods
-    """Exchange the offline token for access tokens, reusing each until near expiry."""
+def warn_if_not_private(path: Path) -> None:
+    """Warn if a credentials file can be read by other users."""
+    if path.stat().st_mode & 0o077:
+        print(
+            f"Warning: {path} can be read by other users; consider: chmod 600 {path}",
+            file=sys.stderr,
+        )
 
-    def __init__(self, token_file: Path):
+
+class TokenManager:
+    """Get MAAP access tokens, reusing each until near expiry.
+
+    Build one with from_token_file() (personal offline token) or from_m2m_file()
+    (M2M service account). Only the login form differs between the two.
+    """
+
+    def __init__(self, form: dict[str, str], description: str):
+        self._form = form
+        self.description = description
+        self._access: str | None = None
+        self._expires = 0.0
+
+    @classmethod
+    def from_token_file(cls, token_file: Path) -> TokenManager:
+        """Login with a personal long-lasting (offline) token, via the refresh_token grant."""
         if not token_file.is_file():
             sys.exit(
                 f"Token file not found: {token_file}\n"
@@ -162,37 +194,87 @@ class TokenManager:  # pylint: disable=too-few-public-methods
                 "https://portal.maap.eo.esa.int/ini/services/auth/token/ and save it there, "
                 f"or point --token-file or ${TOKEN_FILE_ENV} at your token file."
             )
-        if token_file.stat().st_mode & 0o077:
-            print(
-                f"Warning: {token_file} can be read by other users; "
-                f"consider: chmod 600 {token_file}",
-                file=sys.stderr,
+        warn_if_not_private(token_file)
+        form = {
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": token_file.read_text().strip(),
+            "scope": "offline_access openid",
+        }
+        return cls(form, f"offline token ({token_file})")
+
+    @classmethod
+    def from_m2m_file(cls, m2m_file: Path) -> TokenManager:
+        """Login with an M2M service account, via the password grant (ESA M2M ICD v1.2)."""
+        if not m2m_file.is_file():
+            sys.exit(
+                f"M2M credentials file not found: {m2m_file}\n"
+                "Create it as JSON with keys username, password, client_id "
+                f"(and client_secret if issued), or point --m2m-file or ${M2M_FILE_ENV} at it."
             )
-        self.offline_token = token_file.read_text().strip()
-        self._access: str | None = None
-        self._expires = 0.0
+        warn_if_not_private(m2m_file)
+        try:
+            creds = json.loads(m2m_file.read_text())
+        except json.JSONDecodeError as e:
+            sys.exit(f"{m2m_file} is not valid JSON: {e.msg} (line {e.lineno})")
+        if not isinstance(creds, dict):
+            sys.exit(f"{m2m_file} must contain a JSON object")
+        missing = M2M_REQUIRED_KEYS - creds.keys()
+        unknown = creds.keys() - M2M_REQUIRED_KEYS - M2M_OPTIONAL_KEYS
+        if missing or unknown:
+            sys.exit(
+                f"{m2m_file}: "
+                + (f"missing keys {sorted(missing)} " if missing else "")
+                + (f"unexpected keys {sorted(unknown)} " if unknown else "")
+                + f"(expected {sorted(M2M_REQUIRED_KEYS)} plus optional client_secret)"
+            )
+        form = {
+            "grant_type": "password",
+            "client_id": str(creds["client_id"]),
+            "username": str(creds["username"]),
+            "password": str(creds["password"]),
+            "scope": "openid",
+        }
+        if creds.get("client_secret"):
+            form["client_secret"] = str(creds["client_secret"])
+        return cls(form, f"M2M service account {creds['username']} ({m2m_file})")
 
     def get(self) -> str:
         """Return a valid access token, requesting a new one if the last has (nearly) expired."""
         if self._access and time.time() < self._expires - 30:
             return self._access
-        r = requests.post(
-            TOKEN_URL,
-            data={
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "grant_type": "refresh_token",
-                "refresh_token": self.offline_token,
-                "scope": "offline_access openid",
-            },
-            timeout=60,
-        )
+        r = requests.post(TOKEN_URL, data=self._form, timeout=60)
         if r.status_code != 200:
-            sys.exit(f"Token exchange failed ({r.status_code}): {r.text[:300]}")
+            # Keycloak error bodies hold only an error code and description, no credentials.
+            sys.exit(f"Login failed for {self.description} ({r.status_code}): {r.text[:300]}")
         d = r.json()
         self._access = d["access_token"]
         self._expires = time.time() + float(d.get("expires_in", 60))
         return self._access
+
+
+def resolve_path(cli_value: Path | None, env_var: str, default: Path) -> Path:
+    """Path from the command line, else the environment variable, else the default."""
+    if cli_value:
+        return cli_value.expanduser()
+    env = os.environ.get(env_var)
+    if env:
+        return Path(env).expanduser()
+    return default
+
+
+def make_token_manager(args) -> TokenManager:
+    """Pick the login method from --auth (auto: M2M if its credentials file exists)."""
+    m2m_file = resolve_path(args.m2m_file, M2M_FILE_ENV, DEFAULT_M2M_FILE)
+    if args.auth == "m2m" or (args.auth == "auto" and m2m_file.is_file()):
+        tokens = TokenManager.from_m2m_file(m2m_file)
+    else:
+        tokens = TokenManager.from_token_file(
+            resolve_path(args.token_file, TOKEN_FILE_ENV, DEFAULT_TOKEN_FILE)
+        )
+    print(f"Login: {tokens.description}")
+    return tokens
 
 
 def build_filter(args, created_after: datetime | None = None) -> str | None:
@@ -272,16 +354,6 @@ def dest_path(item, args) -> Path:
 def have(dest: Path, expected_size: int | None) -> bool:
     """True if dest exists and (when the catalogue gives a size) has the expected size."""
     return dest.exists() and (expected_size is None or dest.stat().st_size == expected_size)
-
-
-def resolve_token_file(cli_value: Path | None) -> Path:
-    """Token file from --token-file, else $MAAP_TOKEN_FILE, else ~/.config/esa-maap/token.txt."""
-    if cli_value:
-        return cli_value.expanduser()
-    env = os.environ.get(TOKEN_FILE_ENV)
-    if env:
-        return Path(env).expanduser()
-    return DEFAULT_TOKEN_FILE
 
 
 def download(url: str, dest: Path, tokens: TokenManager, expected_size: int | None) -> None:
@@ -374,16 +446,28 @@ def main(argv=None) -> int:
         help="save each file in OUTDIR/YYYY/MM/, using the product's sensing start time; "
         "directories are created as needed",
     )
-    p.add_argument(
+    login = p.add_argument_group("login (downloads only; see the description above)")
+    login.add_argument(
+        "--auth",
+        choices=["auto", "m2m", "token"],
+        default="auto",
+        help="login method; auto (default) uses the M2M file if it exists, else the token file",
+    )
+    login.add_argument(
+        "--m2m-file",
+        type=Path,
+        help=f"M2M service-account JSON file (default: ${M2M_FILE_ENV}, else {DEFAULT_M2M_FILE})",
+    )
+    login.add_argument(
         "-t",
         "--token-file",
         type=Path,
-        help=f"MAAP offline token file (default: ${TOKEN_FILE_ENV}, " f"else {DEFAULT_TOKEN_FILE})",
+        help=f"offline token file (default: ${TOKEN_FILE_ENV}, else {DEFAULT_TOKEN_FILE})",
     )
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="search and list what would be downloaded; no token needed",
+        help="search and list what would be downloaded; no login needed",
     )
     p.add_argument(
         "-v", "--verbose", action="store_true", help="also list products already downloaded"
@@ -471,7 +555,7 @@ def main(argv=None) -> int:
     if args.dry_run or not todo:
         return 0
 
-    tokens = TokenManager(resolve_token_file(args.token_file))
+    tokens = make_token_manager(args)
     failures = 0
     for it, a, dest, size in todo:
         try:

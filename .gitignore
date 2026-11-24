@@ -6,3 +6,5 @@ __pycache__/
 
 # ESA MAAP offline tokens (cs2/esa-maap/cs_maap_download.py)
 token.txt
+# ESA MAAP M2M service-account credentials
+m2m.json
