@@ -50,9 +50,12 @@ import json
 import os
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import requests
 from pystac.utils import str_to_datetime
@@ -62,6 +65,13 @@ from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 CATALOG_URL = "https://catalog.maap.eo.esa.int/catalogue/"
+# Download retries: on these HTTP statuses, or a dropped connection, wait and try again.
+# 403 is included because the MAAP M2M service account returns 403 when it hits its
+# download rate limit (seen 2026-11-24), not only for missing permissions.
+RETRY_STATUSES = {403, 429, 500, 502, 503, 504}
+DEFAULT_RETRIES = 6
+DEFAULT_RETRY_WAIT = 30.0  # seconds before the first retry; doubles each time
+MAX_RETRY_WAIT = 600.0  # cap for the doubling (a server Retry-After is honoured as given)
 PAGE_SIZE = 200  # items per catalogue request; 1000 timed out in testing, 500 worked
 TOKEN_URL = "https://iam.maap.eo.esa.int/realms/esa-maap/protocol/openid-connect/token"
 # Public client credentials published by ESA in the MAAP CryoSat data-access example
@@ -240,6 +250,10 @@ class TokenManager:
             form["client_secret"] = str(creds["client_secret"])
         return cls(form, f"M2M service account {creds['username']} ({m2m_file})")
 
+    def invalidate(self) -> None:
+        """Forget the current access token, so the next get() logs in again."""
+        self._access = None
+
     def get(self) -> str:
         """Return a valid access token, requesting a new one if the last has (nearly) expired."""
         if self._access and time.time() < self._expires - 30:
@@ -356,30 +370,127 @@ def have(dest: Path, expected_size: int | None) -> bool:
     return dest.exists() and (expected_size is None or dest.stat().st_size == expected_size)
 
 
-def download(url: str, dest: Path, tokens: TokenManager, expected_size: int | None) -> None:
-    """Stream url to dest via a .part file, checking the size against the catalogue."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".part")
+class TokenSource(Protocol):
+    """What download() needs from a login: TokenManager, or a stand-in in tests."""
+
+    def get(self) -> str:
+        """Return a valid access token."""
+
+    def invalidate(self) -> None:
+        """Forget the current access token."""
+
+
+class HTTPStatusError(RuntimeError):
+    """A download request answered with an HTTP error status."""
+
+    def __init__(self, status: int, url: str, reason: str, retry_after: str | None):
+        self.status = status
+        self.reason = reason
+        self.retry_after = retry_after
+        super().__init__(
+            f"HTTP {status} for {url}\n      server says: {reason}"
+            + (f"\n      Retry-After: {retry_after}" if retry_after else "")
+        )
+
+
+@dataclass
+class RetryPolicy:
+    """How download() retries: up to `retries` more attempts per file, waiting `base_wait`
+    seconds before the first and doubling each time up to `max_wait`, or as long as the
+    server's Retry-After header asks."""
+
+    retries: int = DEFAULT_RETRIES
+    base_wait: float = DEFAULT_RETRY_WAIT
+    max_wait: float = MAX_RETRY_WAIT
+    sleep: Callable[[float], None] = time.sleep
+
+    def wait(self, attempt: int, retry_after: str | None) -> float:
+        """Seconds to wait before retry number `attempt` (1 = first retry)."""
+        server = parse_retry_after(retry_after)
+        if server is not None:
+            return server
+        return min(self.base_wait * 2 ** (attempt - 1), self.max_wait)
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    """Retry-After header as seconds from now; it may be a number or an HTTP date."""
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+
+
+def fetch(url: str, tmp: Path, tokens: TokenSource, expected_size: int | None) -> None:
+    """One attempt: stream url into tmp. Raises HTTPStatusError on an error status."""
     headers = {"Authorization": f"Bearer {tokens.get()}"}
     with requests.get(url, headers=headers, stream=True, timeout=120) as r:
-        if r.status_code in (401, 403, 429):
-            # Include the server's reason and any Retry-After, to tell permission
+        if r.status_code >= 400:
+            # Keep the server's reason and any Retry-After: they tell permission
             # problems apart from rate or quota limits.
             reason = " ".join(r.text[:300].split()) or "(empty body)"
-            retry_after = r.headers.get("Retry-After")
-            raise RuntimeError(
-                f"HTTP {r.status_code} for {url}\n      server says: {reason}"
-                + (f"\n      Retry-After: {retry_after}" if retry_after else "")
-            )
-        r.raise_for_status()
+            raise HTTPStatusError(r.status_code, url, reason, r.headers.get("Retry-After"))
         total = int(r.headers.get("Content-Length", 0)) or expected_size
         with (
             open(tmp, "wb") as f,
-            tqdm(total=total, unit="B", unit_scale=True, desc=dest.name[:50], leave=False) as pbar,
+            tqdm(total=total, unit="B", unit_scale=True, desc=tmp.name[:50], leave=False) as pbar,
         ):
             for chunk in r.iter_content(chunk_size=1 << 20):
                 f.write(chunk)
                 pbar.update(len(chunk))
+
+
+def download(
+    url: str,
+    dest: Path,
+    tokens: TokenSource,
+    expected_size: int | None,
+    policy: RetryPolicy | None = None,
+) -> None:
+    """Download url to dest via a .part file, retrying rate limits and transient errors,
+    then check the size against the catalogue."""
+    policy = policy or RetryPolicy()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    relogged = False
+    attempt = 0
+    while True:
+        what, retry_after = "", None
+        try:
+            fetch(url, tmp, tokens, expected_size)
+            break
+        except HTTPStatusError as e:
+            if e.status == 401 and not relogged:
+                # The access token may have been revoked or expired early: log in again once.
+                relogged = True
+                tokens.invalidate()
+                continue
+            if e.status not in RETRY_STATUSES or attempt >= policy.retries:
+                raise
+            what, retry_after = f"HTTP {e.status} ({e.reason[:120]})", e.retry_after
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            requests.exceptions.ChunkedEncodingError,
+        ) as e:
+            if attempt >= policy.retries:
+                raise RuntimeError(f"{type(e).__name__} for {url}: {e}") from e
+            what, retry_after = type(e).__name__, None
+        attempt += 1
+        wait = policy.wait(attempt, retry_after)
+        print(
+            f"  {dest.name}: {what}; retry {attempt}/{policy.retries} in {wait:.0f} s",
+            file=sys.stderr,
+        )
+        policy.sleep(wait)
     if expected_size and tmp.stat().st_size != expected_size:
         raise RuntimeError(
             f"Size mismatch for {dest.name}: got {tmp.stat().st_size}, expected {expected_size}"
@@ -470,6 +581,21 @@ def main(argv=None) -> int:
         "--token-file",
         type=Path,
         help=f"offline token file (default: ${TOKEN_FILE_ENV}, else {DEFAULT_TOKEN_FILE})",
+    )
+    p.add_argument(
+        "--retries",
+        type=int,
+        default=DEFAULT_RETRIES,
+        help="per file, how many times to retry after HTTP 403/429/5xx or a dropped "
+        f"connection (default: {DEFAULT_RETRIES}; 0 = no retries)",
+    )
+    p.add_argument(
+        "--retry-wait",
+        type=float,
+        default=DEFAULT_RETRY_WAIT,
+        metavar="SECONDS",
+        help=f"wait before the first retry, doubling each time up to {MAX_RETRY_WAIT:.0f} s; "
+        f"a server Retry-After is used instead when given (default: {DEFAULT_RETRY_WAIT:.0f})",
     )
     p.add_argument(
         "--dry-run",
@@ -563,10 +689,11 @@ def main(argv=None) -> int:
         return 0
 
     tokens = make_token_manager(args)
+    policy = RetryPolicy(retries=args.retries, base_wait=args.retry_wait)
     failures = 0
     for it, a, dest, size in todo:
         try:
-            download(a.href, dest, tokens, size)
+            download(a.href, dest, tokens, size, policy)
             print(f"  downloaded: {dest}")
         except (requests.RequestException, RuntimeError, OSError) as e:  # keep going
             failures += 1
