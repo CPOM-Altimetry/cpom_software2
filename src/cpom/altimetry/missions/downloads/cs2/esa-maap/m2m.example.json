@@ -1,0 +1,6 @@
+{
+  "username": "<M2M service account name from ESA>",
+  "password": "<password from ESA's follow-up email>",
+  "client_id": "<OIDC client id from ESA>",
+  "client_secret": "<OIDC client secret from ESA; remove this line if none was issued>"
+}
