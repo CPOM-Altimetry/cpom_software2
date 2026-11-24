@@ -66,8 +66,11 @@ from urllib3.util.retry import Retry
 
 CATALOG_URL = "https://catalog.maap.eo.esa.int/catalogue/"
 # Download retries: on these HTTP statuses, or a dropped connection, wait and try again.
-# 403 is included because the MAAP M2M service account returns 403 when it hits its
-# download rate limit (seen 2026-11-24), not only for missing permissions.
+# 403 is included because MAAP downloads fail intermittently with HTTP 403 "You do not
+# have the required credentials to access collection ..." even with a valid login: on
+# mssldba (2026-11-24) this hit both the M2M service account and the offline token,
+# about once in 6-20 files, and the same request succeeded on retry 30-120 s later.
+# A real permission problem still fails, once the retries run out.
 RETRY_STATUSES = {403, 429, 500, 502, 503, 504}
 DEFAULT_RETRIES = 6
 DEFAULT_RETRY_WAIT = 30.0  # seconds before the first retry; doubles each time
@@ -455,7 +458,7 @@ def download(
     expected_size: int | None,
     policy: RetryPolicy | None = None,
 ) -> None:
-    """Download url to dest via a .part file, retrying rate limits and transient errors,
+    """Download url to dest via a .part file, retrying intermittent and transient errors,
     then check the size against the catalogue."""
     policy = policy or RetryPolicy()
     dest.parent.mkdir(parents=True, exist_ok=True)

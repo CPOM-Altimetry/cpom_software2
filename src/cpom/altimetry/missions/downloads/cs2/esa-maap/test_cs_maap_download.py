@@ -84,7 +84,7 @@ def make_policy(retries=6, base_wait=30.0):
     return m.RetryPolicy(retries=retries, base_wait=base_wait, sleep=waits.append), waits
 
 
-def test_rate_limit_403_then_success(server, tmp_path: Path):
+def test_intermittent_403_then_success(server, tmp_path: Path):
     """403s are retried with doubling waits, then the file downloads."""
     script, _ = server
     script += [FakeResponse(403, b"Forbidden"), FakeResponse(403), FakeResponse(200, BODY)]
@@ -167,7 +167,7 @@ def test_repeated_401_fails(server, tmp_path: Path):
 
 
 def test_connection_error_is_retried(server, tmp_path: Path):
-    """Dropped connections are retried like rate limits."""
+    """Dropped connections are retried like intermittent 403s."""
     script, _ = server
     script += [requests.ConnectionError("reset"), FakeResponse(200, BODY)]
     policy, waits = make_policy()
