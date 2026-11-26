@@ -46,12 +46,17 @@ Files already present (same name and size) are always skipped.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import math
 import os
+import statistics
 import sys
+import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -184,6 +189,10 @@ def warn_if_not_private(path: Path) -> None:
         )
 
 
+class LoginError(RuntimeError):
+    """The MAAP login (token request) was refused."""
+
+
 class TokenManager:
     """Get MAAP access tokens, reusing each until near expiry.
 
@@ -196,6 +205,7 @@ class TokenManager:
         self.description = description
         self._access: str | None = None
         self._expires = 0.0
+        self._lock = threading.Lock()  # downloads may run in parallel (--workers)
 
     @classmethod
     def from_token_file(cls, token_file: Path) -> TokenManager:
@@ -255,20 +265,26 @@ class TokenManager:
 
     def invalidate(self) -> None:
         """Forget the current access token, so the next get() logs in again."""
-        self._access = None
+        with self._lock:
+            self._access = None
 
     def get(self) -> str:
-        """Return a valid access token, requesting a new one if the last has (nearly) expired."""
-        if self._access and time.time() < self._expires - 30:
+        """Return a valid access token, requesting a new one if the last has (nearly) expired.
+
+        Thread-safe: parallel downloads share one token, and only one thread logs in."""
+        with self._lock:
+            if self._access and time.time() < self._expires - 30:
+                return self._access
+            r = requests.post(TOKEN_URL, data=self._form, timeout=60)
+            if r.status_code != 200:
+                # Keycloak error bodies hold only an error code and description, no credentials.
+                raise LoginError(
+                    f"Login failed for {self.description} ({r.status_code}): {r.text[:300]}"
+                )
+            d = r.json()
+            self._access = d["access_token"]
+            self._expires = time.time() + float(d.get("expires_in", 60))
             return self._access
-        r = requests.post(TOKEN_URL, data=self._form, timeout=60)
-        if r.status_code != 200:
-            # Keycloak error bodies hold only an error code and description, no credentials.
-            sys.exit(f"Login failed for {self.description} ({r.status_code}): {r.text[:300]}")
-        d = r.json()
-        self._access = d["access_token"]
-        self._expires = time.time() + float(d.get("expires_in", 60))
-        return self._access
 
 
 def resolve_path(cli_value: Path | None, env_var: str, default: Path) -> Path:
@@ -432,7 +448,9 @@ def parse_retry_after(value: str | None) -> float | None:
     return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
 
 
-def fetch(url: str, tmp: Path, tokens: TokenSource, expected_size: int | None) -> None:
+def fetch(
+    url: str, tmp: Path, tokens: TokenSource, expected_size: int | None, progress: bool = True
+) -> None:
     """One attempt: stream url into tmp. Raises HTTPStatusError on an error status."""
     headers = {"Authorization": f"Bearer {tokens.get()}"}
     with requests.get(url, headers=headers, stream=True, timeout=120) as r:
@@ -444,22 +462,39 @@ def fetch(url: str, tmp: Path, tokens: TokenSource, expected_size: int | None) -
         total = int(r.headers.get("Content-Length", 0)) or expected_size
         with (
             open(tmp, "wb") as f,
-            tqdm(total=total, unit="B", unit_scale=True, desc=tmp.name[:50], leave=False) as pbar,
+            tqdm(
+                total=total,
+                unit="B",
+                unit_scale=True,
+                desc=tmp.name[:50],
+                leave=False,
+                disable=not progress,
+            ) as pbar,
         ):
             for chunk in r.iter_content(chunk_size=1 << 20):
                 f.write(chunk)
                 pbar.update(len(chunk))
 
 
-def download(
+def with_retries(err: Exception, retries: int) -> Exception:
+    """Attach how many retries were used to an exception, for the per-file log."""
+    err.retries = retries  # type: ignore[attr-defined]
+    return err
+
+
+def download(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     url: str,
     dest: Path,
     tokens: TokenSource,
     expected_size: int | None,
     policy: RetryPolicy | None = None,
-) -> None:
+    progress: bool = True,
+) -> int:
     """Download url to dest via a .part file, retrying intermittent and transient errors,
-    then check the size against the catalogue."""
+    then check the size against the catalogue.
+
+    Returns the number of retries used. On failure, the exception raised carries the
+    same count in its `retries` attribute."""
     policy = policy or RetryPolicy()
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
@@ -468,7 +503,7 @@ def download(
     while True:
         what, retry_after = "", None
         try:
-            fetch(url, tmp, tokens, expected_size)
+            fetch(url, tmp, tokens, expected_size, progress)
             break
         except HTTPStatusError as e:
             if e.status == 401 and not relogged:
@@ -477,6 +512,7 @@ def download(
                 tokens.invalidate()
                 continue
             if e.status not in RETRY_STATUSES or attempt >= policy.retries:
+                with_retries(e, attempt)
                 raise
             what, retry_after = f"HTTP {e.status} ({e.reason[:120]})", e.retry_after
         except (
@@ -485,7 +521,9 @@ def download(
             requests.exceptions.ChunkedEncodingError,
         ) as e:
             if attempt >= policy.retries:
-                raise RuntimeError(f"{type(e).__name__} for {url}: {e}") from e
+                raise with_retries(
+                    RuntimeError(f"{type(e).__name__} for {url}: {e}"), attempt
+                ) from e
             what, retry_after = type(e).__name__, None
         attempt += 1
         wait = policy.wait(attempt, retry_after)
@@ -495,10 +533,202 @@ def download(
         )
         policy.sleep(wait)
     if expected_size and tmp.stat().st_size != expected_size:
-        raise RuntimeError(
-            f"Size mismatch for {dest.name}: got {tmp.stat().st_size}, expected {expected_size}"
+        raise with_retries(
+            RuntimeError(
+                f"Size mismatch for {dest.name}: got {tmp.stat().st_size}, "
+                f"expected {expected_size}"
+            ),
+            attempt,
         )
     tmp.rename(dest)
+    return attempt
+
+
+CSV_FIELDS = [
+    "start_utc",
+    "end_utc",
+    "product_id",
+    "status",
+    "bytes",
+    "seconds",
+    "mb_per_s",
+    "retries",
+    "error",
+]
+
+
+@dataclass
+class FileResult:  # pylint: disable=too-many-instance-attributes
+    """Outcome of one file download, as logged to the CSV file."""
+
+    product_id: str
+    dest: Path
+    start: datetime
+    end: datetime
+    ok: bool
+    nbytes: int
+    retries: int
+    error: str = ""
+
+    @property
+    def seconds(self) -> float:
+        """Wall-clock time for this file, including any retry waits."""
+        return (self.end - self.start).total_seconds()
+
+    def csv_row(self) -> dict[str, Any]:
+        """This result as a row for the --log-csv file."""
+        return {
+            "start_utc": iso_ms(self.start),
+            "end_utc": iso_ms(self.end),
+            "product_id": self.product_id,
+            "status": "ok" if self.ok else "failed",
+            "bytes": self.nbytes,
+            "seconds": f"{self.seconds:.3f}",
+            "mb_per_s": f"{self.nbytes / 1e6 / self.seconds:.3f}" if self.seconds > 0 else "",
+            "retries": self.retries,
+            "error": self.error,
+        }
+
+
+def iso_ms(t: datetime) -> str:
+    """UTC ISO 8601 with milliseconds, e.g. 2026-11-25T10:00:00.123Z."""
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+@dataclass
+class CsvLog:
+    """Thread-safe append-only per-file CSV log (header written if the file is new)."""
+
+    path: Path | None
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def write(self, result: FileResult) -> None:
+        """Append one row, flushed straight away so a crash loses nothing."""
+        if self.path is None:
+            return
+        with self._lock:
+            new = not self.path.exists() or self.path.stat().st_size == 0
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.path, "a", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+                if new:
+                    w.writeheader()
+                w.writerow(result.csv_row())
+
+
+def download_one(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    product_id: str,
+    url: str,
+    dest: Path,
+    size: int | None,
+    tokens: TokenSource,
+    policy: RetryPolicy,
+    progress: bool,
+) -> FileResult:
+    """Download one file and time it; never raises for a failed download."""
+    start = datetime.now(timezone.utc)
+    try:
+        retries = download(url, dest, tokens, size, policy, progress)
+        return FileResult(
+            product_id, dest, start, datetime.now(timezone.utc), True, dest.stat().st_size, retries
+        )
+    except (requests.RequestException, RuntimeError, OSError) as e:
+        if isinstance(e, LoginError):
+            raise  # a refused login fails every file: stop the run
+        error = " ".join(str(e).split())
+        return FileResult(
+            product_id,
+            dest,
+            start,
+            datetime.now(timezone.utc),
+            False,
+            0,
+            getattr(e, "retries", 0),
+            error,
+        )
+
+
+def run_downloads(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    todo: list[tuple[str, str, Path, int | None]],
+    tokens: TokenSource,
+    policy: RetryPolicy,
+    workers: int = 1,
+    log: CsvLog | None = None,
+    report: Callable[[FileResult], None] | None = None,
+) -> tuple[list[FileResult], float]:
+    """Download (product_id, url, dest, size) entries, `workers` at a time.
+
+    Returns the per-file results (in completion order) and the total wall-clock seconds."""
+    log = log or CsvLog(None)
+    results: list[FileResult] = []
+    progress = workers == 1  # per-file progress bars only make sense one at a time
+    t0 = time.monotonic()
+
+    def done(res: FileResult) -> None:
+        results.append(res)
+        log.write(res)
+        if report:
+            report(res)
+
+    if workers == 1:
+        for pid, url, dest, size in todo:
+            done(download_one(pid, url, dest, size, tokens, policy, progress))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = [
+                ex.submit(download_one, pid, url, dest, size, tokens, policy, progress)
+                for pid, url, dest, size in todo
+            ]
+            try:
+                for fut in as_completed(futures):
+                    done(fut.result())
+            except BaseException:
+                ex.shutdown(wait=False, cancel_futures=True)  # e.g. Ctrl-C: don't start more
+                raise
+    return results, time.monotonic() - t0
+
+
+def summary_lines(results: list[FileResult], wall: float, workers: int) -> list[str]:
+    """Throughput summary for the end of a run."""
+    ok = [r for r in results if r.ok]
+    nbytes = sum(r.nbytes for r in ok)
+    lines = [
+        f"Done: {len(ok)} downloaded, {len(results) - len(ok)} failed, "
+        f"{sum(r.retries for r in results)} retries",
+        (
+            f"Time: {fmt_duration(wall)} wall clock with {workers} worker(s); "
+            f"{nbytes / 1e6:.1f} MB at {nbytes / 1e6 / wall:.2f} MB/s"
+            f" ({len(ok) / wall * 60:.1f} files/min)"
+            if wall > 0 and ok
+            else ""
+        ),
+    ]
+    if ok:
+        secs = sorted(r.seconds for r in ok)
+        rates = sorted(r.nbytes / 1e6 / r.seconds for r in ok if r.seconds > 0)
+        lines.append(
+            f"Per file: median {statistics.median(secs):.2f} s, "
+            f"95th percentile {percentile(secs, 95):.2f} s, max {secs[-1]:.2f} s"
+            + (f"; median {statistics.median(rates):.2f} MB/s" if rates else "")
+        )
+    return [line for line in lines if line]
+
+
+def percentile(sorted_values: list[float], pct: float) -> float:
+    """Nearest-rank percentile of an already sorted, non-empty list."""
+    k = max(0, min(len(sorted_values) - 1, math.ceil(pct / 100 * len(sorted_values)) - 1))
+    return sorted_values[k]
+
+
+def fmt_duration(seconds: float) -> str:
+    """Seconds as e.g. '42.0 s', '12 min 05 s' or '3 h 07 min'."""
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    m, s = divmod(round(seconds), 60)
+    if m < 60:
+        return f"{m} min {s:02d} s"
+    h, m = divmod(m, 60)
+    return f"{h} h {m:02d} min"
 
 
 def main(argv=None) -> int:
@@ -601,6 +831,21 @@ def main(argv=None) -> int:
         f"a server Retry-After is used instead when given (default: {DEFAULT_RETRY_WAIT:.0f})",
     )
     p.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=1,
+        help="download this many files at once (default: 1). Agree any value above 1 with "
+        "ESA first",
+    )
+    p.add_argument(
+        "--log-csv",
+        type=Path,
+        metavar="FILE",
+        help="append one line per file to this CSV: UTC start/end, product, status, bytes, "
+        "seconds, MB/s, retries, error",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="search and list what would be downloaded; no login needed",
@@ -612,6 +857,8 @@ def main(argv=None) -> int:
 
     if args.last_days is not None and (args.start or args.end):
         p.error("--last-days cannot be combined with --start/--end")
+    if args.workers < 1:
+        p.error("--workers must be at least 1")
     info = COLLECTIONS[args.collection]
     # Warn rather than fail: ESA may add new types or baselines after this list was made.
     if args.product_type and args.product_type not in info["types"]:
@@ -693,16 +940,29 @@ def main(argv=None) -> int:
 
     tokens = make_token_manager(args)
     policy = RetryPolicy(retries=args.retries, base_wait=args.retry_wait)
-    failures = 0
-    for it, a, dest, size in todo:
-        try:
-            download(a.href, dest, tokens, size, policy)
-            print(f"  downloaded: {dest}")
-        except (requests.RequestException, RuntimeError, OSError) as e:  # keep going
-            failures += 1
-            print(f"  FAILED {it.id}: {e}", file=sys.stderr)
-    print(f"Done: {len(todo) - failures} downloaded, {failures} failed")
-    return 1 if failures else 0
+
+    def report(res: FileResult) -> None:
+        if res.ok:
+            print(f"  downloaded: {res.dest}  ({res.nbytes / 1e6:.1f} MB, {res.seconds:.1f} s)")
+        else:
+            print(f"  FAILED {res.product_id}: {res.error}", file=sys.stderr)
+
+    try:
+        results, wall = run_downloads(
+            [(it.id, a.href, dest, size) for it, a, dest, size in todo],
+            tokens,
+            policy,
+            workers=args.workers,
+            log=CsvLog(args.log_csv),
+            report=report,
+        )
+    except LoginError as e:
+        sys.exit(str(e))
+    for line in summary_lines(results, wall, args.workers):
+        print(line)
+    if args.log_csv:
+        print(f"Per-file log: {args.log_csv}")
+    return 1 if any(not r.ok for r in results) else 0
 
 
 if __name__ == "__main__":
