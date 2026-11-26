@@ -14,9 +14,10 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
 
-import cs_maap_download as m  # pylint: disable=import-error
 import pytest
 import requests
+
+from cpom.altimetry.missions.downloads.cs2.esa_maap import cs_maap_download as m
 
 URL = "https://catalog.maap.eo.esa.int/data/example/PRODUCT.nc"
 BODY = b"x" * 1000

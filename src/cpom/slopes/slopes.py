@@ -79,8 +79,8 @@ class Slopes:
         self.yslopes = np.array([])
         self.zslopes = np.array([])
         self.zslopes_flip = np.array([])
-        self.minslopesx = None
-        self.minslopesy = None
+        self.minslopesx: float | None = None
+        self.minslopesy: float | None = None
         self.binsize = 0
         self.store_in_shared_memory = store_in_shared_memory
         self.shape = ()

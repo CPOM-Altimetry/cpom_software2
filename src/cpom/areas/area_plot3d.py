@@ -8,10 +8,10 @@ Functions to create 3d plots (using plotly library)
 import logging
 import os
 
+import matplotlib
 import matplotlib.colors as mcolors
 import numpy as np
 import plotly.graph_objects as go
-from matplotlib import cm
 from numpy import ma  # masked arrays
 from scipy.ndimage import gaussian_filter
 
@@ -749,7 +749,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                 )  # Color for values above cmax
 
                 # Convert Matplotlib colormap to a Plotly colorscale
-                mpl_cmap = cm.get_cmap(data_set["colourmap"])
+                mpl_cmap = matplotlib.colormaps[data_set["colourmap"]]
                 colorscale = [[i / 255, mcolors.to_hex(mpl_cmap(i / 255))] for i in range(256)]
 
                 if cmap_over_color:
