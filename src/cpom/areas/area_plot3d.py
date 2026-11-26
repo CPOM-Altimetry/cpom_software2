@@ -745,7 +745,7 @@ def plot_3d_area(area_name: str, *data_sets, area_overrides: dict):
                     "cmap_under_color", None
                 )  # Color for values below cmin
                 cmap_over_color = data_set.get(
-                    "cmap_under_color", None
+                    "cmap_over_color", None
                 )  # Color for values above cmax
 
                 # Convert Matplotlib colormap to a Plotly colorscale
